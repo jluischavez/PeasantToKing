@@ -1,10 +1,14 @@
 import type Phaser from 'phaser';
 import type { Cell } from './CellSelection';
+import type { ConstructionMap, ConstructionType } from './ConstructionMap';
+import { drawConstruction } from './drawConstruction';
 
 export class GridMap {
   readonly columns = 20;
   readonly rows = 20;
   private readonly terrain: Phaser.GameObjects.Graphics;
+  private readonly constructions: Phaser.GameObjects.Graphics;
+  private readonly preview: Phaser.GameObjects.Graphics;
   private readonly highlight: Phaser.GameObjects.Graphics;
   private readonly selection: Phaser.GameObjects.Graphics;
   private x = 0;
@@ -13,6 +17,8 @@ export class GridMap {
 
   constructor(scene: Phaser.Scene) {
     this.terrain = scene.add.graphics();
+    this.constructions = scene.add.graphics();
+    this.preview = scene.add.graphics().setDepth(1);
     this.highlight = scene.add.graphics();
     this.selection = scene.add.graphics();
   }
@@ -22,6 +28,8 @@ export class GridMap {
     this.y = y;
     this.cellSize = size / this.columns;
     this.terrain.clear();
+    this.constructions.clear();
+    this.preview.clear();
     this.clearHighlight();
     this.selection.clear();
     if (size <= 0) return;
@@ -54,10 +62,9 @@ export class GridMap {
     return { column, row };
   }
 
-  highlightAt(x: number, y: number): void {
+  renderHover(cell: Cell | null): void {
     this.clearHighlight();
-    const cell = this.getCellAt(x, y);
-    if (!cell) return;
+    if (!cell || this.cellSize <= 0) return;
 
     const cellX = this.x + cell.column * this.cellSize;
     const cellY = this.y + cell.row * this.cellSize;
@@ -69,6 +76,32 @@ export class GridMap {
 
   clearHighlight(): void {
     this.highlight.clear();
+  }
+
+  renderConstructions(map: ConstructionMap): void {
+    this.constructions.clear();
+    if (this.cellSize <= 0) return;
+    for (let row = 0; row < map.rows; row++) {
+      for (let column = 0; column < map.columns; column++) {
+        const type = map.getConstruction({ column, row });
+        if (type) {
+          drawConstruction(this.constructions, type,
+            this.x + column * this.cellSize, this.y + row * this.cellSize, this.cellSize);
+        }
+      }
+    }
+  }
+
+  renderPreview(cell: Cell | null, type: ConstructionType | null, available: boolean): void {
+    this.preview.clear();
+    if (!cell || !type || this.cellSize <= 0) return;
+    const x = this.x + cell.column * this.cellSize;
+    const y = this.y + cell.row * this.cellSize;
+    if (available) drawConstruction(this.preview, type, x, y, this.cellSize, 0.55);
+    this.preview.fillStyle(available ? 0xa4e69c : 0xf05252, 0.25);
+    this.preview.fillRect(x, y, this.cellSize, this.cellSize);
+    this.preview.lineStyle(2, available ? 0xa4e69c : 0xf05252);
+    this.preview.strokeRect(x, y, this.cellSize, this.cellSize);
   }
 
   renderSelection(cell: Cell | null): void {

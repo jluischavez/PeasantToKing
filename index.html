@@ -8,14 +8,24 @@
   </head>
   <body>
     <main id="game" aria-label="Peasant to King — Mapa inicial de 20 por 20 casillas"></main>
-    <section id="selection-panel" aria-label="Información de la casilla">
-      <div aria-live="polite" aria-atomic="true">
-        <p>Coordenadas (0–19): <span id="cell-coordinates">X: — · Y: —</span></p>
-        <p>Tipo de terreno: <span id="cell-terrain">—</span></p>
-        <p>Estado: <span id="cell-status">Sin selección</span></p>
-      </div>
-      <button id="cancel-selection" type="button" disabled>Cancelar selección</button>
-    </section>
+    <footer id="controls">
+      <nav id="construction-menu" aria-label="Construcción">
+        <div class="construction-buttons">
+          <button type="button" data-construction="house" aria-pressed="false">Casa</button>
+          <button type="button" data-construction="road" aria-pressed="false">Camino</button>
+          <button type="button" data-construction="cancel" disabled>Cancelar construcción</button>
+        </div>
+        <p id="construction-status" aria-live="polite">Selecciona Casa o Camino para construir.</p>
+      </nav>
+      <section id="selection-panel" aria-label="Información de la casilla">
+        <div aria-live="polite" aria-atomic="true">
+          <p>Coordenadas (0–19): <span id="cell-coordinates">X: — · Y: —</span></p>
+          <p>Tipo de terreno: <span id="cell-terrain">—</span></p>
+          <p>Estado: <span id="cell-status">Sin selección</span></p>
+        </div>
+        <button id="cancel-selection" type="button" disabled>Cancelar selección</button>
+      </section>
+    </footer>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

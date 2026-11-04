@@ -3,11 +3,12 @@
 - 2026-11-04 — Tarea 00 implementada: base técnica con Vite, TypeScript y Phaser.
 - 2026-11-04 — Tarea 01 implementada: mapa verde con cuadrícula de 20 × 20 casillas.
 - 2026-11-04 — Tarea 02 implementada: selección persistente con clic izquierdo y cambio de casilla.
-- Panel inferior: coordenadas X/Y (0–19, origen arriba a la izquierda), terreno césped y estado disponible.
-- Botón para cancelar la selección; deshabilitado cuando no hay ninguna casilla seleccionada.
-- Se conserva el resaltado temporal, el título, la cámara fija y el mapa completo con casillas cuadradas.
-- Estado de selección separado del dibujo del mapa y del panel; se conserva al redimensionar.
-- Sin nuevas dependencias ni funcionalidades de etapas 03–11; no se implementó economía.
-- Verificación: `npm run build` y comprobaciones locales de límites, selección, redimensionado, panel y cancelación correctos.
-- Continúa la advertencia de paquete superior a 500 kB por Phaser; no impide compilar.
-- Pendiente: comprobación visual y aprobación del usuario; proyecto sin publicar.
+- 2026-11-04 — Tarea 03 implementada: menú Casa, Camino y Cancelar construcción; herramienta activa hasta cancelarla.
+- Modelo de ocupación independiente de Phaser: una construcción por casilla; se rechazan solapamientos y posiciones inválidas.
+- Gráficos por código y vista previa semitransparente; indicador rojo en casillas ocupadas.
+- Se conservan selección, resaltado temporal y panel X/Y (0–19); el estado distingue disponible u ocupada con el nombre de la construcción.
+- Mapa y construcciones se ajustan al redimensionar; datos en memoria, sin guardado ni nuevas dependencias o etapas 04–11.
+- Verificación: `npm run build` correcto; pruebas locales de las 400 casillas, solapamientos, límites y gráficos dentro de una casilla correctas.
+- 2026-11-04 — Corrección visual: amarillo y vista previa comparten la casilla del cursor; amarillo limitado al modo construcción y limpiado al salir o cancelar, sin afectar la selección azul.
+- Verificación de la corrección: `npm run build` y prueba local de eventos de movimiento, clic, salida y cancelación correctos; sin nuevas dependencias.
+- Pendiente: prueba visual y aprobación del usuario; sigue la advertencia de tamaño de Phaser; proyecto sin publicar.

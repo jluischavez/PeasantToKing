@@ -38,7 +38,7 @@ canvas {
   margin: 4px 0;
 }
 
-#cancel-selection {
+#controls button {
   padding: 8px 12px;
   border: 1px solid #c1c7b7;
   border-radius: 4px;
@@ -48,7 +48,30 @@ canvas {
   cursor: pointer;
 }
 
-#cancel-selection:disabled {
+#controls button:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+#construction-menu {
+  padding: 10px 16px 0;
+  text-align: center;
+  color: #c1c7b7;
+  font: 14px Arial, sans-serif;
+}
+
+.construction-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+#construction-menu button[aria-pressed="true"] {
+  border-color: #ecd5a2;
+  background: #527b43;
+}
+
+#construction-status {
+  margin: 8px 0;
 }

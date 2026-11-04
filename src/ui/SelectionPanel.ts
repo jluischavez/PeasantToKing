@@ -1,4 +1,6 @@
 import type { Cell } from '../map/CellSelection';
+import { constructionNames } from '../map/ConstructionMap';
+import type { ConstructionType } from '../map/ConstructionMap';
 
 export class SelectionPanel {
   private readonly coordinates = document.querySelector<HTMLElement>('#cell-coordinates')!;
@@ -13,10 +15,12 @@ export class SelectionPanel {
     this.render(null);
   }
 
-  render(cell: Cell | null): void {
+  render(cell: Cell | null, construction: ConstructionType | null = null): void {
     this.coordinates.textContent = cell ? `X: ${cell.column} · Y: ${cell.row}` : 'X: — · Y: —';
     this.terrain.textContent = cell ? 'césped' : '—';
-    this.status.textContent = cell ? 'disponible' : 'Sin selección';
+    this.status.textContent = cell
+      ? (construction ? `ocupada — ${constructionNames[construction]}` : 'disponible')
+      : 'Sin selección';
     this.cancel.disabled = cell === null;
   }
 
