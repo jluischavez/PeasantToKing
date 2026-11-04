@@ -1,11 +1,19 @@
 import type { Cell } from './CellSelection';
 
-export type ConstructionType = 'house' | 'road';
-
-export const constructionNames: Record<ConstructionType, string> = {
+export const constructionNames = {
   house: 'Casa',
   road: 'Camino',
-};
+  farm: 'Granja',
+  lumberjack: 'Leñador',
+  warehouse: 'Almacén',
+  market: 'Mercado',
+} as const;
+
+export type ConstructionType = keyof typeof constructionNames;
+
+export function isConstructionType(value: string | undefined): value is ConstructionType {
+  return value !== undefined && Object.prototype.hasOwnProperty.call(constructionNames, value);
+}
 
 export class ConstructionMap {
   private readonly cells: (ConstructionType | null)[];

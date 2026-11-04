@@ -7,8 +7,15 @@
 - Modelo de ocupación independiente de Phaser: una construcción por casilla; se rechazan solapamientos y posiciones inválidas.
 - Gráficos por código y vista previa semitransparente; indicador rojo en casillas ocupadas.
 - Se conservan selección, resaltado temporal y panel X/Y (0–19); el estado distingue disponible u ocupada con el nombre de la construcción.
-- Mapa y construcciones se ajustan al redimensionar; datos en memoria, sin guardado ni nuevas dependencias o etapas 04–11.
+- Mapa y construcciones se ajustan al redimensionar; datos en memoria, sin guardado.
 - Verificación: `npm run build` correcto; pruebas locales de las 400 casillas, solapamientos, límites y gráficos dentro de una casilla correctas.
 - 2026-11-04 — Corrección visual: amarillo y vista previa comparten la casilla del cursor; amarillo limitado al modo construcción y limpiado al salir o cancelar, sin afectar la selección azul.
 - Verificación de la corrección: `npm run build` y prueba local de eventos de movimiento, clic, salida y cancelación correctos; sin nuevas dependencias.
+- 2026-11-04 — Tarea 04 implementada: Granja, Leñador, Almacén y Mercado, conservando Casa y Camino.
+- Catálogo central de tipos y nombres: genera el menú y alimenta el panel; dibujos específicos registrados por tipo.
+- Granja con cultivos, Leñador con árbol y troncos, Almacén con portón doble y Mercado con toldo a rayas.
+- Se reutilizan ocupación y colocación múltiple de una casilla; consulta muestra nombre y coordenadas.
+- Correcciones del cursor, indicadores verde/rojo, selección y cancelación sin cambios.
+- Sin costos, producción, economía, población, conexiones de caminos ni dependencias nuevas; etapa 05 pendiente.
+- Verificación de 04: `npm run build` correcto; pruebas locales de seis tipos, múltiples colocaciones, solapamientos, gráficos y transparencia correctas.
 - Pendiente: prueba visual y aprobación del usuario; sigue la advertencia de tamaño de Phaser; proyecto sin publicar.

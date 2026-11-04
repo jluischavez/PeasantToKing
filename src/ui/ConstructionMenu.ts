@@ -1,4 +1,4 @@
-import { constructionNames } from '../map/ConstructionMap';
+import { constructionNames, isConstructionType } from '../map/ConstructionMap';
 import type { ConstructionType } from '../map/ConstructionMap';
 
 export class ConstructionMenu {
@@ -7,11 +7,21 @@ export class ConstructionMenu {
   private readonly onClick: (event: MouseEvent) => void;
 
   constructor(onChange: (type: ConstructionType | null) => void) {
+    const buttons = this.root.querySelector<HTMLElement>('.construction-buttons')!;
+    const cancel = buttons.querySelector<HTMLButtonElement>('[data-construction="cancel"]')!;
+    for (const [type, name] of Object.entries(constructionNames)) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.construction = type;
+      button.textContent = name;
+      button.setAttribute('aria-pressed', 'false');
+      buttons.insertBefore(button, cancel);
+    }
     this.onClick = (event) => {
       const target = event.target;
       if (!(target instanceof HTMLButtonElement)) return;
       const value = target.dataset.construction;
-      if (value !== 'house' && value !== 'road' && value !== 'cancel') return;
+      if (!isConstructionType(value) && value !== 'cancel') return;
       const type = value === 'cancel' ? null : value;
       this.render(type);
       onChange(type);
@@ -30,10 +40,12 @@ export class ConstructionMenu {
     });
     this.status.textContent = type
       ? `${constructionNames[type]}: haz clic en una casilla disponible. Rojo: casilla ocupada.`
-      : 'Selecciona Casa o Camino para construir.';
+      : 'Selecciona un tipo de construcción.';
   }
 
   destroy(): void {
     this.root.removeEventListener('click', this.onClick);
+    this.root.querySelectorAll('[data-construction]:not([data-construction="cancel"])')
+      .forEach((button) => button.remove());
   }
 }
