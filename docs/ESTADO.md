@@ -1,9 +1,10 @@
 # Estado del proyecto
 
 - 2026-11-04 — Tarea 00 implementada: base técnica con Vite, TypeScript y Phaser.
-- Pantalla inicial: «Peasant to King» y «Prototipo — Etapa 00».
-- Comandos disponibles: `npm install`, `npm run dev` y `npm run build`.
-- Verificación: compilación correcta; servidor Vite y entrada TypeScript responden HTTP 200.
-- Advertencia pendiente: paquete generado superior a 500 kB al incluir Phaser; no impide compilar.
-- Pendiente: comprobación visual del usuario en el navegador y aprobación de la entrega.
-- Git inicializado, sin commit de entrega; no se publicó el proyecto ni se implementaron tareas 01–11.
+- 2026-11-04 — Tarea 01 implementada: mapa verde con cuadrícula de 20 × 20 casillas.
+- Se mantiene el título «Peasant to King» sobre el mapa.
+- Cámara fija; mapa completo ajustado al espacio disponible, con casillas cuadradas al redimensionar.
+- Resaltado al pasar el cursor; desaparece al salir del mapa o del lienzo.
+- Código separado en escena y módulo de mapa; sin nuevas dependencias ni funciones de etapas 02–11.
+- Verificación: `npm run build` correcto; continúa la advertencia de paquete superior a 500 kB por Phaser.
+- Pendiente: comprobación visual y aprobación del usuario; proyecto sin publicar.
