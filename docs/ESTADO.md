@@ -2,9 +2,12 @@
 
 - 2026-11-04 — Tarea 00 implementada: base técnica con Vite, TypeScript y Phaser.
 - 2026-11-04 — Tarea 01 implementada: mapa verde con cuadrícula de 20 × 20 casillas.
-- Se mantiene el título «Peasant to King» sobre el mapa.
-- Cámara fija; mapa completo ajustado al espacio disponible, con casillas cuadradas al redimensionar.
-- Resaltado al pasar el cursor; desaparece al salir del mapa o del lienzo.
-- Código separado en escena y módulo de mapa; sin nuevas dependencias ni funciones de etapas 02–11.
-- Verificación: `npm run build` correcto; continúa la advertencia de paquete superior a 500 kB por Phaser.
+- 2026-11-04 — Tarea 02 implementada: selección persistente con clic izquierdo y cambio de casilla.
+- Panel inferior: coordenadas X/Y (0–19, origen arriba a la izquierda), terreno césped y estado disponible.
+- Botón para cancelar la selección; deshabilitado cuando no hay ninguna casilla seleccionada.
+- Se conserva el resaltado temporal, el título, la cámara fija y el mapa completo con casillas cuadradas.
+- Estado de selección separado del dibujo del mapa y del panel; se conserva al redimensionar.
+- Sin nuevas dependencias ni funcionalidades de etapas 03–11; no se implementó economía.
+- Verificación: `npm run build` y comprobaciones locales de límites, selección, redimensionado, panel y cancelación correctos.
+- Continúa la advertencia de paquete superior a 500 kB por Phaser; no impide compilar.
 - Pendiente: comprobación visual y aprobación del usuario; proyecto sin publicar.
