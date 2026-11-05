@@ -102,7 +102,7 @@ Multijugador, login, servidor, cuentas en nube, ranking global, combate, ejérci
 
 - El almacén configura por separado la recepción y el envío a mercados de comida y madera. La reserva conserva las reglas de acceso para construir y el modo vaciado transfiere a otros almacenes.
 - Voces de la aldea amplía su catálogo con 69 plantillas y rota entre temas y hogares. La cadencia se mide en tiempo simulado.
-- El lanzamiento se verifica en GitHub Pages desde `main`. Tras comprobar el despliegue, `develop` parte de ese commit. El [README](../README.md) describe el flujo de publicación y de Pull Requests.
+- Alpha 0.1 cierra la etapa. El desarrollo continúa en `main` y la publicación web queda aplazada. El [README](../README.md) describe la verificación local.
 
 ### Funcionalidad futura reservada: evolución visual de la ciudad
 

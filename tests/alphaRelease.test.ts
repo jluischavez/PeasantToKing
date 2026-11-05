@@ -5,11 +5,11 @@ import { test } from 'vitest';
 
 const read = (path: string) => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
 
-test('the Alpha uses a local favicon and correct paths in development and the Pages build', async () => {
+test('the Alpha uses a local favicon and root asset paths in development and production', async () => {
   const dev = await resolveConfig({}, 'serve');
   assert.equal(dev.base, '/');
   const preview = await resolveConfig({}, 'serve', 'production', 'production', true);
-  assert.equal(preview.base, '/PeasantToKing/');
+  assert.equal(preview.base, '/');
   assert.match(read('src/assets/favicon.svg'), /<svg\b[^>]*viewBox="0 0 32 32"/);
   assert.match(read('index.html'), /href="\/src\/assets\/favicon\.svg"/);
   const output = await build({ logLevel: 'silent', build: { write: false } });
@@ -21,15 +21,6 @@ test('the Alpha uses a local favicon and correct paths in development and the Pa
   for (const extension of ['svg', 'css', 'js']) {
     const asset = output.output.find(entry => entry.fileName.endsWith('.' + extension));
     assert.ok(asset);
-    assert.ok(page.source.includes('="/PeasantToKing/' + asset.fileName + '"'));
+    assert.ok(page.source.includes('="/' + asset.fileName + '"'));
   }
-});
-
-test('Pages accepts main pushes and manual dispatches from main, with tests before deployment', () => {
-  const workflow = read('.github/workflows/pages.yml');
-  assert.match(workflow, /^on:\r?\n  push:\r?\n    branches: \[main\]\r?\n  workflow_dispatch:\r?\n\r?\n/m);
-  assert.match(workflow, /^  build:\r?\n    if: github\.ref == 'refs\/heads\/main'$/m);
-  assert.match(workflow, /^  deploy:\r?\n    needs: build$/m);
-  assert.match(workflow, /npm ci\s+- run: npm test\s+- run: npm run build/);
-  assert.match(workflow, /actions\/upload-pages-artifact@v\d+\s+with:\s+path: dist/);
 });

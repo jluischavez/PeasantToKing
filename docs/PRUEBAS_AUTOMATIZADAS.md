@@ -15,7 +15,7 @@ Vitest usa Vite y el TypeScript del proyecto. Las pruebas se ejecutan en Node e 
 | Mercados | Empleo, permisos, cobertura vial, existencias e ingresos por comida entregada |
 | Simulación y auditoría | Pausa, reanudación, velocidades, saldos por evento, filtros, rechazos y límite del historial |
 | Integración | Granja → almacén → mercado → vivienda y recuperación con dos trabajadores, mercados inactivos y reserva agotada |
-| Alpha 0.1 | Versión, favicon, base de Vite en desarrollo y producción y condiciones del workflow de Pages |
+| Alpha 0.1 | Versión, favicon y rutas de recursos desde la raíz en desarrollo y producción |
 | Reservas de almacén | Envíos independientes de la recepción, gastos de construcción, vaciado, saldos y guardados anteriores |
 | Catálogo de Voces | 69 plantillas nuevas, condiciones observadas, filtros, rotación y compatibilidad de los enfriamientos |
 
