@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { ConstructionMap } from '../src/map/ConstructionMap.ts';
 import { RoadConnections } from '../src/map/RoadConnections.ts';
 import { Economy } from '../src/economy/Economy.ts';

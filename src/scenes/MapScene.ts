@@ -1,3 +1,4 @@
+import { ProductConfigurationPanel } from '../ui/ProductConfigurationPanel';
 import Phaser from 'phaser';
 import { GridMap } from '../map/GridMap';
 import { CellSelection } from '../map/CellSelection';
@@ -44,10 +45,10 @@ export class MapScene extends Phaser.Scene {
         reserve: economy.storage.initialFoodReserve, availableFood: economy.availableFood,
         blocked: economy.blockedProducers, bootstrap: economy.distribution.bootstrapActive,
       });
-      populationPanel.render(population, economy.availableFood,
-        economy.immigrationSupply(population, populationRules.familySize,
-          populationRules.immigrationIntervalSeconds, populationRules.foodPerResidentPerSecond,
-          populationRules.residentsPerPlot));
+      const supply = economy.immigrationSupply(population, populationRules.familySize,
+        populationRules.immigrationIntervalSeconds, populationRules.foodPerResidentPerSecond,
+        populationRules.residentsPerPlot);
+      populationPanel.render(population, economy.availableFood, supply, economy.migrationReason(population, supply));
     };
     renderSummary();
     const renderSelected = (): void => {
@@ -58,6 +59,8 @@ export class MapScene extends Phaser.Scene {
         cell ? economy.storage.warehouseAt(cell) : undefined,
         cell ? economy.distribution.marketAt(cell) : undefined,
         cell && constructions.getConstruction(cell) === 'house' ? economy.distribution.supplyAt(cell) : undefined);
+      configuration.render(cell, cell ? economy.storage.warehouseAt(cell) : undefined,
+        cell ? economy.distribution.marketAt(cell) : undefined);
     };
     const updateSimulation = (_time: number, delta: number): void => {
       const previousPopulation = population.total;
@@ -81,7 +84,14 @@ export class MapScene extends Phaser.Scene {
     const panel = new SelectionPanel(() => {
       selection.clear();
       map.renderSelection(selection.selected);
-      panel.render(selection.selected);
+      renderSelected();
+    });
+    const configuration = new ProductConfigurationPanel((cell, kind, product, enabled) => {
+      if (constructions.getConstruction(cell) !== kind) return;
+      if (kind === 'warehouse') economy.setWarehouseAcceptance(cell, product, enabled);
+      else economy.setMarketSale(cell, product, enabled);
+      renderSummary();
+      renderSelected();
     });
     const menu = new ConstructionMenu((type) => {
       buildType = type;
@@ -135,6 +145,7 @@ export class MapScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off(Phaser.Scale.Events.RESIZE, layout);
       this.events.off(Phaser.Scenes.Events.UPDATE, updateSimulation);
+      configuration.destroy();
       panel.destroy();
       menu.destroy();
     });

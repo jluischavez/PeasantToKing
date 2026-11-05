@@ -106,3 +106,35 @@ canvas {
   border-top: 1px solid #527b43;
   color: #c1c7b7;
 }
+
+#product-configuration {
+  flex-basis: 100%;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid #527b43;
+  border-radius: 4px;
+}
+
+#product-config-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+}
+
+#product-config-options label {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-block-size: 44px;
+  padding-inline: 8px;
+  cursor: pointer;
+}
+
+#product-config-options input {
+  inline-size: 1.15em;
+  block-size: 1.15em;
+  margin: 0;
+  accent-color: #ecd5a2;
+}

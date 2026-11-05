@@ -88,3 +88,30 @@
 - Interfaz muestra mercados (comida, empleo, cobertura, estado), suministro residencial, reserva abierta/cerrada e ingresos reales/s; pruebas manuales en docs/PRUEBAS_08D.md.
 - Verificación: npm run build correcto, 72 pruebas aprobadas y git diff --check sin errores; ciudad de referencia simulada 120 s, solares abastecidos crecen y solar a 7 tramos permanece vacío.
 - Pendiente validación visual/manual; persiste aviso conocido de tamaño de Phaser. Sin dependencias nuevas, transporte animado, mortalidad, emigración, felicidad ni avance a otra etapa.
+
+- 2026-11-04 — Etapa 08E implementada: configuración individual de almacenes (aceptar comida/madera) y mercados (autorizar comida), habilitada por defecto para sus productos permitidos.
+- Products centraliza identificadores, nombres y productos autorizables; solo food y wood, sin agregar productos futuros ni tratar el oro como mercancía.
+- Inventories conserva permisos por inventario y valida entradas a almacenes y entradas/salidas autorizadas de mercados; cambios no modifican existencias, capacidad ni totales.
+- Producción busca almacenes operativos que acepten su producto y tengan espacio; sin destino válido se mantiene bloqueada. Rechazar entradas permite retirar existencias anteriores hacia mercados.
+- Mercados con comida deshabilitada conservan inventario, sin reponer ni vender; hogares e inmigración buscan otros mercados autorizados dentro de cobertura, sin ingresos por productos deshabilitados.
+- Casillas HTML por edificio con estado explícito, etiquetas amplias y distribución flexible; controles reutilizados durante actualizaciones, conservando foco y selección. Configuración en memoria, sin guardado nuevo.
+- Sin cambios en consumo, empleo, capacidades 300/100 ni intervalo de reposición; sin reinicios de relojes, dependencias, cuotas, prioridades de almacenamiento, transportistas ni avance de etapa.
+- Verificación: npm run build correcto, 85 pruebas aprobadas (13 nuevas) y git diff --check sin errores. Pasos manuales en docs/PRUEBAS_08E.md; pendiente validación visual del usuario.
+- Persiste la advertencia conocida del tamaño de Phaser; no se publicó ni se avanzó sin autorización.
+
+- 2026-11-04 — Corrección posterior a 08E, sin nueva etapa: con dos activos se ocupaban almacén y granja antes del mercado; la previsión por vivienda quedaba vacía y el atractivo en 0 aunque hubiese alimentos almacenados.
+- employmentRules configura mínimos mercado/almacén/granja, recuperación productiva con escasez y puestos sobrantes para servicios antes del campamento; empates por fila y columna.
+- Prioridad esencial a almacén con comida y mercado autorizado con cobertura útil; otro mercado obtiene mínimo si cubre habitantes distintos y quedan activos, sin superar capacidades.
+- La reserva se cierra cuando un mercado autorizado y empleado tiene comida real, no al contratarlo vacío; no se regenera ni duplica.
+- Si la previsión normal falla, recuperación limitada a 1 llegada por evaluación por debajo de 12 habitantes, con comida accesible real y cobertura autorizada; se conservan consumo, empleo, límites migratorios y permisos de productos.
+- Sin comida, dos activos pueden producir/almacenar antes de distribuir; no se vende ni produce sin empleados, ni se consume directamente de almacenes.
+- Interfaz muestra por qué un mercado está inactivo, vacío o deshabilitado, y por qué el atractivo es 0 o la llegada está limitada.
+- Verificación: npm run build correcto y 98 pruebas aprobadas (13 nuevas), incluida ciudad de 4 habitantes, 23 puestos, dos mercados y 77,5 comida; conservación exacta y recuperación con reserva agotada.
+- Causa, desempates y pasos en docs/RECUPERACION_ECONOMICA.md; pendiente comprobación visual. Persiste aviso conocido del tamaño de Phaser; sin dependencias ni funcionalidades de otra etapa.
+
+- 2026-11-04 — Etapa 08T. npm test ejecuta la suite con Vitest 5.1 como dependencia de desarrollo y reutiliza Vite 8 y TypeScript.
+- Migradas las 98 pruebas existentes y agregados tres casos de regresión para la cadena alimentaria y los límites independientes de una transferencia.
+- Las dos integraciones verifican saldos e ingresos en el ciclo de distribución y la recuperación de la ciudad con mercados inactivos.
+- La suite usa modelos independientes de Phaser. La revisión visual de la escena se mantiene como prueba manual.
+- docs/PRUEBAS_AUTOMATIZADAS.md explica cómo ejecutar y ampliar la suite. Las guías anteriores usan los comandos de Vitest.
+- Verificación de 08T. npm test ejecutó 101 pruebas en ocho archivos, con 101 aprobadas y cero fallidas. npm run build correcto.

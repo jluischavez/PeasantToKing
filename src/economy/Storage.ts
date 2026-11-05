@@ -1,3 +1,4 @@
+import type { ProductId, ProductFlags } from './Products';
 import { Inventories, unitsPerResource } from './Inventories.ts';
 import type { Goods, StoredResource } from './Inventories';
 import type { Cell } from '../map/CellSelection';
@@ -9,6 +10,7 @@ export const storageRules = { warehouseCapacity: 300 } as const;
 export type WarehouseSnapshot = Readonly<{
   food: number; wood: number; used: number; free: number; capacity: number;
   workers: number; workerCapacity: number; connected: boolean; operational: boolean;
+  accepts: Readonly<ProductFlags>;
 }>;
 type Warehouse = { id: string; cell: Cell; workers: number; workerCapacity: number; connected: boolean };
 type Allocation = { destination: string; units: number };
@@ -68,8 +70,12 @@ export class Storage {
       used: inventory.used / unitsPerResource, free: inventory.free / unitsPerResource,
       capacity: inventory.capacity / unitsPerResource,
       workers: warehouse.workers, workerCapacity: warehouse.workerCapacity,
-      connected: warehouse.connected, operational: inventory.operational,
+      connected: warehouse.connected, operational: inventory.operational, accepts: inventory.products,
     };
+  }
+
+  setAcceptance(cell: Cell, product: ProductId, enabled: boolean): boolean {
+    return this.warehouses.has(key(cell)) && this.inventories.setProductEnabled(key(cell), product, enabled);
   }
 
   get initialFoodReserve(): number {
@@ -95,6 +101,22 @@ export class Storage {
     return food;
   }
 
+  essentialWarehouse(cell: Cell): boolean {
+    const stocked = [...this.warehouses.values()].filter(warehouse => warehouse.connected
+      && this.inventories.snapshot(warehouse.id)!.goods.food > 0);
+    if (stocked.length > 0) return stocked.some(warehouse => warehouse.id === key(cell));
+    return this.inventories.snapshot(key(cell))?.products.food ?? true;
+  }
+
+  connectedWarehouseFood(operationalOnly: boolean): number {
+    let units = 0;
+    for (const warehouse of this.warehouses.values()) {
+      const inventory = this.inventories.snapshot(warehouse.id)!;
+      if (warehouse.connected && (!operationalOnly || inventory.operational)) units += inventory.goods.food;
+    }
+    return units / unitsPerResource;
+  }
+
   availableSpaces(): Map<string, number> {
     const spaces = new Map<string, number>();
     for (const warehouse of this.warehouses.values()) {
@@ -108,13 +130,15 @@ export class Storage {
   // neither reserve capacity nor create goods.
   planProduction(cell: Cell, units: number, spaces = this.availableSpaces()): Allocation[] | undefined {
     if (!this.producers.has(key(cell)) || !Number.isSafeInteger(units) || units <= 0) return undefined;
+    const product = this.producers.get(key(cell))!;
     const network = this.connections?.networkFor(cell);
     if (!network) return undefined;
     const plan: Allocation[] = [];
     let remaining = units;
     for (const [id, free] of spaces) {
       const inventory = this.inventories.snapshot(id);
-      if (!inventory?.operational || inventory.network !== network) continue;
+      if (!inventory?.operational || inventory.network !== network
+        || !this.inventories.isProductEnabled(id, product)) continue;
       const quantity = Math.min(free, remaining);
       if (quantity > 0) plan.push({ destination: id, units: quantity });
       remaining -= quantity;

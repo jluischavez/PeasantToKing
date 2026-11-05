@@ -20,6 +20,7 @@
         <p>Puestos: <strong id="job-capacity">0</strong> · Vacantes: <span id="jobs-available">0</span></p>
         <p>Empleados: <strong id="workers-employed">0</strong> · Desempleados: <span id="workers-unemployed">0</span> (<span id="unemployment-rate">0</span> %)</p>
         <p>Atractivo migratorio: <strong id="migration-attractiveness">0</strong>/100</p>
+        <p id="migration-reason">Esperando condiciones para inmigración.</p>
         <p>Consumo: <span id="food-consumption">0,0</span> comida/s</p>
       </section>
     </header>
@@ -38,6 +39,10 @@
           <p>Estado: <span id="cell-status">Sin selección</span></p>
         </div>
         <button id="cancel-selection" type="button" disabled>Cancelar selección</button>
+        <fieldset id="product-configuration" hidden>
+          <legend id="product-config-title">Configuración de productos</legend>
+          <div id="product-config-options"></div>
+        </fieldset>
       </section>
     </footer>
     <script type="module" src="/src/main.ts"></script>

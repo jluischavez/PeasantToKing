@@ -40,6 +40,6 @@ Preparar una partida nueva con esta distribución. Se puede colocar el centro al
 
 ## Comprobaciones automatizadas
 
-node --test --test-reporter=spec tests/economy.test.ts tests/population.test.ts tests/storage.test.ts tests/roadConnections.test.ts tests/roadAppearance.test.ts
+npm test -- tests/economy.test.ts tests/population.test.ts tests/storage.test.ts tests/roadConnections.test.ts tests/roadAppearance.test.ts
 
 Incluyen fracciones exactas, transferencias inválidas, redes aisladas, pérdida de conexión/empleo sin pérdida de mercancías, saturación, reparto de lotes, reserva única, consumo sin duplicación y arranque con prioridad mínima.

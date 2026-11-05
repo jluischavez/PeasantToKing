@@ -51,4 +51,4 @@ La inmigración conserva su evaluación cada 5 segundos, atractivo y límite por
 
 Para evitar el ciclo población → empleados → distribución → inmigración, el asignador existente prioriza un trabajador por eslabón y completar la primera granja antes de puestos secundarios. No se crean trabajadores ni alimentos adicionales.
 
-node --test --test-reporter=spec tests/economy.test.ts tests/population.test.ts tests/storage.test.ts tests/distribution.test.ts tests/roadConnections.test.ts tests/roadAppearance.test.ts
+npm test -- tests/economy.test.ts tests/population.test.ts tests/storage.test.ts tests/distribution.test.ts tests/roadConnections.test.ts tests/roadAppearance.test.ts

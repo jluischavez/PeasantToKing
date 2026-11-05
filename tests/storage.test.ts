@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { Inventories, unitsPerResource as U } from '../src/economy/Inventories.ts';
 import type { StoredResource } from '../src/economy/Inventories.ts';
 import { Storage } from '../src/economy/Storage.ts';
@@ -275,4 +275,19 @@ test('inaccessible warehouse food is included globally but cannot enable immigra
   assert.equal(population.total, 0);
   assert.equal(economy.resources.food, 5);
   assert.equal(economy.availableFood, 0);
+});
+test.each([
+  { limit: 'source stock', stock: 30, capacity: 60, quantity: 31 },
+  { limit: 'destination space', stock: 60, capacity: 30, quantity: 31 },
+])('transfer exceeding $limit leaves both inventories unchanged', ({ stock, capacity, quantity }) => {
+  const ledger = new Inventories();
+  ledger.create('origin', { kind: 'warehouse', capacity: 100, network: 'A', operational: true },
+    { food: stock, wood: 0 });
+  ledger.create('destination', { kind: 'warehouse', capacity, network: 'A', operational: true });
+  const originBefore = ledger.snapshot('origin');
+  const destinationBefore = ledger.snapshot('destination');
+
+  assert.equal(ledger.transfer('origin', 'destination', 'food', quantity), false);
+  assert.deepEqual(ledger.snapshot('origin'), originBefore);
+  assert.deepEqual(ledger.snapshot('destination'), destinationBefore);
 });

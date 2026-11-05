@@ -36,7 +36,7 @@ export class SelectionPanel {
       this.status.textContent += ` · Empleados: ${productivity.workers}/${productivity.capacity} · Productividad: ${percent} %`;
     }
     if (productivity?.storageBlocked) {
-      this.status.textContent += ' · Producción bloqueada por falta de almacenamiento operativo con espacio.';
+      this.status.textContent += ' · Producción bloqueada por falta de almacenamiento operativo que acepte el producto y tenga espacio.';
     }
     if (cell && warehouse) {
       const format = (value: number) => value.toLocaleString('es', { maximumFractionDigits: 2 });
@@ -51,6 +51,7 @@ export class SelectionPanel {
         : supply.status === 'market' ? ` · Mercado con existencias a ${supply.distance} tramos`
         : ' · Sin acceso a alimentos: inmigración detenida';
     }
+    if (cell && market) this.status.textContent += ` · ${market.reason}`;
     this.cancel.disabled = cell === null;
   }
 

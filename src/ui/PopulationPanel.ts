@@ -6,6 +6,7 @@ export class PopulationPanel {
   private readonly active = document.querySelector<HTMLElement>('#population-active')!;
   private readonly unemploymentRate = document.querySelector<HTMLElement>('#unemployment-rate')!;
   private readonly attractiveness = document.querySelector<HTMLElement>('#migration-attractiveness')!;
+  private readonly reason = document.querySelector<HTMLElement>('#migration-reason')!;
   private readonly capacity = document.querySelector<HTMLElement>('#residential-capacity')!;
   private readonly connected = document.querySelector<HTMLElement>('#connected-capacity')!;
   private readonly jobs = document.querySelector<HTMLElement>('#job-capacity')!;
@@ -19,7 +20,8 @@ export class PopulationPanel {
     this.attractiveness.title = `Las llegadas se detienen con ${populationRules.migration.stopUnemploymentRate * 100} % de desempleo, sin espacio conectado o sin abastecimiento de alimentos.`;
   }
 
-  render(population: Population, food: number, supply: ReadonlyMap<string, number>): void {
+  render(population: Population, food: number, supply: ReadonlyMap<string, number>, reason: string): void {
+    this.reason.textContent = reason;
     this.total.textContent = String(population.total);
     this.active.textContent = String(population.activePopulation);
     this.unemploymentRate.textContent = (population.unemploymentRate * 100).toLocaleString('es', {

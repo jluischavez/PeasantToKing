@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { Economy } from '../src/economy/Economy.ts';
 import { distributionRules } from '../src/economy/Distribution.ts';
 import { unitsPerResource as U } from '../src/economy/Inventories.ts';
@@ -189,22 +189,30 @@ test('sales pay exactly for delivered food, including partial demand, with no pa
   assert.equal(economy.resources.gold, marketFood);
 });
 
-test('the bootstrap reserve feeds first inhabitants, earns no gold and closes permanently at first operation', () => {
-  const { economy, counts, sync, consume } = setup(0);
+test('the bootstrap reserve feeds first inhabitants until an authorized market has real stock', () => {
+  const { economy, counts, sync, consume, food, restock } = setup(0);
   consume([{ cell: near, residents: 2 }]);
   assert.equal(economy.storage.initialFoodReserve, 19.8);
   assert.equal(economy.resources.gold, 0);
   counts.set('4,1', 1);
   sync();
+  assert.equal(economy.distribution.bootstrapActive, true);
+  consume([{ cell: near, residents: 2 }]);
+  assert.equal(economy.storage.initialFoodReserve, 19.6);
+  food(1);
+  restock();
   assert.equal(economy.distribution.bootstrapActive, false);
-  const before = economy.resources;
-  consume([{ cell: near, residents: 2 }]); // Empty market, no fallback to reserve.
-  assert.deepEqual(economy.resources, before);
+  for (let i = 0; i < 5; i++) consume([{ cell: near, residents: 2 }]);
+  assert.equal(economy.resources.gold, 1);
+  assert.equal(economy.storage.initialFoodReserve, 19.6);
   counts.set('4,1', 0);
   for (let i = 0; i < 5; i++) sync();
+  const before = economy.resources;
+  consume([{ cell: near, residents: 2 }]);
+  assert.deepEqual(economy.resources, before);
   assert.equal(economy.distribution.bootstrapActive, false);
   assert.equal(economy.storage.consumeFood(3), false);
-  assert.equal(economy.storage.initialFoodReserve, 19.8);
+  assert.equal(economy.storage.initialFoodReserve, 19.6);
   assert.equal(economy.availableFood, 0);
 });
 
@@ -341,4 +349,39 @@ test('fractional sales conserve food and treasury exactly over a thousand withdr
   consume([{ cell: near, residents: 1 }]);
   assert.equal(economy.perSecond.gold, 0);
   assert.equal(economy.resources.gold, 100);
+});
+test('simulation moves farm food through the warehouse and market before households buy it', () => {
+  const map = new ConstructionMap(20, 20);
+  const farm = cell(1, 1), warehouse = cell(2, 1), market = cell(3, 1);
+  map.place(cell(0, 0), 'villageCenter');
+  for (let x = 1; x <= 5; x++) map.place(cell(x, 0), 'road');
+  map.place(farm, 'farm');
+  map.place(warehouse, 'warehouse');
+  map.place(market, 'market');
+  map.place(cell(4, 1), 'house');
+  map.place(cell(5, 1), 'house');
+
+  const roads = new RoadConnections(), population = new Population(), economy = new Economy();
+  const simulation = new SettlementSimulation(economy, population,
+    populationRules.immigrationIntervalSeconds, map, roads);
+  simulation.recalculate();
+  for (let i = 0; i < 3; i++) population.immigrate(economy.availableFood);
+  simulation.recalculate();
+  assert.equal(population.total, 6);
+  assert.equal(population.workersAt(farm), 1);
+  assert.equal(population.workersAt(warehouse), 1);
+  assert.equal(population.workersAt(market), 1);
+
+  simulation.advance(4999);
+  assert.equal(economy.storage.warehouseAt(warehouse)!.food, 2);
+  assert.equal(economy.distribution.marketAt(market)!.food, 0);
+  assert.equal(economy.storage.initialFoodReserve, 17.6);
+  assert.equal(economy.resources.gold, 0);
+
+  simulation.advance(1);
+  assert.equal(economy.storage.warehouseAt(warehouse)!.food, 0);
+  assert.equal(economy.distribution.marketAt(market)!.food, 1.9);
+  assert.equal(economy.storage.initialFoodReserve, 17.6);
+  assert.equal(economy.resources.food, 19.5);
+  assert.equal(economy.resources.gold, 0.6);
 });

@@ -1,3 +1,7 @@
+import { populationRules } from '../population/Population.ts';
+import type { LaborContext } from '../population/Population';
+import { productNames } from './Products.ts';
+import type { ProductId } from './Products';
 import { Distribution } from './Distribution.ts';
 import { Storage } from './Storage.ts';
 import { unitsPerResource } from './Inventories.ts';
@@ -7,12 +11,13 @@ import type { ConstructionMap, ConstructionType } from '../map/ConstructionMap';
 import type { RoadConnections } from '../map/RoadConnections';
 import type { Population } from '../population/Population';
 
-export const resourceNames = { gold: 'Oro', food: 'Comida', wood: 'Madera' } as const;
+export const resourceNames = { gold: 'Oro', ...productNames } as const;
 export type Resource = keyof typeof resourceNames;
 export type Resources = Record<Resource, number>;
 
 export const economyRules = {
   initialResources: { gold: 0, food: 20, wood: 0 },
+  recovery: { populationLimit: 12, arrivalsPerEvaluation: 1 },
 } as const;
 
 // 1/30 represents halves, thirds and consumption in tenths exactly.
@@ -126,8 +131,58 @@ export class Economy {
 
   immigrationSupply(population: Pick<Population, 'residencesSnapshot'>, maxResidents: number, seconds: number,
     foodPerResident: number, residentialCapacity: number): ReadonlyMap<string, number> {
-    return this.distribution.immigrationPlan(population.residencesSnapshot, maxResidents,
+    const homes = population.residencesSnapshot;
+    const normal = this.distribution.immigrationPlan(homes, maxResidents,
       seconds, foodPerResident, residentialCapacity);
+    if (normal.size > 0) return normal;
+    const total = homes.reduce((sum, home) => sum + home.residents, 0);
+    // Limited recruitment can use real logistics stocks as evidence of near-term
+    // supply; it never consumes warehouse food directly or manufactures resources.
+    // Existing consumption remains market-only, so shortage still has consequences.
+    const logisticsFood = this.storage.connectedWarehouseFood(true) + this.distribution.availableFood;
+    if (total >= economyRules.recovery.populationLimit || logisticsFood < seconds * foodPerResident) return normal;
+    const candidate = [...homes].sort((a, b) => a.residents - b.residents)
+      .find(home => home.residents < residentialCapacity && this.distribution.hasAuthorizedCoverage(home.cell));
+    return candidate ? new Map([[key(candidate.cell),
+      Math.min(maxResidents, economyRules.recovery.arrivalsPerEvaluation, residentialCapacity - candidate.residents)]]) : normal;
+  }
+
+  laborContext(population: Pick<Population, 'total' | 'activePopulation' | 'residencesSnapshot'>): LaborContext {
+    const food = this.storage.connectedWarehouseFood(false) + this.distribution.availableFood;
+    const buffer = (population.total + 1) * populationRules.foodPerResidentPerSecond * populationRules.immigrationIntervalSeconds;
+    return {
+      produceFoodFirst: population.activePopulation < 3 && food < buffer,
+      marketCoverage: cell => this.distribution.inhabitedCoverage(cell, population.residencesSnapshot),
+      essentialEligible: (cell, type) => {
+        if (type === 'market') return this.distribution.essentialMarket(cell, population.residencesSnapshot);
+        if (type === 'warehouse') return this.storage.essentialWarehouse(cell);
+        return true;
+      },
+    };
+  }
+
+  migrationReason(population: Population, supply: ReadonlyMap<string, number>): string {
+    const blocked = population.migrationBlockReason(this.availableFood, supply);
+    if (blocked && supply.size === 0 && population.availableHousing > 0
+      && population.unemploymentRate < populationRules.migration.stopUnemploymentRate) {
+      return this.distribution.supplyBlockReason(population.residencesSnapshot);
+    }
+    if (blocked) return blocked;
+    const normal = this.distribution.immigrationPlan(population.residencesSnapshot, populationRules.familySize,
+      populationRules.immigrationIntervalSeconds, populationRules.foodPerResidentPerSecond, populationRules.residentsPerPlot);
+    return normal.size === 0 ? 'Recuperación limitada: hasta 1 habitante por evaluación con alimentos reales.'
+      : 'Suministro previsto suficiente para inmigración.';
+  }
+  setWarehouseAcceptance(cell: Cell, product: ProductId, enabled: boolean): boolean {
+    const changed = this.storage.setAcceptance(cell, product, enabled);
+    if (changed) this.refresh();
+    return changed;
+  }
+
+  setMarketSale(cell: Cell, product: ProductId, enabled: boolean): boolean {
+    const changed = this.distribution.setSale(cell, product, enabled);
+    if (changed) this.refresh();
+    return changed;
   }
 
   private refresh(): void {

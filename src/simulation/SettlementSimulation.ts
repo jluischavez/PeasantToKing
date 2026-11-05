@@ -24,7 +24,8 @@ export class SettlementSimulation {
 
   recalculate(): void {
     this.connections.recalculate(this.map);
-    this.population.recalculate(this.map, this.connections);
+    this.economy.recalculate(this.map, this.connections, this.population);
+    this.population.recalculate(this.map, this.connections, this.economy.laborContext(this.population));
     this.economy.recalculate(this.map, this.connections, this.population);
   }
 
@@ -35,6 +36,8 @@ export class SettlementSimulation {
     let advanced = false;
     while (this.elapsedMs >= 1000) {
       this.elapsedMs -= 1000;
+      this.economy.recalculate(this.map, this.connections, this.population);
+      this.population.recalculate(this.map, this.connections, this.economy.laborContext(this.population));
       this.economy.recalculate(this.map, this.connections, this.population);
       this.economy.advance(1000);
       this.economy.consumeHomes(this.population, populationRules.foodPerResidentPerSecond);

@@ -16,6 +16,19 @@ export const populationRules = {
   },
 } as const;
 
+export const employmentRules = {
+  minimumServices: ['market', 'warehouse', 'farm'],
+  productionRecoveryServices: ['farm', 'warehouse', 'market'],
+  singleWorkerRecoveryServices: ['warehouse', 'market', 'farm'],
+  fillPriority: { farm: 0, warehouse: 1, market: 2, lumberjack: 10, house: 20, road: 20, villageCenter: 20 },
+} as const;
+
+export type LaborContext = {
+  produceFoodFirst?: boolean;
+  essentialEligible?: (cell: Cell, type: ConstructionType) => boolean;
+  marketCoverage?: (cell: Cell) => readonly string[];
+};
+
 const jobsByType: Record<ConstructionType, number> = {
   house: 0, road: 0, villageCenter: 0,
   farm: 4, lumberjack: 3, market: 3, warehouse: 2,
@@ -29,6 +42,7 @@ export class Population {
   private residences = new Map<string, Residence>();
   private workplaces = new Map<string, Workplace>();
   private migrationCredit = 0;
+  private laborContext: LaborContext = {};
 
   get residencesSnapshot(): readonly { cell: Cell; residents: number }[] {
     return [...this.residences.values()].map(home => ({
@@ -96,7 +110,8 @@ export class Population {
     return this.workplaces.get(key(cell))?.workers ?? 0;
   }
 
-  recalculate(map: ConstructionMap, connections: RoadConnections): void {
+  recalculate(map: ConstructionMap, connections: RoadConnections, context: LaborContext = {}): void {
+    this.laborContext = context;
     const residences = new Map<string, Residence>();
     const workplaces = new Map<string, Workplace>();
     for (let row = 0; row < map.rows; row++) {
@@ -143,6 +158,15 @@ export class Population {
     return Math.round(100 * base * employmentFactor);
   }
 
+  migrationBlockReason(food: number, supply?: ReadonlyMap<string, number>): string | null {
+    if (this.availableHousing === 0) return 'No hay solares conectados con espacio.';
+    if (this.unemploymentRate >= populationRules.migration.stopUnemploymentRate) return 'Desempleo demasiado alto.';
+    const supported = supply ? [...supply.values()].reduce((sum, count) => sum + count, 0)
+      : this.foodSupportedArrivals(food);
+    if (supported <= 0) return 'No hay alimento suficiente para admitir habitantes.';
+    return this.migrationAttractiveness(food, supply) === 0 ? 'El desempleo reduce el atractivo a cero.' : null;
+  }
+
   // Evaluated once per immigration interval. Fractional credit slows arrivals
   // predictably as attraction falls; no random rolls or accumulating backlog.
   immigrate(food: number, supply?: ReadonlyMap<string, number>): number {
@@ -177,24 +201,39 @@ export class Population {
 
   private assignWorkers(): void {
     let available = this.activePopulation;
-    for (const workplace of this.workplaces.values()) workplace.workers = 0;
-    // Bootstrap uses one existing worker per link: storage, farm and market.
-    // This is the same allocator; no workers are created or counted twice.
-    for (const type of ['warehouse', 'farm', 'market'] as const) {
-      const workplace = [...this.workplaces.values()].find(entry => entry.type === type);
+    const workplaces = [...this.workplaces.values()];
+    for (const workplace of workplaces) workplace.workers = 0;
+    const eligible = (workplace: Workplace) =>
+      this.laborContext.essentialEligible?.(workplace.cell, workplace.type) ?? true;
+    const order = available < 2 ? employmentRules.singleWorkerRecoveryServices
+      : this.laborContext.produceFoodFirst ? employmentRules.productionRecoveryServices
+      : employmentRules.minimumServices;
+    // One worker per essential TYPE before second buildings or extra posts.
+    // Equal candidates use stable row/column order, with authorized food services first.
+    for (const type of order) {
+      const workplace = workplaces.find(entry => entry.type === type && eligible(entry));
       if (available > 0 && workplace) {
         workplace.workers = 1;
         available--;
       }
     }
-    // Complete food production before secondary posts to avoid a distribution deadlock.
-    const farm = [...this.workplaces.values()].find(entry => entry.type === 'farm');
-    if (farm) {
-      const assigned = Math.min(available, farm.capacity - farm.workers);
-      farm.workers += assigned;
-      available -= assigned;
+    // An extra market gets a minimum worker only if it reaches inhabitants
+    // not covered by an already staffed market; redundant markets wait.
+    const covered = new Set(workplaces.filter(entry => entry.type === 'market' && entry.workers > 0)
+      .flatMap(entry => [...(this.laborContext.marketCoverage?.(entry.cell) ?? [])]));
+    for (const workplace of workplaces) {
+      const homes = this.laborContext.marketCoverage?.(workplace.cell) ?? [];
+      if (available > 0 && workplace.type === 'market' && workplace.workers === 0
+        && eligible(workplace) && homes.some(home => !covered.has(home))) {
+        workplace.workers = 1;
+        available--;
+        for (const home of homes) covered.add(home);
+      }
     }
-    for (const workplace of this.workplaces.values()) {
+    // Fill food production first; secondary services precede normal lumber jobs.
+    workplaces.sort((a, b) => employmentRules.fillPriority[a.type] - employmentRules.fillPriority[b.type]
+      || a.cell.row - b.cell.row || a.cell.column - b.cell.column);
+    for (const workplace of workplaces) {
       const assigned = Math.min(available, workplace.capacity - workplace.workers);
       workplace.workers += assigned;
       available -= assigned;

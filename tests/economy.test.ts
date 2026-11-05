@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test } from 'vitest';
 import { Economy } from '../src/economy/Economy.ts';
 import { ConstructionMap } from '../src/map/ConstructionMap.ts';
 import type { ConstructionType } from '../src/map/ConstructionMap.ts';
@@ -22,12 +22,15 @@ function setup() {
     economy.recalculate(map, connections, population);
   };
   const fillWorkers = (workers: number) => {
-    const residents = (workers + 1) * 2;
+    const farmOnly = map.getConstruction(cell(13, 1)) === 'farm'
+      && map.getConstruction(cell(14, 1)) === null;
+    const storageWorkers = farmOnly ? 1 : 2;
+    const residents = (workers + storageWorkers) * 2;
     // Use actual immigration/assignment, limiting arrivals with the food reserve.
     for (let i = 0; i < 100 && population.total < residents; i++) {
       population.immigrate(residents / 2);
     }
-    assert.equal(population.activePopulation, workers + 1);
+    assert.equal(population.activePopulation, workers + storageWorkers);
     economy.recalculate(map, connections, population);
   };
   return { map, connections, economy, population, recalculate, fillWorkers };
