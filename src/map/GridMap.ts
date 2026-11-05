@@ -3,6 +3,7 @@ import type { Cell } from './CellSelection';
 import type { ConstructionMap, ConstructionType } from './ConstructionMap';
 import { drawConstruction } from './drawConstruction';
 import type { RoadConnections } from './RoadConnections';
+import type { Population } from '../population/Population';
 import { getRoadMask } from './RoadAppearance';
 
 export class GridMap {
@@ -83,7 +84,7 @@ export class GridMap {
     this.highlight.clear();
   }
 
-  renderConstructions(map: ConstructionMap, connections: RoadConnections): void {
+  renderConstructions(map: ConstructionMap, connections: RoadConnections, population: Population): void {
     this.constructions.clear();
     this.connectionIndicators.clear();
     if (this.cellSize <= 0) return;
@@ -93,7 +94,8 @@ export class GridMap {
         if (type) {
           drawConstruction(this.constructions, type,
             this.x + column * this.cellSize, this.y + row * this.cellSize, this.cellSize,
-            1, type === 'road' ? getRoadMask(map, { column, row }) : 0);
+            1, type === 'road' ? getRoadMask(map, { column, row }) : 0,
+            population.residentsAt({ column, row }) > 0);
           if (type !== 'road' && !connections.isConnected({ column, row })) {
             const markerX = this.x + (column + 0.86) * this.cellSize;
             const markerY = this.y + (row + 0.14) * this.cellSize;

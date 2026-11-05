@@ -10,8 +10,17 @@ import { RoadConnections } from '../map/RoadConnections';
 import { getRoadMask } from '../map/RoadAppearance';
 import { Economy } from '../economy/Economy';
 import { ResourceBar } from '../ui/ResourceBar';
+import { Population, populationRules } from '../population/Population';
+import { PopulationPanel } from '../ui/PopulationPanel';
+import { SettlementSimulation } from '../simulation/SettlementSimulation';
 
 export class MapScene extends Phaser.Scene {
+  // Settlement state survives scene/UI reconstruction; a new scene starts a new game.
+  private readonly economy = new Economy();
+  private readonly population = new Population();
+  private readonly connections = new RoadConnections();
+  private constructions: ConstructionMap | null = null;
+  private simulation: SettlementSimulation | null = null;
   constructor() {
     super('MapScene');
   }
@@ -23,17 +32,39 @@ export class MapScene extends Phaser.Scene {
     }).setOrigin(0.5);
     const map = new GridMap(this);
     const selection = new CellSelection();
-    const constructions = new ConstructionMap(map.columns, map.rows);
-    const connections = new RoadConnections();
-    const economy = new Economy();
+    const constructions = this.constructions ??= new ConstructionMap(map.columns, map.rows);
+    const { connections, economy, population } = this;
+    const simulation = this.simulation ??= new SettlementSimulation(
+      economy, population, populationRules.immigrationIntervalSeconds, constructions, connections);
+    simulation.recalculate();
     const resourceBar = new ResourceBar();
-    resourceBar.render(economy.resources, economy.perSecond);
-    const updateEconomy = (_time: number, delta: number): void => {
-      if (economy.advance(delta)) {
-        resourceBar.render(economy.resources, economy.perSecond);
+    const populationPanel = new PopulationPanel();
+    const renderSummary = (): void => {
+      resourceBar.render(economy.resources, economy.perSecond, {
+        reserve: economy.storage.initialFoodReserve, availableFood: economy.availableFood,
+        blocked: economy.blockedProducers,
+      });
+      populationPanel.render(population, economy.availableFood);
+    };
+    renderSummary();
+    const renderSelected = (): void => {
+      const cell = selection.selected;
+      panel.render(cell, cell ? constructions.getConstruction(cell) : null,
+        cell !== null && connections.isConnected(cell), cell ? population.residentsAt(cell) : 0,
+        cell ? economy.productivityAt(cell) : undefined,
+        cell ? economy.storage.warehouseAt(cell) : undefined);
+    };
+    const updateSimulation = (_time: number, delta: number): void => {
+      const previousPopulation = population.total;
+      if (simulation.advance(delta)) {
+        renderSummary();
+        renderSelected();
+        if (population.total !== previousPopulation) {
+          map.renderConstructions(constructions, connections, population);
+        }
       }
     };
-    this.events.on(Phaser.Scenes.Events.UPDATE, updateEconomy);
+    this.events.on(Phaser.Scenes.Events.UPDATE, updateSimulation);
     let buildType: ConstructionType | null = null;
     let hoveredCell: Cell | null = null;
     const updatePointerFeedback = (): void => {
@@ -52,6 +83,8 @@ export class MapScene extends Phaser.Scene {
       updatePointerFeedback();
     });
 
+    if (constructions.villageCenter) menu.disableVillageCenter();
+
     const layout = (): void => {
       const { width, height } = this.scale;
       const headerHeight = Math.min(80, height * 0.25);
@@ -59,7 +92,7 @@ export class MapScene extends Phaser.Scene {
       title.setPosition(width / 2, headerHeight / 2);
       title.setFontSize(Math.min(36, width / 10, headerHeight * 0.55));
       map.layout((width - size) / 2, headerHeight + (height - headerHeight - size) / 2, size);
-      map.renderConstructions(constructions, connections);
+      map.renderConstructions(constructions, connections, population);
       map.renderSelection(selection.selected);
       hoveredCell = null;
       updatePointerFeedback();
@@ -81,23 +114,22 @@ export class MapScene extends Phaser.Scene {
       if (!cell) return;
       selection.select(cell);
       if (buildType && constructions.place(cell, buildType)) {
-        connections.recalculate(constructions);
-        economy.recalculate(constructions, connections);
-        resourceBar.render(economy.resources, economy.perSecond);
-        map.renderConstructions(constructions, connections);
+        simulation.recalculate();
+        renderSummary();
+        map.renderConstructions(constructions, connections, population);
         if (buildType === 'villageCenter') {
           menu.disableVillageCenter();
           buildType = null;
         }
       }
       map.renderSelection(selection.selected);
-      panel.render(selection.selected, constructions.getConstruction(cell), connections.isConnected(cell));
+      renderSelected();
       hoveredCell = cell;
       updatePointerFeedback();
     });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off(Phaser.Scale.Events.RESIZE, layout);
-      this.events.off(Phaser.Scenes.Events.UPDATE, updateEconomy);
+      this.events.off(Phaser.Scenes.Events.UPDATE, updateSimulation);
       panel.destroy();
       menu.destroy();
     });

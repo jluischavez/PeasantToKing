@@ -96,3 +96,13 @@ canvas {
 #resource-bar span {
   color: #c1c7b7;
 }
+#population-bar {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 24px;
+  padding-top: 8px;
+  border-top: 1px solid #527b43;
+  color: #c1c7b7;
+}

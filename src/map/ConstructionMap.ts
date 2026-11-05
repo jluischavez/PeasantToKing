@@ -1,10 +1,11 @@
 import type { Cell } from './CellSelection';
 
 export const constructionNames = {
-  house: 'Casa',
+  // Stable map identifier: a residential plot, occupied only after immigration.
+  house: 'Zona residencial',
   road: 'Camino',
   farm: 'Granja',
-  lumberjack: 'Leñador',
+  lumberjack: 'Campamento maderero',
   warehouse: 'Almacén',
   market: 'Mercado',
   villageCenter: 'Centro de Aldea',

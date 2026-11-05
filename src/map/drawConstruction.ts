@@ -26,16 +26,17 @@ const constructionDrawers: Record<ConstructionType, ConstructionDrawer> = {
       x + size * 0.78, y + size * 0.11, x + size * 0.52, y + size * 0.17);
   },
   house(graphics, x, y, size, alpha) {
-    graphics.fillStyle(0xe4c68e, alpha);
-    graphics.fillRect(x + size * 0.2, y + size * 0.42, size * 0.6, size * 0.45);
-    graphics.fillStyle(0x914d39, alpha);
-    graphics.fillTriangle(
-      x + size * 0.1, y + size * 0.45,
-      x + size * 0.5, y + size * 0.1,
-      x + size * 0.9, y + size * 0.45,
-    );
+    graphics.fillStyle(0x8a7653, alpha);
+    graphics.fillRect(x + size * 0.12, y + size * 0.12, size * 0.76, size * 0.76);
+    graphics.lineStyle(Math.max(1, size * 0.04), 0xd4bd8e, alpha);
+    graphics.strokeRect(x + size * 0.16, y + size * 0.16, size * 0.68, size * 0.68);
+    // Four short stakes distinguish an empty reserved plot from a road.
     graphics.fillStyle(0x503a29, alpha);
-    graphics.fillRect(x + size * 0.43, y + size * 0.62, size * 0.16, size * 0.25);
+    for (const dx of [0.12, 0.8]) {
+      for (const dy of [0.12, 0.8]) {
+        graphics.fillRect(x + size * dx, y + size * dy, size * 0.08, size * 0.08);
+      }
+    }
   },
   road: drawRoad,
   farm(graphics, x, y, size, alpha) {
@@ -103,6 +104,17 @@ export function drawConstruction(
   size: number,
   alpha = 1,
   roadMask = 0,
+  inhabited = false,
 ): void {
+  if (type === 'house' && inhabited) {
+    graphics.fillStyle(0xb89a6b, alpha);
+    graphics.fillRect(x + size * 0.22, y + size * 0.43, size * 0.56, size * 0.43);
+    graphics.fillStyle(0xc5a24d, alpha);
+    graphics.fillTriangle(x + size * 0.12, y + size * 0.47,
+      x + size * 0.5, y + size * 0.17, x + size * 0.88, y + size * 0.47);
+    graphics.fillStyle(0x503a29, alpha);
+    graphics.fillRect(x + size * 0.43, y + size * 0.62, size * 0.16, size * 0.24);
+    return;
+  }
   constructionDrawers[type](graphics, x, y, size, alpha, roadMask);
 }

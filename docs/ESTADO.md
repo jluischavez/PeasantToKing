@@ -38,3 +38,42 @@
 - Sin costos, trabajadores, consumo, límites, niveles, guardado ni funcionalidades posteriores; controles conservados.
 - Verificación: `npm run build` correcto y 18 pruebas aprobadas (6 económicas y 12 previas); sin dependencias nuevas.
 - Pendiente: comprobación visual/manual y aprobación del usuario; persiste advertencia de tamaño de Phaser. No se avanzó a 07 ni se publicó.
+- 2026-11-04 — Etapa 07 implementada: «Zona residencial» reemplaza Casa; el identificador interno house se conserva como solar de una casilla.
+- Solares vacíos con estacas; primera familia activa una choza sencilla, máximo 4 habitantes por solar; selección muestra estado, habitantes y conexión.
+- Inmigración cada 5 s: hasta 2 habitantes distribuidos entre solares conectados, limitada por espacio, vacantes y reserva de comida para 5 s de toda la población resultante.
+- Population mantiene habitantes y asigna empleo automáticamente; puestos conectados: Granja 4, Leñador 3, Mercado 3 y Almacén 2.
+- SettlementSimulation coordina producción, consumo e inmigración en un único ciclo; consumo de 0,1 comida/habitante/s, redondeado a décimas y limitado a cero.
+- Panel HTML flexible fuera del canvas: población, capacidades residencial total/conectada, puestos, ocupados, desempleados, vacantes y consumo.
+- Producción de etapa 06 independiente del empleo; sin mortalidad, emigración, servicios, costos, impuestos, dependencias nuevas ni funcionalidades posteriores.
+- Verificación: npm run build correcto y 30 pruebas aprobadas (12 nuevas); pendiente comprobación visual/manual y aprobación del usuario.
+- Persiste advertencia conocida de tamaño de Phaser; sin publicación ni avance a etapa 08.
+
+- 2026-11-04 — Etapa 08A implementada: población activa = 50 % de habitantes, redondeada hacia abajo; empleados + desempleados = población activa; tasa sobre activos, 0 % si no hay activos.
+- Asignación central automática por edificio conectado, limitada por activos y capacidad; puestos conservados: Granja 4, Campamento maderero 3, Mercado 3, Almacén 2.
+- Nombre visible «Campamento maderero», conservando el identificador lumberjack.
+- Inmigración sin requisito de vacantes: atractivo 0–100 combina vivienda conectada (35), reserva de comida (40), oportunidades laborales (25) y penalización progresiva por desempleo.
+- Evaluación determinista cada 5 s; crédito fraccionario regula hasta 2 llegadas por evaluación. Con 60 % de desempleo, sin espacio conectado o sin comida suficiente, se detiene.
+- Parámetros en populationRules; se conserva la reserva alimentaria de 5 s, recursos iniciales en 0, consumo de 0,1/habitante/s y producción independiente de empleados.
+- Interfaz HTML flexible muestra población, activos, empleados, desempleados, porcentaje y atractivo; nuevos empleos conectados reasignan trabajadores inmediatamente.
+- Verificación: npm run build correcto, 36 pruebas aprobadas y git diff --check sin errores; simulación reproducible con 1 granja: 10 habitantes, 5 activos y 1 desempleado a los 30 s.
+- Pendiente validación visual/manual; persiste aviso conocido de tamaño de Phaser. Sin dependencias nuevas, salarios, inventarios, cambios visuales ni avance a 08B.
+
+- 2026-11-04 — Etapa 08B implementada: producción = máximo × empleados/capacidad; Granja 2 comida/4, Campamento maderero 2 madera/3, Mercado 1 oro/3; Almacén no produce.
+- Empleados y capacidades reutilizados de Population; sin segundo asignador. Edificios desconectados o sin empleados producen 0; nunca se supera el máximo.
+- SettlementSimulation recalcula conexiones → empleo → producción al construir, y actualiza las tasas tras inmigración/reasignación dentro del único ciclo existente.
+- Reserva inicial configurable en economyRules: 20 comida, 0 oro y 0 madera, concedida solo al crear Economy para una partida nueva.
+- Estado económico, población, mapa y reloj conservados en la escena al reconstruir su interfaz; recalcular y redimensionar no conceden recursos.
+- Precisión mediante enteros en unidades de 1/30: mitades, tercios y consumo de décimas exactos; cantidades con hasta 2 decimales y tasas con hasta 3 solo en presentación.
+- Selección de productores muestra empleados/capacidad y productividad porcentual; se mantiene la interfaz y las reglas migratorias de 08A.
+- Verificación: npm run build correcto, 43 pruebas aprobadas y git diff --check sin errores; incluye arranque, conexión tardía, reasignación, reserva única y acumulación prolongada de fracciones.
+- Pendiente comprobación visual/manual; continúa aviso conocido de tamaño de Phaser. Sin dependencias nuevas, almacenamiento, distribución, ventas reales, salarios ni avance de etapa.
+
+- 2026-11-04 — Etapa 08C implementada: inventario propio por almacén, comida/madera con capacidad compartida de 300; operación exige conexión al centro y al menos 1 empleado.
+- Inventories centraliza transferencias atómicas: valida origen, destino, recurso, red, disponibilidad y capacidad, con precisión entera de 1/30 y sin duplicaciones.
+- Storage conserva inventarios y reparte cada entrega entre almacenes operativos de la misma red BFS; si el lote completo no cabe, no se almacena y se muestra bloqueo.
+- Economía reutiliza producción laboral y ciclo existentes; oro provisional del Mercado sin cambios. Totales de comida/madera derivados únicamente de reserva e inventarios reales.
+- Reserva inicial separada de 20 comida: se consume primero, luego comida de almacenes operativos; no se regenera ni se copia al construir. Comida inaccesible no habilita inmigración.
+- Solución mínima de arranque en el asignador existente: priorizar 1 empleado al primer almacén conectado y 1 a la primera granja, sin crear población ni otro sistema laboral.
+- Interfaz HTML conserva distribución flexible: reserva, comida disponible, bloqueo; selección de almacén muestra inventario, capacidad usada/libre, empleados y conexión.
+- Verificación: npm run build correcto, 56 pruebas aprobadas y git diff --check sin errores; secuencia de saturación/ampliación verificada en simulación; pasos en docs/PRUEBAS_08C.md.
+- Pendiente validación visual/manual; persiste aviso conocido de tamaño de Phaser. Sin dependencias nuevas, ventas, salarios, demolición, transportistas ni avance a 08D.
