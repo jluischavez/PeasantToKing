@@ -1,9 +1,14 @@
+import { formatNumber } from '../formatNumber';
 import { distributionRules } from '../economy/Distribution';
 import type { MarketSnapshot, HousingSupply } from '../economy/Distribution';
 import { gameMinutesForSeconds } from '../simulation/GameTime';
 import type { WarehouseSnapshot } from '../economy/Storage';
 import type { BuildingProductivity } from '../economy/Economy';
 import type { Cell } from '../map/CellSelection';
+import { populationRules } from '../population/Population';
+import { wellbeingState } from '../population/Wellbeing';
+import { waterRules } from '../simulation/WaterService';
+import type { WellSnapshot } from '../simulation/WaterService';
 import { constructionNames } from '../map/ConstructionMap';
 import type { ConstructionType } from '../map/ConstructionMap';
 
@@ -38,7 +43,8 @@ export class SelectionPanel {
 
   render(cell: Cell | null, construction: ConstructionType | null = null, connected = false, residents = 0,
     productivity?: BuildingProductivity, warehouse?: WarehouseSnapshot, market?: MarketSnapshot,
-    supply?: HousingSupply, foodShortage = 0, woodSupply?: HousingSupply, woodShortage = 0): void {
+    supply?: HousingSupply, foodShortage = 0, woodSupply?: HousingSupply, woodShortage = 0,
+    wellbeing?: Readonly<{ happiness: number; concerns: readonly string[] }>, waterSupplied = 0, well?: WellSnapshot): void {
     this.coordinates.textContent = cell ? `X: ${cell.column} · Y: ${cell.row}` : 'X: — · Y: —';
     this.terrain.textContent = cell ? 'césped' : '—';
     this.status.textContent = cell
@@ -50,35 +56,46 @@ export class SelectionPanel {
       this.status.textContent = `ocupada — ${residents > 0 ? 'Choza' : 'Solar vacío'} · ${residents}/4 habitantes · ${connected ? 'Conectado' : 'Sin conexión'}`;
     }
     if (cell && productivity) {
-      const percent = (productivity.ratio * 100).toLocaleString('es', { maximumFractionDigits: 1 });
+      const percent = formatNumber(productivity.ratio * 100);
       this.status.textContent += ` · Empleados: ${productivity.workers}/${productivity.capacity} · Productividad: ${percent} %`;
     }
     if (productivity?.storageBlocked) {
       this.status.textContent += ' · Producción bloqueada por falta de almacenamiento operativo que acepte el producto y tenga espacio.';
     }
     if (cell && warehouse) {
-      const format = (value: number) => value.toLocaleString('es', { maximumFractionDigits: 2 });
-      this.status.textContent += ` · Comida: ${format(warehouse.food)} · Madera: ${format(warehouse.wood)} · Capacidad usada: ${format(warehouse.used)}/${warehouse.capacity} · Disponible: ${format(warehouse.free)} · Empleados: ${warehouse.workers}/${warehouse.workerCapacity} · ${warehouse.operational ? 'Operativo' : 'Inactivo'}`;
+      this.status.textContent += ` · Comida: ${formatNumber(warehouse.food)} · Madera: ${formatNumber(warehouse.wood)} · Capacidad usada: ${formatNumber(warehouse.used)}/${warehouse.capacity} · Disponible: ${formatNumber(warehouse.free)} · Empleados: ${warehouse.workers}/${warehouse.workerCapacity} · ${warehouse.operational ? 'Operativo' : 'Inactivo'}`;
     }
     if (cell && market) {
-      const restockMinutes = gameMinutesForSeconds(distributionRules.restockIntervalSeconds).toLocaleString('es');
+      const restockMinutes = formatNumber(gameMinutesForSeconds(distributionRules.restockIntervalSeconds));
       this.status.textContent += ' · Reposición cada ' + restockMinutes + ' min del juego';
-      const format = (amount: number) => amount.toLocaleString('es', { maximumFractionDigits: 2 });
-      this.status.textContent += ` · Comida: ${format(market.food)} · Madera: ${format(market.wood)} · Capacidad usada: ${format(market.food + market.wood)}/${market.capacity} · Empleados: ${market.workers}/${market.workerCapacity} · Cobertura: ${market.coveredHomes} solares, hasta ${market.range} tramos de camino · ${market.operational ? 'Operativo' : 'Inactivo'}`;
+      this.status.textContent += ` · Comida: ${formatNumber(market.food)} · Madera: ${formatNumber(market.wood)} · Capacidad usada: ${formatNumber(market.food + market.wood)}/${market.capacity} · Empleados: ${market.workers}/${market.workerCapacity} · Cobertura: ${market.coveredHomes} solares, hasta ${market.range} tramos de camino · ${market.operational ? 'Operativo' : 'Inactivo'}`;
     }
     if (cell && construction === 'house' && supply) {
       this.status.textContent += supply.status === 'reserve' ? ' · Abastecimiento: reserva inicial'
         : supply.status === 'market' ? ` · Mercado con existencias a ${supply.distance} tramos`
-        : ' · Sin acceso a alimentos: inmigración detenida';
+        : ' · Sin comida disponible en esta vivienda';
     }
     if (woodSupply && residents > 0) {
       this.status.textContent += woodSupply.status === 'market'
         ? ' · Madera disponible en mercado a ' + woodSupply.distance + ' tramos'
         : ' · Sin acceso a madera disponible';
-      if (woodShortage > 0) this.status.textContent += ' · Madera sin entregar en el último ciclo: ' + woodShortage.toLocaleString('es');
+      if (woodShortage > 0) this.status.textContent += ' · Madera sin entregar en el último ciclo: ' + formatNumber(woodShortage);
     }
     if (foodShortage > 0) {
-      this.status.textContent += ' · Comida sin entregar en el último ciclo: ' + foodShortage.toLocaleString('es');
+      this.status.textContent += ' · Comida sin entregar en el último ciclo: ' + formatNumber(foodShortage);
+    }
+    if (well) {
+      this.status.textContent += ' · Aguadores: ' + well.workers + '/1 · Habitantes abastecidos: ' + well.served
+        + '/' + waterRules.capacity + ' · Cobertura: hasta ' + waterRules.roadRange + ' tramos de camino';
+    }
+    if (residents > 0) {
+      this.status.textContent += ' · Agua: ' + waterSupplied + '/' + residents + ' habitantes abastecidos';
+      const happiness = wellbeing?.happiness ?? populationRules.migration.neutralHappiness;
+      this.status.textContent += ' · Felicidad: ' + formatNumber(happiness)
+        + '/100 · ' + wellbeingState(happiness);
+      const concerns = wellbeing?.concerns ?? [];
+      this.status.textContent += concerns.length > 0 ? ' · ' + concerns.join(' · ')
+        : wellbeing ? ' · Suministros cubiertos y empleo estable' : ' · Bienestar inicial';
     }
     if (cell && market) this.status.textContent += ` · ${market.reason}`;
     this.cancel.disabled = cell === null;

@@ -75,15 +75,15 @@ test('tax attraction is applied once, is bounded and does not override immigrati
   const { economy, population } = town(0);
   assert.equal(population.migrationAttractiveness(20), 75);
   economy.setTaxPolicy('low');
-  assert.equal(population.migrationAttractiveness(20, undefined, economy.taxMigrationModifier), 85);
-  assert.equal(population.migrationAttractiveness(0, undefined, economy.taxMigrationModifier), 0);
+  assert.equal(population.migrationAttractiveness(20, economy.taxMigrationModifier), 85);
+  assert.equal(population.migrationAttractiveness(0, economy.taxMigrationModifier), 0);
   economy.setTaxPolicy('high');
   for (let i = 0; i < 3; i++) {
-    assert.equal(population.migrationAttractiveness(20, undefined, economy.taxMigrationModifier), 55);
+    assert.equal(population.migrationAttractiveness(20, economy.taxMigrationModifier), 55);
   }
   const capped = town(2);
   capped.economy.setTaxPolicy('low');
-  assert.equal(capped.population.migrationAttractiveness(20, undefined, capped.economy.taxMigrationModifier), 100);
+  assert.equal(capped.population.migrationAttractiveness(20, capped.economy.taxMigrationModifier), 100);
 });
 
 test('the settlement applies tax attractiveness to actual arrivals', () => {

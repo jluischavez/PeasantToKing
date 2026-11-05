@@ -1,3 +1,4 @@
+import { formatNumber } from '../formatNumber';
 import type { AuditResource, EconomicHistory } from '../economy/EconomicHistory';
 import { resourceNames } from '../economy/Economy';
 import { unitsPerResource } from '../economy/Inventories';
@@ -24,15 +25,6 @@ function endpointName(id: string): string {
     : endpointNames[id] ?? id;
 }
 
-function exactAmount(units: number, scale = unitsPerResource): string {
-  if ((units % scale * 10_000) % scale === 0) {
-    return (units / scale).toLocaleString('es', { maximumFractionDigits: 4 });
-  }
-  const whole = Math.floor(units / scale);
-  const fraction = (units % scale) + '/' + scale;
-  return whole ? whole + ' + ' + fraction : fraction;
-}
-
 export class SimulationPanel {
   private readonly pause = document.querySelector<HTMLButtonElement>('#simulation-pause')!;
   private readonly speed = document.querySelector<HTMLSelectElement>('#simulation-speed')!;
@@ -42,6 +34,9 @@ export class SimulationPanel {
   private readonly selectedOnly = document.querySelector<HTMLInputElement>('#audit-selected-only')!;
   private readonly list = document.querySelector<HTMLOListElement>('#audit-list')!;
   private readonly empty = document.querySelector<HTMLElement>('#audit-empty')!;
+  private readonly populationList = document.querySelector<HTMLOListElement>('#population-events-list')!;
+  private readonly populationEmpty = document.querySelector<HTMLElement>('#population-events-empty')!;
+  private lastDepartureTime: number | undefined;
   private readonly events = new AbortController();
   private readonly simulation: SettlementSimulation;
   private readonly history: EconomicHistory;
@@ -80,6 +75,7 @@ export class SimulationPanel {
     this.speed.value = String(this.simulation.speed);
     this.renderClock();
     if (!this.audit.open) return;
+    this.renderEmigrationEvents();
 
     const target = this.selectedOnly.checked ? building : undefined;
     const resource = this.resource.value as AuditResource | '';
@@ -93,10 +89,10 @@ export class SimulationPanel {
     this.list.replaceChildren(...[...events].reverse().map(event => {
       const row = document.createElement('li');
       const title = document.createElement('strong');
-      const amount = (units: number) => exactAmount(units, event.unitScale);
+      const amount = (units: number) => formatNumber(units / (event.unitScale ?? unitsPerResource));
       const operation = event.soldProduct ? 'Venta de ' + resourceNames[event.soldProduct].toLowerCase()
         : operationNames[event.operation];
-      title.textContent = '#' + event.id + ' · ' + formatGameTime(gameTimeAt(event.timeMs)) + ' · '
+      title.textContent = '#' + formatNumber(event.id) + ' · ' + formatGameTime(gameTimeAt(event.timeMs)) + ' · '
         + operation + (event.result === 'unpaid' ? ' (impago)' : '')
         + ' · ' + resourceNames[event.resource] + ' ' + amount(event.units);
       const route = document.createElement('div');
@@ -112,6 +108,20 @@ export class SimulationPanel {
       }
       balances.textContent = parts.join(' · ');
       row.append(title, route, balances);
+      return row;
+    }));
+  }
+
+  private renderEmigrationEvents(): void {
+    const departures = this.simulation.wellbeing.emigrationEvents;
+    const latest = departures[departures.length - 1]?.timeMs;
+    if (latest === this.lastDepartureTime) return;
+    this.lastDepartureTime = latest;
+    this.populationEmpty.hidden = departures.length > 0;
+    this.populationList.replaceChildren(...[...departures].reverse().map(event => {
+      const row = document.createElement('li');
+      row.textContent = formatGameTime(gameTimeAt(event.timeMs)) + ' · Emigración por descontento sostenido · '
+        + formatNumber(event.residents) + ' habitante · Vivienda (' + event.cell.column + ',' + event.cell.row + ')';
       return row;
     }));
   }

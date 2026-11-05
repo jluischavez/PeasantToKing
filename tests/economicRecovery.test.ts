@@ -48,7 +48,7 @@ test('reproduces 4 residents, 23 jobs and stored food with no operational market
   assert.equal(economy.distribution.marketAt(otherMarket)!.workers, 0);
   const strict = economy.distribution.immigrationPlan(population.residencesSnapshot, 2, 5, 0.1, 4);
   assert.equal(strict.size, 0);
-  assert.equal(population.migrationAttractiveness(0, strict), 0);
+  assert.ok(population.migrationAttractiveness(economy.migrationFood(population)) > 0);
   assert.match(economy.distribution.marketAt(market)!.reason, /Sin empleados/);
   simulation.recalculate();
   assert.equal(population.workersAt(market), 1);
@@ -116,7 +116,7 @@ test('one active resident can operate storage and recruit moderately before a ma
   assert.equal(population.workersAt(market), 0);
   const supply = economy.immigrationSupply(population, 2, 5, 0.1, 4);
   assert.equal([...supply.values()].reduce((sum, count) => sum + count, 0), 1);
-  assert.ok(population.migrationAttractiveness(0, supply) > 0);
+  assert.ok(population.migrationAttractiveness(economy.migrationFood(population)) > 0);
   simulation.advance(10000);
   assert.ok(population.total >= 4);
   assert.equal(population.workersAt(market), 1);
@@ -192,11 +192,11 @@ test('market and migration diagnostics name the actual blocking condition', () =
   const { population, economy, simulation } = town(4, 0);
   simulation.recalculate();
   const supply = economy.immigrationSupply(population, 2, 5, 0.1, 4);
-  assert.equal(population.migrationAttractiveness(0, supply), 0);
-  assert.match(economy.migrationReason(population, supply), /sin empleados/);
+  assert.equal(population.migrationAttractiveness(economy.migrationFood(population)), 0);
+  assert.match(economy.migrationReason(population, supply, 0), /sin empleados/);
   economy.setMarketSale(market, 'food', false);
   economy.setMarketSale(otherMarket, 'food', false);
-  assert.match(economy.migrationReason(population, supply), /deshabilitada/);
+  assert.match(economy.migrationReason(population, supply, 0), /deshabilitada/);
   assert.match(economy.distribution.marketAt(market)!.reason, /Sin empleados/);
 });
 test('the essential warehouse slot follows existing food rather than an earlier empty warehouse', () => {

@@ -19,11 +19,20 @@
       </p>
       <section id="population-bar" aria-label="Población y empleo">
         <p>Población: <strong id="population-total">0</strong></p>
+        <p id="needs-summary" aria-label="Necesidades de los aldeanos">
+          <strong>Necesidades de los aldeanos</strong> · Comida: <span id="need-food">—</span>
+          · Madera: <span id="need-wood">—</span> · Agua: <span id="need-water">—</span>
+          · <span id="need-priority">Sin datos de suministro</span>
+        </p>
         <p>Población activa: <strong id="population-active">0</strong></p>
         <p>Capacidad residencial: <strong id="residential-capacity">0</strong> (conectada: <span id="connected-capacity">0</span>)</p>
         <p>Puestos: <strong id="job-capacity">0</strong> · Vacantes: <span id="jobs-available">0</span></p>
         <p>Empleados: <strong id="workers-employed">0</strong> · Desempleados: <span id="workers-unemployed">0</span> (<span id="unemployment-rate">0</span> %)</p>
         <p>Atractivo migratorio: <strong id="migration-attractiveness">0</strong>/100</p>
+        <p>Capacidad libre: <strong id="housing-free">0</strong> · En espera: <strong id="migration-waiting">0</strong></p>
+        <p>Felicidad: <strong id="city-happiness">70</strong>/100 · <span id="city-wellbeing">Neutral · sin habitantes</span></p>
+        <p id="housing-wellbeing-counts">Viviendas satisfechas: 0 · Inconformes: 0 · En crisis: 0</p>
+        <p id="wellbeing-concerns" hidden></p>
         <p id="migration-reason">Esperando condiciones para inmigración.</p>
         <p>Demanda: <span id="food-consumption">0,0</span> comida/h · Déficit acumulado: <span id="food-shortage">0</span> comida</p>
       </section>
@@ -59,7 +68,25 @@
           </div>
         </section>
         <details id="audit-panel" open>
-          <summary>Historial económico</summary>
+          <summary>Historial y Voces de la aldea</summary>
+          <details id="voices-panel" class="population-events">
+            <summary>Voces de la aldea</summary>
+            <label>Opiniones
+              <select id="voice-filter">
+                <option value="">Todas</option>
+                <option value="positive">Positivas</option>
+                <option value="negative">Negativas</option>
+                <option value="neutral">Neutras</option>
+              </select>
+            </label>
+            <p id="voices-empty">Todavía no hay opiniones.</p>
+            <ul id="voices-list" aria-label="Opiniones recientes" tabindex="0"></ul>
+          </details>
+          <details id="population-events" class="population-events">
+            <summary>Eventos de población</summary>
+            <p id="population-events-empty">Todavía no hay emigraciones.</p>
+            <ol id="population-events-list" aria-label="Emigraciones recientes"></ol>
+          </details>
           <section id="audit-content" aria-label="Movimientos económicos recientes">
             <div class="audit-filters">
               <label>Recurso

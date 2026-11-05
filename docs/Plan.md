@@ -78,6 +78,19 @@ Multijugador, login, servidor, cuentas en nube, ranking global, combate, ejérci
 - Cada mercado comparte 100 unidades de capacidad entre comida y madera. Las viviendas cubiertas consumen hasta 0,5 unidades de madera por habitante y hora. El faltante se informa en el inspector.
 - La base tributaria y los ingresos municipales directos de 1 oro por unidad de comida o madera consumida son provisionales hasta introducir presupuestos familiares.
 
+### Bienestar y migración de 10A-1
+
+- El atractivo usa abastecimiento, bienestar, empleo e impuestos. La capacidad libre y el suministro previsto por vivienda determinan la admisión de quienes esperan.
+- La lista de espera admite hasta la mitad de la población redondeada hacia arriba, con un mínimo de cuatro plazas. Si el atractivo permanece en cero, una persona desiste por hora del juego.
+- La felicidad empieza en 70 y se aproxima gradualmente a un objetivo ponderado por comida, madera, empleo e impuestos. El bienestar general pondera cada vivienda por sus residentes.
+- Una vivienda que permanece por debajo de 40 durante dos horas del juego puede perder un residente. La ciudad admite como máximo una salida por hora y espera dos horas desde la última emigración y una felicidad media de al menos 45 para volver a admitir inmigrantes.
+
+### Agua, aguadores y Voces de la aldea de 10A-2
+
+- El pozo cuesta 20 oro y 10 madera. Tiene un puesto de aguador, mantiene un gasto de 0,05 oro por hora y abastece a un máximo de 20 habitantes a seis casillas viales. El servicio depende de un trabajador asignado y de una conexión al Centro de Aldea.
+- El agua se mide como habitantes abastecidos. El bienestar usa el suministro efectivo de comida, madera y agua, junto con el empleo y los impuestos. El resumen de necesidades promedia hasta una hora del juego y estima el número equivalente de habitantes afectados.
+- Voces de la aldea conserva las 50 opiniones más recientes, generadas a partir de plantillas y de observaciones de hogares habitados. Se puede filtrar por tono y seleccionar la vivienda de origen mientras siga existiendo.
+
 ### Funcionalidad futura reservada: evolución visual de la ciudad
 
 **Prioridad:** después de finalizar, probar y publicar el MVP funcional (etapas 06–11), **no antes**. Es una expansión planificada, no un requisito inmediato ni una orden de implementación automática. Dividir en tareas pequeñas independientes:

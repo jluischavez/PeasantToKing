@@ -1,3 +1,4 @@
+import { formatNumber } from '../formatNumber.ts';
 import type { ProductId, ProductFlags } from './Products';
 import { populationRules } from '../population/Population.ts';
 import { unitsPerResource as U } from './Inventories.ts';
@@ -233,7 +234,7 @@ export class Distribution {
       return 'Mercados sin existencias: esperando producción de alimentos.';
     }
     return 'Comida distribuida insuficiente para reservar '
-      + gameMinutesForSeconds(populationRules.immigrationIntervalSeconds).toLocaleString('es')
+      + formatNumber(gameMinutesForSeconds(populationRules.immigrationIntervalSeconds))
       + ' min del juego de consumo.';
   }
 

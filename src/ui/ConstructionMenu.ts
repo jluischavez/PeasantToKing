@@ -1,3 +1,4 @@
+import { formatNumber } from '../formatNumber';
 import { constructionNames, isConstructionType } from '../map/ConstructionMap';
 import type { ConstructionType } from '../map/ConstructionMap';
 import { constructionCosts, demolitionCost } from '../map/ConstructionCosts';
@@ -7,8 +8,8 @@ export type ConstructionMode = ConstructionType | 'demolish' | null;
 
 export function formatCost(cost: ConstructionCost): string {
   const parts = [];
-  if (cost.gold > 0) parts.push(cost.gold + ' oro');
-  if (cost.wood > 0) parts.push(cost.wood + ' madera');
+  if (cost.gold > 0) parts.push(formatNumber(cost.gold) + ' oro');
+  if (cost.wood > 0) parts.push(formatNumber(cost.wood) + ' madera');
   return parts.join(' + ') || 'gratis';
 }
 

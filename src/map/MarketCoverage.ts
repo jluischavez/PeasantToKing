@@ -11,12 +11,12 @@ const neighbors = (cell: Cell): Cell[] => [
 export class MarketCoverage {
   private readonly distances = new Map<string, Map<string, number>>();
 
-  recalculate(map: ConstructionMap, connections: RoadConnections, range: number): void {
+  recalculate(map: ConstructionMap, connections: RoadConnections, range: number, source: 'market' | 'well' = 'market'): void {
     this.distances.clear();
     for (let row = 0; row < map.rows; row++) {
       for (let column = 0; column < map.columns; column++) {
         const market = { column, row };
-        if (map.getConstruction(market) !== 'market' || !connections.isConnected(market)) continue;
+        if (map.getConstruction(market) !== source || !connections.isConnected(market)) continue;
         const homes = new Map<string, number>();
         const visited = new Set<string>();
         const queue: { cell: Cell; distance: number }[] = [];

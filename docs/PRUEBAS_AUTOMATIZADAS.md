@@ -7,6 +7,8 @@ Vitest usa Vite y el TypeScript del proyecto. Las pruebas se ejecutan en Node e 
 | Sistema | Casos principales |
 | --- | --- |
 | Empleo y población | Límites de población activa y puestos, desempleo, conexión, capacidad residencial e inmigración |
+| Bienestar y migración | Atractivo sin solares, lista de espera, promedio ponderado, recuperación y tolerancia antes de emigrar |
+| Agua y voces | Cobertura vial, capacidad de pozos, bienestar, ventana de necesidades, opiniones, filtros y demolición |
 | Producción | Proporción por trabajador, máximo, productores desconectados o sin personal |
 | Almacenes y transferencias | Capacidad, permisos, operación, inventarios separados y saldos exactos, incluso tras rechazar una transferencia |
 | Mercados | Empleo, permisos, cobertura vial, existencias e ingresos por comida entregada |

@@ -79,6 +79,16 @@ const constructionDrawers: Record<ConstructionType, ConstructionDrawer> = {
     graphics.fillRect(x + size * 0.48, y + size * 0.5, size * 0.04, size * 0.38);
     graphics.fillRect(x + size * 0.31, y + size * 0.65, size * 0.38, size * 0.04);
   },
+  well(graphics, x, y, size, alpha) {
+    graphics.fillStyle(0xc1b79a, alpha);
+    graphics.fillCircle(x + size * 0.5, y + size * 0.56, size * 0.32);
+    graphics.fillStyle(0x3e8aa8, alpha);
+    graphics.fillCircle(x + size * 0.5, y + size * 0.56, size * 0.22);
+    graphics.fillStyle(0x624734, alpha);
+    graphics.fillRect(x + size * 0.28, y + size * 0.2, size * 0.06, size * 0.44);
+    graphics.fillRect(x + size * 0.66, y + size * 0.2, size * 0.06, size * 0.44);
+    graphics.fillRect(x + size * 0.28, y + size * 0.18, size * 0.44, size * 0.08);
+  },
   market(graphics, x, y, size, alpha) {
     graphics.fillStyle(0x65472f, alpha);
     graphics.fillRect(x + size * 0.15, y + size * 0.3, size * 0.06, size * 0.58);

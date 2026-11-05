@@ -9,6 +9,7 @@ export const constructionCosts: Readonly<Record<ConstructionType, ConstructionCo
   lumberjack: { gold: 25, wood: 5 },
   warehouse: { gold: 35, wood: 15 },
   market: { gold: 40, wood: 20 },
+  well: { gold: 20, wood: 10 },
   villageCenter: { gold: 0, wood: 0 },
 };
 

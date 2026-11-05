@@ -1,3 +1,4 @@
+import { formatNumber } from '../formatNumber';
 import { resourceNames } from '../economy/Economy';
 import type { Resource, Resources } from '../economy/Economy';
 import type { OperatingCosts } from '../economy/OperatingCosts';
@@ -26,7 +27,7 @@ export class ResourceBar {
 
   constructor(policy: TaxPolicy, onTaxChange: (policy: TaxPolicy) => void) {
     this.taxSelect.replaceChildren(...Object.entries(taxPolicies).map(([value, tax]) =>
-      new Option(tax.label + ' (' + tax.percent + ' %)', value)));
+      new Option(tax.label + ' (' + formatNumber(tax.percent) + ' %)', value)));
     this.taxSelect.value = policy;
     this.taxSelect.addEventListener('change', () => {
       const policy = (Object.keys(taxPolicies) as TaxPolicy[]).find(value => value === this.taxSelect.value);
@@ -43,23 +44,22 @@ export class ResourceBar {
       costs: OperatingCosts; taxes: number;
     }): void {
     this.reserveStatus.textContent = storage.reserve === 0 ? 'agotada' : storage.bootstrap ? 'reserva de arranque' : 'cerrada: consumo por mercados';
-    this.reserve.textContent = storage.reserve.toLocaleString('es', { maximumFractionDigits: 2 });
-    this.available.textContent = storage.availableFood.toLocaleString('es', { maximumFractionDigits: 2 });
-    this.constructionWood.textContent = storage.constructionWood.toLocaleString('es', { maximumFractionDigits: 2 });
-    this.constructionReserve.textContent = storage.constructionReserve.toLocaleString('es', { maximumFractionDigits: 2 });
+    this.reserve.textContent = formatNumber(storage.reserve);
+    this.available.textContent = formatNumber(storage.availableFood);
+    this.constructionWood.textContent = formatNumber(storage.constructionWood);
+    this.constructionReserve.textContent = formatNumber(storage.constructionReserve);
     const storageMessage = storage.blocked > 0
-      ? `Producción bloqueada por falta de almacenamiento: ${storage.blocked} edificio(s).`
+      ? `Producción bloqueada por falta de almacenamiento: ${formatNumber(storage.blocked)} edificio(s).`
       : 'Almacenamiento sin bloqueos.';
     if (this.storageStatus.textContent !== storageMessage) this.storageStatus.textContent = storageMessage;
-    const hourly = (amount: number) => amount.toLocaleString('es', { maximumFractionDigits: 3 });
-    this.taxes.textContent = hourly(storage.taxes);
-    this.wages.textContent = hourly(storage.costs.wages);
-    this.maintenance.textContent = hourly(storage.costs.maintenance);
+    this.taxes.textContent = formatNumber(storage.taxes);
+    this.wages.textContent = formatNumber(storage.costs.wages);
+    this.maintenance.textContent = formatNumber(storage.costs.maintenance);
     const net = perGameHour(perSecond.gold) + storage.taxes - storage.costs.wages - storage.costs.maintenance;
-    this.net.textContent = hourly(Math.round(net * 1000) / 1000 || 0);
+    this.net.textContent = formatNumber(net);
     for (const { resource, amount, rate } of this.fields) {
-      amount.textContent = resources[resource].toLocaleString('es', { maximumFractionDigits: 2 });
-      const value = hourly(perGameHour(perSecond[resource]));
+      amount.textContent = formatNumber(resources[resource]);
+      const value = formatNumber(perGameHour(perSecond[resource]));
       rate.textContent = resource === 'gold' ? `(ventas: +${value}/h)` : `(+${value}/h)`;
     }
   }

@@ -8,6 +8,7 @@ export const constructionNames = {
   lumberjack: 'Campamento maderero',
   warehouse: 'Almacén',
   market: 'Mercado',
+  well: 'Pozo',
   villageCenter: 'Centro de Aldea',
 } as const;
 

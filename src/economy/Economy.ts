@@ -38,6 +38,7 @@ const productionByType: Record<ConstructionType, Readonly<Resources>> = {
   lumberjack: { gold: 0, food: 0, wood: 2 },
   warehouse: { gold: 0, food: 0, wood: 0 },
   market: { gold: 0, food: 0, wood: 0 },
+  well: { gold: 0, food: 0, wood: 0 },
   villageCenter: { gold: 0, food: 0, wood: 0 },
 };
 
@@ -225,13 +226,24 @@ export class Economy {
     };
   }
 
-  migrationReason(population: Population, supply: ReadonlyMap<string, number>): string {
-    const blocked = population.migrationBlockReason(this.availableFood, supply, this.taxMigrationModifier);
-    if (blocked && supply.size === 0 && population.availableHousing > 0
-      && population.unemploymentRate < populationRules.migration.stopUnemploymentRate) {
-      return this.distribution.supplyBlockReason(population.residencesSnapshot);
+  migrationFood(population: Population): number {
+    const available = this.availableFood;
+    const logisticsFood = available + this.storage.connectedWarehouseFood(true);
+    const householdReserve = population.total * populationRules.foodPerResidentPerSecond
+      * populationRules.immigrationIntervalSeconds;
+    const oneArrival = populationRules.foodPerResidentPerSecond * populationRules.immigrationIntervalSeconds;
+    if (population.total < economyRules.recovery.populationLimit && logisticsFood >= oneArrival
+      && population.residencesSnapshot.some(home => this.distribution.hasAuthorizedCoverage(home.cell))) {
+      return Math.max(available, householdReserve + oneArrival);
     }
-    if (blocked) return blocked;
+    return available;
+  }
+
+  migrationReason(population: Population, supply: ReadonlyMap<string, number>, attractiveness: number): string {
+    if (population.availableHousing === 0) return 'No hay solares conectados con espacio.';
+    if (population.unemploymentRate >= populationRules.migration.stopUnemploymentRate) return 'Desempleo demasiado alto.';
+    if (supply.size === 0) return this.distribution.supplyBlockReason(population.residencesSnapshot);
+    if (attractiveness === 0) return 'El atractivo es insuficiente para nuevas llegadas.';
     const normal = this.distribution.immigrationPlan(population.residencesSnapshot, populationRules.familySize,
       populationRules.immigrationIntervalSeconds, populationRules.foodPerResidentPerSecond, populationRules.residentsPerPlot);
     return normal.size === 0 ? 'Recuperación limitada: hasta 1 habitante por evaluación con alimentos reales.'

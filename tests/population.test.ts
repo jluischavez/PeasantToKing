@@ -138,13 +138,15 @@ test('closing a road gap activates existing plots and jobs without resetting res
   map.place(cell(2, 1), 'farm');
   recalculate();
   assert.equal(population.immigrate(100), 0);
+  assert.equal(population.waitingImmigrants, 1);
   map.place(cell(1, 0), 'road');
   recalculate();
-  assert.equal(population.immigrate(100), 2);
+  assert.equal(population.immigrate(100), 1);
+  assert.equal(population.waitingImmigrants, 0);
   recalculate();
   recalculate();
-  assert.equal(population.total, 2);
-  assert.equal(population.residentsAt(cell(3, 0)), 2);
+  assert.equal(population.total, 1);
+  assert.equal(population.residentsAt(cell(3, 0)), 1);
   assert.equal(population.jobCapacity, 4);
 });
 
@@ -328,8 +330,9 @@ test('food and housing are hard limits regardless of jobs or migration credit', 
   assert.equal(population.immigrate(100), 2); // No backlog after starvation.
   assert.equal(population.total, 4);
   assert.equal(population.availableHousing, 0);
-  assert.equal(population.migrationAttractiveness(100), 0);
+  assert.ok(population.migrationAttractiveness(100) > 0);
   assert.equal(population.immigrate(100), 0);
+  assert.ok(population.waitingImmigrants > 0);
 });
 
 test('rising unemployment progressively reduces both attraction and the deterministic arrival rate', () => {

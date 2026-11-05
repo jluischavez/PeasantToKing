@@ -1,3 +1,4 @@
+import { gameTimeRules } from '../simulation/GameTime.ts';
 import type { Cell } from '../map/CellSelection';
 import type { ConstructionMap, ConstructionType } from '../map/ConstructionMap';
 import type { RoadConnections } from '../map/RoadConnections';
@@ -9,7 +10,11 @@ export const populationRules = {
   foodPerResidentPerSecond: 0.1,
   laborParticipationRate: 0.5,
   migration: {
-    housingWeight: 35,
+    wellbeingWeight: 35,
+    neutralHappiness: 70,
+    minimumWaitingCapacity: 4,
+    waitingPerResident: 0.5,
+    patienceHours: 1,
     foodWeight: 40,
     jobsWeight: 25,
     stopUnemploymentRate: 0.6,
@@ -17,11 +22,18 @@ export const populationRules = {
 } as const;
 
 export const employmentRules = {
-  minimumServices: ['market', 'warehouse', 'farm'],
-  productionRecoveryServices: ['farm', 'warehouse', 'market'],
-  singleWorkerRecoveryServices: ['warehouse', 'market', 'farm'],
-  fillPriority: { farm: 0, warehouse: 1, market: 2, lumberjack: 10, house: 20, road: 20, villageCenter: 20 },
+  minimumServices: ['market', 'warehouse', 'farm', 'well'],
+  productionRecoveryServices: ['farm', 'warehouse', 'market', 'well'],
+  singleWorkerRecoveryServices: ['warehouse', 'market', 'farm', 'well'],
+  fillPriority: { farm: 0, warehouse: 1, market: 2, well: 3, lumberjack: 10, house: 20, road: 20, villageCenter: 20 },
 } as const;
+
+type MigrationConditions = {
+  modifier?: number;
+  happiness?: number;
+  seconds?: number;
+  admissionsOpen?: boolean;
+};
 
 export type LaborContext = {
   produceFoodFirst?: boolean;
@@ -31,7 +43,7 @@ export type LaborContext = {
 
 const jobsByType: Record<ConstructionType, number> = {
   house: 0, road: 0, villageCenter: 0,
-  farm: 4, lumberjack: 3, market: 3, warehouse: 2,
+  farm: 4, lumberjack: 3, market: 3, warehouse: 2, well: 1,
 };
 
 type Residence = { cell: Cell; residents: number; connected: boolean };
@@ -42,6 +54,8 @@ export class Population {
   private residences = new Map<string, Residence>();
   private workplaces = new Map<string, Workplace>();
   private migrationCredit = 0;
+  private waiting = 0;
+  private unattractiveSeconds = 0;
   private laborContext: LaborContext = {};
 
   get residencesSnapshot(): readonly { cell: Cell; residents: number }[] {
@@ -62,6 +76,13 @@ export class Population {
   get unemploymentRate(): number {
     return this.activePopulation === 0 ? 0 : this.unemployed / this.activePopulation;
   }
+
+  get waitingCapacity(): number {
+    const rules = populationRules.migration;
+    return Math.max(rules.minimumWaitingCapacity, Math.ceil(this.total * rules.waitingPerResident));
+  }
+
+  get waitingImmigrants(): number { return this.waiting; }
 
   get availableHousing(): number {
     return [...this.residences.values()]
@@ -131,6 +152,7 @@ export class Population {
       }
     }
     this.residences = residences;
+    this.waiting = Math.min(this.waiting, this.waitingCapacity);
     this.workplaces = workplaces;
     this.assignWorkers();
   }
@@ -142,45 +164,48 @@ export class Population {
     return Math.max(0, Math.floor(food / foodPerResident) - this.total);
   }
 
-  // A score from 0 to 100; food and connected housing remain hard requirements.
-  migrationAttractiveness(food: number, supply?: ReadonlyMap<string, number>, modifier = 0): number {
-    const supported = supply ? [...supply.values()].reduce((sum, count) => sum + count, 0)
-      : this.foodSupportedArrivals(food);
-    if (this.availableHousing === 0 || supported === 0
-      || this.unemploymentRate >= populationRules.migration.stopUnemploymentRate) return 0;
+  migrationAttractiveness(food: number, modifier = 0, happiness: number = populationRules.migration.neutralHappiness): number {
+    const supported = this.foodSupportedArrivals(food);
     const rules = populationRules.migration;
-    const housing = Math.min(1, this.availableHousing / populationRules.familySize);
+    if (supported === 0 || this.unemploymentRate >= rules.stopUnemploymentRate) return 0;
     const foodAvailability = Math.min(1, supported / populationRules.familySize);
     const opportunities = Math.min(1, this.availableJobs / Math.max(1, this.activePopulation));
-    const employmentFactor = Math.max(0, 1 - this.unemploymentRate / rules.stopUnemploymentRate);
-    const weights = rules.housingWeight + rules.foodWeight + rules.jobsWeight;
-    const base = (rules.housingWeight * housing + rules.foodWeight * foodAvailability
+    const employmentFactor = 1 - this.unemploymentRate / rules.stopUnemploymentRate;
+    const wellbeing = happiness / rules.neutralHappiness;
+    const weights = rules.wellbeingWeight + rules.foodWeight + rules.jobsWeight;
+    const base = (rules.wellbeingWeight * wellbeing + rules.foodWeight * foodAvailability
       + rules.jobsWeight * opportunities) / weights;
     return Math.max(0, Math.min(100, Math.round(100 * base * employmentFactor) + modifier));
   }
 
-  migrationBlockReason(food: number, supply?: ReadonlyMap<string, number>, modifier = 0): string | null {
-    if (this.availableHousing === 0) return 'No hay solares conectados con espacio.';
-    if (this.unemploymentRate >= populationRules.migration.stopUnemploymentRate) return 'Desempleo demasiado alto.';
-    const supported = supply ? [...supply.values()].reduce((sum, count) => sum + count, 0)
-      : this.foodSupportedArrivals(food);
-    if (supported <= 0) return 'No hay alimento suficiente para admitir habitantes.';
-    if (this.migrationAttractiveness(food, supply, modifier) > 0) return null;
-    return modifier < 0 ? 'La presión tributaria reduce el atractivo a cero.'
-      : 'El desempleo reduce el atractivo a cero.';
-  }
-
-  // Evaluated once per immigration interval. Fractional credit slows arrivals
-  // predictably as attraction falls; no random rolls or accumulating backlog.
-  immigrate(food: number, supply?: ReadonlyMap<string, number>, modifier = 0): number {
-    const attractiveness = this.migrationAttractiveness(food, supply, modifier);
+  immigrate(food: number, supply?: ReadonlyMap<string, number>, conditions: MigrationConditions = {}): number {
+    const attractiveness = this.migrationAttractiveness(food, conditions.modifier, conditions.happiness);
     if (attractiveness === 0) {
       this.migrationCredit = 0;
+      const patience = populationRules.migration.patienceHours * gameTimeRules.secondsPerHour;
+      this.unattractiveSeconds += conditions.seconds ?? populationRules.immigrationIntervalSeconds;
+      const departures = Math.floor(this.unattractiveSeconds / patience);
+      this.waiting = Math.max(0, this.waiting - departures);
+      this.unattractiveSeconds %= patience;
       return 0;
     }
-    this.migrationCredit = Math.min(populationRules.familySize,
-      this.migrationCredit + populationRules.familySize * attractiveness / 100);
-    let remaining = Math.min(Math.floor(this.migrationCredit),
+    this.unattractiveSeconds = 0;
+
+    // Existing candidates have priority when a place opens.
+    if (this.waiting > 0 && conditions.admissionsOpen !== false) {
+      const admitted = this.admit(food, supply);
+      if (admitted > 0) return admitted;
+    }
+
+    this.migrationCredit += populationRules.familySize * attractiveness;
+    const interested = Math.floor(this.migrationCredit / 100);
+    this.waiting = Math.min(this.waitingCapacity, this.waiting + interested);
+    this.migrationCredit %= 100;
+    return conditions.admissionsOpen !== false ? this.admit(food, supply) : 0;
+  }
+
+  private admit(food: number, supply?: ReadonlyMap<string, number>): number {
+    let remaining = Math.min(this.waiting, populationRules.familySize,
       supply ? [...supply.values()].reduce((sum, count) => sum + count, 0)
         : this.foodSupportedArrivals(food), this.availableHousing);
     if (remaining <= 0) return 0;
@@ -197,9 +222,18 @@ export class Population {
       arrived += count;
       if (remaining === 0) break;
     }
-    this.migrationCredit -= arrived;
+    this.waiting -= arrived;
     this.assignWorkers();
     return arrived;
+  }
+
+  removeResident(cell: Cell): boolean {
+    const home = this.residences.get(key(cell));
+    if (!home || home.residents === 0) return false;
+    home.residents--;
+    this.waiting = Math.min(this.waiting, this.waitingCapacity);
+    this.assignWorkers();
+    return true;
   }
 
   private assignWorkers(): void {

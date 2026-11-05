@@ -1,5 +1,11 @@
+import { formatNumber } from '../formatNumber.ts';
 import { populationRules } from '../population/Population.ts';
-import { gameTimeAt } from './GameTime.ts';
+import { gameTimeAt, gameTimeRules } from './GameTime.ts';
+import { distributionRules } from '../economy/Distribution.ts';
+import { Wellbeing } from '../population/Wellbeing.ts';
+import { HouseholdNeeds } from '../population/HouseholdNeeds.ts';
+import { VillageVoices } from '../population/VillageVoices.ts';
+import { WaterService } from './WaterService.ts';
 import { constructionCosts, demolitionCost } from '../map/ConstructionCosts.ts';
 import type { ConstructionCost } from '../map/ConstructionCosts';
 import type { Cell } from '../map/CellSelection';
@@ -16,6 +22,10 @@ function buildingId(cell: Cell, type: ConstructionType): string {
 }
 
 export class SettlementSimulation {
+  readonly wellbeing = new Wellbeing();
+  readonly water = new WaterService();
+  readonly needs = new HouseholdNeeds();
+  readonly voices = new VillageVoices();
   private elapsedMs = 0;
   private isPaused = false;
   private suspended = false;
@@ -57,9 +67,10 @@ export class SettlementSimulation {
   costIssue(cost: ConstructionCost): string | null {
     const missing = this.economy.missingCost(cost);
     const quantities = [];
-    const format = (value: number) => value.toLocaleString('es', { maximumFractionDigits: 3 });
-    if (missing.gold > 0) quantities.push(format(missing.gold) + ' oro');
-    if (missing.wood > 0) quantities.push(format(missing.wood) + ' madera disponible');
+    const formatShortfall = (value: number) => value < 0.005
+      ? 'menos de ' + formatNumber(0.01) : formatNumber(value);
+    if (missing.gold > 0) quantities.push(formatShortfall(missing.gold) + ' oro');
+    if (missing.wood > 0) quantities.push(formatShortfall(missing.wood) + ' madera disponible');
     return quantities.length ? 'Recursos insuficientes. Faltan ' + quantities.join(' y ') + '.' : null;
   }
 
@@ -120,6 +131,11 @@ export class SettlementSimulation {
     if (!this.economy.payBuildingCost(demolitionCost, 'demolition', buildingId(target.cell, target.type))) {
       throw new Error('A validated demolition charge failed');
     }
+    if (target.type === 'house') {
+      this.wellbeing.forget(target.cell);
+      this.needs.forget(target.cell);
+      this.voices.retireHome(target.cell);
+    }
     this.cancelDemolition();
     this.recalculate();
     return null;
@@ -130,9 +146,37 @@ export class SettlementSimulation {
     this.economy.recalculate(this.map, this.connections, this.population);
     this.population.recalculate(this.map, this.connections, this.economy.laborContext(this.population));
     this.economy.recalculate(this.map, this.connections, this.population);
+    this.water.refresh(this.map, this.connections, this.population);
   }
 
-  // One shared clock processes production, consumption and immigration in order.
+  migrationAttractiveness(happiness: number): number {
+    if (!this.map.villageCenter) return 0;
+    return this.population.migrationAttractiveness(this.economy.migrationFood(this.population),
+      this.economy.taxMigrationModifier, happiness);
+  }
+
+  private updateWellbeing(): void {
+    const distribution = this.economy.distribution;
+    const homes = this.population.residencesSnapshot;
+    this.water.refresh(this.map, this.connections, this.population);
+    this.needs.recordSecond(homes, home => ({
+      food: Math.max(0, 1 - distribution.foodShortageAt(home.cell)
+        / (home.residents * populationRules.foodPerResidentPerSecond)),
+      wood: Math.max(0, 1 - distribution.woodShortageAt(home.cell)
+        / (home.residents * distributionRules.woodPerResidentPerHour / gameTimeRules.secondsPerHour)),
+      water: this.water.suppliedAt(home.cell) / home.residents,
+    }));
+    const candidate = this.wellbeing.advanceSecond(homes, home => this.needs.currentAt(home.cell)!,
+      this.population.unemploymentRate, this.economy.currentTaxPolicy, this.simulatedTimeMs);
+    if (candidate && this.population.removeResident(candidate)) {
+      this.wellbeing.recordDeparture(this.simulatedTimeMs, candidate, this.population.residentsAt(candidate));
+      this.needs.forget(candidate);
+      this.economy.recalculate(this.map, this.connections, this.population);
+      this.water.refresh(this.map, this.connections, this.population);
+    }
+  }
+
+  // One shared clock processes production, consumption, wellbeing and migration in order.
   advance(deltaMs: number): boolean {
     if (this.suspended) return false;
     if (this.discardResumingFrame) {
@@ -150,16 +194,27 @@ export class SettlementSimulation {
       this.economy.advance(1000);
       this.economy.consumeHomes(this.population, populationRules.foodPerResidentPerSecond);
       this.economy.accountOperatingSecond(this.population.employed, this.population.total);
+      this.updateWellbeing();
       this.immigrationSeconds++;
       if (this.immigrationSeconds === this.immigrationIntervalSeconds) {
         this.immigrationSeconds = 0;
         const supply = this.economy.immigrationSupply(this.population, populationRules.familySize,
           this.immigrationIntervalSeconds, populationRules.foodPerResidentPerSecond,
           populationRules.residentsPerPlot);
-        if (this.population.immigrate(this.economy.availableFood, supply, this.economy.taxMigrationModifier) > 0) {
+        const { happiness } = this.wellbeing.summarize(this.population.residencesSnapshot);
+        const food = this.map.villageCenter ? this.economy.migrationFood(this.population) : 0;
+        if (this.population.immigrate(food, supply, {
+          happiness, modifier: this.economy.taxMigrationModifier, seconds: this.immigrationIntervalSeconds,
+          admissionsOpen: this.wellbeing.admissionsOpen(this.simulatedTimeMs, happiness),
+        }) > 0) {
           this.economy.recalculate(this.map, this.connections, this.population);
+          this.water.refresh(this.map, this.connections, this.population);
         }
       }
+      this.voices.advance(this.simulatedTimeMs, () => this.needs.observations(this.population.residencesSnapshot), {
+        unemployment: this.population.unemploymentRate, tax: this.economy.currentTaxPolicy,
+        waiting: this.population.waitingImmigrants,
+      });
       advanced = true;
     }
     return advanced;

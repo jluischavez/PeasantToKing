@@ -154,3 +154,20 @@
 - Los hogares consumen hasta 0,5 madera por habitante y hora desde mercados en cobertura. El inspector informa la disponibilidad y el faltante del último ciclo. Se conservan las reglas de comida y la madera no condiciona la inmigración.
 - La escala de inventarios pasa a 1/150 para conservar fracciones exactas. El historial distingue impuestos y ventas de comida o madera. Los ingresos municipales de 1 oro por unidad consumida y la base tributaria son provisionales hasta incorporar presupuestos familiares.
 - Verificación. npm test aprobó 166 pruebas, con cero fallidas y 17 casos nuevos. npm run build correcto, con el aviso habitual de tamaño de Phaser. Chrome comprobó el selector, la tasa prevista, el permiso independiente de madera, el faltante residencial, el registro de impuestos y el canvas estable.
+
+- 2026-11-05 — Etapa 10A-1. El atractivo depende de abastecimiento, bienestar, empleo e impuestos. La capacidad libre se muestra aparte y el plan alimentario por vivienda sigue controlando la admisión.
+- La lista de espera se evalúa cada cinco segundos simulados, admite hasta la mitad de la población redondeada hacia arriba con un mínimo de cuatro plazas y pierde una persona por hora con atractivo sostenido en cero. Se da prioridad a quienes ya esperan.
+- Wellbeing calcula felicidad desde las entregas de comida y madera, empleo e impuestos, con cambios graduales. El promedio general pondera por habitantes y las viviendas vacías se excluyen. Sin habitantes, el valor neutral es 70.
+- Una vivienda por debajo de 40 durante dos horas del juego puede perder un habitante. Se registra como evento de población y se recalcula el empleo. La ciudad permite como máximo una salida por hora y retoma las admisiones tras dos horas y con felicidad general de al menos 45.
+- El resumen y el inspector muestran bienestar, suministros y causas de descontento. El historial de población comparte el espacio fijo del panel de auditoría.
+- Verificación. npm test aprobó 177 pruebas, con cero fallidas y 11 casos nuevos. npm run build correcto, con el aviso habitual del tamaño de Phaser. Chrome verificó la cola con la ciudad llena, la admisión al abrir un solar, la pausa, la salida sostenida y el canvas estable a 1280 × 720.
+
+- 2026-11-05 — Corrección de formato numérico. formatNumber centraliza la presentación en español con hasta dos decimales y un guion para valores no finitos. Se usa en importes, saldos, tasas, inspectores y eventos de población.
+- El historial convierte desde la escala entera de cada movimiento al presentar el dato. La revisión y las pruebas de operaciones repetidas no detectaron deriva en tesorería o inventarios. Se conservaron las escalas y los cálculos económicos.
+- Verificación. npm test aprobó 181 pruebas, con cero fallidas. npm run build correcto, con el aviso conocido de tamaño de Phaser. Chrome verificó los saldos visibles y las dimensiones fijas a 1280 × 720 y 390 × 844.
+
+- 2026-11-05 — Etapa 10A-2 sobre 10A-1. El Pozo cuesta 20 oro y 10 madera, tiene un puesto asalariado de aguador y cuesta 0,05 oro/h de mantenimiento. Un pozo operativo abastece hasta 20 habitantes a seis casillas de camino.
+- WaterService reutiliza la cobertura vial de mercados y asigna cupos sin duplicar residentes. La demolición recalcula el servicio, el empleo y el mantenimiento. El agua se representa como servicio residencial, sin inventario comercial.
+- El bienestar pondera comida, madera, agua, empleo e impuestos. El panel de necesidades promedia hasta una hora del juego y muestra cobertura y habitantes equivalentes afectados. El inspector muestra el agua asignada en el momento.
+- Voces de la aldea conserva hasta 50 mensajes de plantillas locales con filtros por tono. Las publicaciones se espacian al menos 15 segundos simulados y el mismo tema espera tres horas del juego. Los mensajes permiten seleccionar viviendas existentes y se conservan cuando se demuelen.
+- Verificación. npm test aprobó 192 pruebas, cero fallidas y 11 nuevas. npm run build correcto, con el aviso habitual de tamaño de Phaser. Chrome verificó suministro, filtros, selección, demolición y canvas estable a 1280 × 720 y 390 × 844.

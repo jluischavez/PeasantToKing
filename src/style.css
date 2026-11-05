@@ -253,6 +253,31 @@ canvas {
   padding: 0 12px 12px;
 }
 
+#audit-panel .population-events summary {
+  position: static;
+  padding: 6px 0;
+}
+
+.population-events {
+  padding-inline: 12px;
+}
+
+#voices-list {
+  max-block-size: 11rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+#voices-list button {
+  margin-block-start: 4px;
+  padding: 4px 8px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+#voices-list,
+#population-events-list,
 #audit-list {
   padding: 0;
   margin: 8px 0 0;
@@ -260,6 +285,8 @@ canvas {
   font-variant-numeric: tabular-nums;
 }
 
+#voices-list li,
+#population-events-list li,
 #audit-list li {
   padding: 8px 0;
   border-top: 1px solid #527b43;
