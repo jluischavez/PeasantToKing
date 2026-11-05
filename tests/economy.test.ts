@@ -59,7 +59,7 @@ test('connected producers without assigned workers produce nothing', () => {
 });
 
 for (const [type, resource, capacity, maximum] of [
-  ['farm', 'food', 4, 2], ['lumberjack', 'wood', 3, 2], ['market', 'gold', 3, 1],
+  ['farm', 'food', 4, 2], ['lumberjack', 'wood', 3, 2],
 ] as const) {
   test(type + ' scales production at every workforce level, including full capacity', () => {
     for (let workers = 0; workers <= capacity; workers++) {
@@ -85,10 +85,10 @@ test('multiple fully staffed buildings accumulate production and nonproducers co
   types.forEach((type, i) => map.place(cell(i + 13, 1), type));
   recalculate();
   fillWorkers(20);
-  assert.deepEqual(economy.perSecond, { gold: 2, food: 4, wood: 4 });
+  assert.deepEqual(economy.perSecond, { gold: 0, food: 4, wood: 4 });
   assert.equal(economy.productivityAt(cell(19, 1)), undefined);
   economy.advance(3000);
-  assert.deepEqual(economy.resources, { gold: 6, food: 32, wood: 12 });
+  assert.deepEqual(economy.resources, { gold: 0, food: 32, wood: 12 });
 });
 
 test('disconnected production is zero even if an old workforce snapshot still has employees', () => {
@@ -156,12 +156,12 @@ test('consumption preserves fractional food residue rather than rounding stocks 
 
 test('production never exceeds maximum even if a workforce provider reports too many workers', () => {
   const { map, connections, economy, population, recalculate } = setup();
-  map.place(cell(13, 1), 'market');
+  map.place(cell(13, 1), 'farm');
   recalculate();
   economy.recalculate(map, connections, {
     capacityFor: type => population.capacityFor(type),
     workersAt: () => 100,
   });
-  assert.equal(economy.perSecond.gold, 1);
-  assert.deepEqual(economy.productivityAt(cell(13, 1)), { workers: 3, capacity: 3, ratio: 1, storageBlocked: false });
+  assert.equal(economy.perSecond.food, 2);
+  assert.deepEqual(economy.productivityAt(cell(13, 1)), { workers: 4, capacity: 4, ratio: 1, storageBlocked: false });
 });

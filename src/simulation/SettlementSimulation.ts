@@ -1,3 +1,4 @@
+import { populationRules } from '../population/Population.ts';
 import type { ConstructionMap } from '../map/ConstructionMap';
 import type { RoadConnections } from '../map/RoadConnections';
 import type { Economy } from '../economy/Economy';
@@ -36,11 +37,14 @@ export class SettlementSimulation {
       this.elapsedMs -= 1000;
       this.economy.recalculate(this.map, this.connections, this.population);
       this.economy.advance(1000);
-      const fed = this.economy.consumeFood(this.population.foodConsumptionPerSecond);
+      this.economy.consumeHomes(this.population, populationRules.foodPerResidentPerSecond);
       this.immigrationSeconds++;
       if (this.immigrationSeconds === this.immigrationIntervalSeconds) {
         this.immigrationSeconds = 0;
-        if (fed && this.population.immigrate(this.economy.availableFood) > 0) {
+        const supply = this.economy.immigrationSupply(this.population, populationRules.familySize,
+          this.immigrationIntervalSeconds, populationRules.foodPerResidentPerSecond,
+          populationRules.residentsPerPlot);
+        if (this.population.immigrate(this.economy.availableFood, supply) > 0) {
           this.economy.recalculate(this.map, this.connections, this.population);
         }
       }

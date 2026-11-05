@@ -143,23 +143,27 @@ export class Storage {
     return true;
   }
 
+  operationalWarehouseIds(): string[] {
+    return [...this.warehouses.keys()].filter(id => this.inventories.snapshot(id)!.operational);
+  }
+
+  // Homes can consume only reserve or market food, never warehouse stocks.
+  consumeInventoryFood(id: string, units: number): number {
+    if (!Number.isSafeInteger(units) || units <= 0) return 0;
+    const source = this.inventories.snapshot(id);
+    if (!source?.operational || (source.kind !== 'reserve' && source.kind !== 'market')) return 0;
+    const quantity = Math.min(units, source.goods.food);
+    if (quantity === 0) return 0;
+    this.inventories.create('food-consumption', {
+      kind: 'consumer', capacity: quantity, network: null, operational: true,
+    });
+    const transferred = this.inventories.transfer(id, 'food-consumption', 'food', quantity);
+    this.inventories.discardTransient('food-consumption');
+    return transferred ? quantity : 0;
+  }
+
   consumeFood(units: number): boolean {
     if (!Number.isSafeInteger(units) || units < 0) return false;
-    if (units === 0) return true;
-    this.inventories.create('food-consumption', {
-      kind: 'consumer', capacity: units, network: null, operational: true,
-    });
-    let remaining = units;
-    for (const id of ['initial-reserve', ...this.warehouses.keys()]) {
-      const inventory = this.inventories.snapshot(id)!;
-      if (!inventory.operational) continue;
-      const quantity = Math.min(remaining, inventory.goods.food);
-      if (quantity > 0 && this.inventories.transfer(id, 'food-consumption', 'food', quantity)) {
-        remaining -= quantity;
-      }
-      if (remaining === 0) break;
-    }
-    this.inventories.discardTransient('food-consumption');
-    return remaining === 0;
+    return units === 0 || this.consumeInventoryFood('initial-reserve', units) === units;
   }
 }

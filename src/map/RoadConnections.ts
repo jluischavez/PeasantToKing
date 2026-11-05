@@ -17,6 +17,7 @@ function neighbors(cell: Cell): Cell[] {
 export class RoadConnections {
   private readonly connected = new Set<string>();
   private network: string | null = null;
+  revision = 0;
 
   isConnected(cell: Cell): boolean {
     return this.connected.has(key(cell));
@@ -29,6 +30,7 @@ export class RoadConnections {
   }
 
   recalculate(map: ConstructionMap): void {
+    this.revision++;
     this.connected.clear();
     const center = map.villageCenter;
     this.network = center ? key(center) : null;

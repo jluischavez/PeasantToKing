@@ -2,7 +2,7 @@
 export const unitsPerResource = 30;
 export type StoredResource = 'food' | 'wood';
 export type Goods = Record<StoredResource, number>;
-type InventoryKind = 'reserve' | 'warehouse' | 'production' | 'consumer';
+type InventoryKind = 'reserve' | 'warehouse' | 'market' | 'production' | 'consumer';
 export type InventoryAccess = {
   kind: InventoryKind;
   capacity: number;
@@ -46,8 +46,9 @@ export class Inventories {
       || !source.operational || !destination.operational) return false;
     const allowed = (source.kind === 'reserve' && destination.kind === 'consumer')
       || (source.kind === 'production' && destination.kind === 'warehouse')
-      || (source.kind === 'warehouse' && (destination.kind === 'warehouse' || destination.kind === 'consumer'));
-    if (!allowed) return false;
+      || (source.kind === 'warehouse' && (destination.kind === 'warehouse' || destination.kind === 'market'))
+      || (source.kind === 'market' && destination.kind === 'consumer' && resource === 'food');
+    if (!allowed || (destination.kind === 'market' && resource !== 'food')) return false;
     if (destination.kind !== 'consumer'
       && (source.network === null || source.network !== destination.network)) return false;
     const free = destination.capacity - destination.goods.food - destination.goods.wood;

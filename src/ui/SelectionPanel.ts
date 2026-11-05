@@ -1,3 +1,4 @@
+import type { MarketSnapshot, HousingSupply } from '../economy/Distribution';
 import type { WarehouseSnapshot } from '../economy/Storage';
 import type { BuildingProductivity } from '../economy/Economy';
 import type { Cell } from '../map/CellSelection';
@@ -18,7 +19,8 @@ export class SelectionPanel {
   }
 
   render(cell: Cell | null, construction: ConstructionType | null = null, connected = false, residents = 0,
-    productivity?: BuildingProductivity, warehouse?: WarehouseSnapshot): void {
+    productivity?: BuildingProductivity, warehouse?: WarehouseSnapshot, market?: MarketSnapshot,
+    supply?: HousingSupply): void {
     this.coordinates.textContent = cell ? `X: ${cell.column} · Y: ${cell.row}` : 'X: — · Y: —';
     this.terrain.textContent = cell ? 'césped' : '—';
     this.status.textContent = cell
@@ -39,6 +41,15 @@ export class SelectionPanel {
     if (cell && warehouse) {
       const format = (value: number) => value.toLocaleString('es', { maximumFractionDigits: 2 });
       this.status.textContent += ` · Comida: ${format(warehouse.food)} · Madera: ${format(warehouse.wood)} · Capacidad usada: ${format(warehouse.used)}/${warehouse.capacity} · Disponible: ${format(warehouse.free)} · Empleados: ${warehouse.workers}/${warehouse.workerCapacity} · ${warehouse.operational ? 'Operativo' : 'Inactivo'}`;
+    }
+    if (cell && market) {
+      const food = market.food.toLocaleString('es', { maximumFractionDigits: 2 });
+      this.status.textContent += ` · Comida: ${food}/${market.capacity} · Empleados: ${market.workers}/${market.workerCapacity} · Cobertura: ${market.coveredHomes} solares, hasta ${market.range} tramos de camino · ${market.operational ? 'Operativo' : 'Inactivo'}`;
+    }
+    if (cell && construction === 'house' && supply) {
+      this.status.textContent += supply.status === 'reserve' ? ' · Abastecimiento: reserva inicial'
+        : supply.status === 'market' ? ` · Mercado con existencias a ${supply.distance} tramos`
+        : ' · Sin acceso a alimentos: inmigración detenida';
     }
     this.cancel.disabled = cell === null;
   }

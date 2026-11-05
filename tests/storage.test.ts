@@ -120,28 +120,28 @@ test('workers, real producer type and center-connected road network are all requ
   assert.equal(storage.warehouseAt(cell(12, 10))!.food, 0);
 });
 
-test('initial reserve is separate, consumed first, and never copied into new warehouses', () => {
+test('reserve stays separate and exhausted reserve cannot consume warehouse food directly', () => {
   const { storage, map, sync } = setup();
   storage.depositProduction(farm, 'food', 3 * U);
   assert.equal(storage.initialFoodReserve, 20);
   assert.equal(storage.consumeFood(19 * U), true);
   assert.equal(storage.initialFoodReserve, 1);
   assert.equal(storage.warehouseAt(first)!.food, 3);
-  assert.equal(storage.consumeFood(2 * U), true);
+  assert.equal(storage.consumeFood(2 * U), false);
   assert.equal(storage.initialFoodReserve, 0);
-  assert.equal(storage.warehouseAt(first)!.food, 2);
-  assert.equal(storage.totalsUnits.food, 2 * U);
+  assert.equal(storage.warehouseAt(first)!.food, 3);
+  assert.equal(storage.totalsUnits.food, 3 * U);
   map.place(second, 'warehouse');
   for (let i = 0; i < 10; i++) sync();
   assert.equal(storage.initialFoodReserve, 0);
   assert.equal(storage.warehouseAt(second)!.food, 0);
-  assert.equal(storage.totalsUnits.food, 2 * U);
+  assert.equal(storage.totalsUnits.food, 3 * U);
   assert.equal(storage.consumeFood(3 * U), false);
-  assert.equal(storage.totalsUnits.food, 0);
+  assert.equal(storage.totalsUnits.food, 3 * U);
   assert.equal(storage.inventories.snapshot('food-consumption'), undefined);
 });
 
-test('inoperative warehouses retain real stocks but cannot feed residents until reactivated', () => {
+test('warehouse food remains real but homes cannot withdraw it directly, even when operational', () => {
   const { storage, sync, setWorkers } = setup();
   storage.depositProduction(farm, 'food', 5 * U);
   storage.consumeFood(20 * U);
@@ -154,8 +154,8 @@ test('inoperative warehouses retain real stocks but cannot feed residents until 
   setWorkers(1);
   sync();
   assert.equal(storage.availableFoodUnits, 5 * U);
-  assert.equal(storage.consumeFood(U), true);
-  assert.equal(storage.totalsUnits.food, 4 * U);
+  assert.equal(storage.consumeFood(U), false);
+  assert.equal(storage.totalsUnits.food, 5 * U);
 });
 
 test('disconnecting a stocked warehouse preserves goods and prevents new transfers and consumption', () => {
@@ -206,7 +206,7 @@ test('production blocking is visible and stops resource growth until operational
   assert.equal(economy.storage.warehouseAt(first)!.food, 0.5);
 });
 
-test('global totals include each real inventory once and consumption subtracts exactly once', () => {
+test('global totals count warehouse food once and legacy consumption withdraws only the initial reserve', () => {
   const { map, connections, workforce } = setup();
   const economy = new Economy();
   economy.recalculate(map, connections, workforce);
@@ -214,10 +214,10 @@ test('global totals include each real inventory once and consumption subtracts e
   const inventory = economy.storage.warehouseAt(first)!;
   assert.equal(economy.resources.food, economy.storage.initialFoodReserve + inventory.food);
   assert.equal(economy.resources.wood, inventory.wood);
-  assert.equal(economy.consumeFood(20.5), true);
+  assert.equal(economy.consumeFood(20.5), false);
   assert.equal(economy.storage.initialFoodReserve, 0);
-  assert.equal(economy.storage.warehouseAt(first)!.food, 1);
-  assert.equal(economy.resources.food, 1);
+  assert.equal(economy.storage.warehouseAt(first)!.food, 1.5);
+  assert.equal(economy.resources.food, 1.5);
   assert.equal(economy.resources.wood, 2);
 });
 

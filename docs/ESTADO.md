@@ -77,3 +77,14 @@
 - Interfaz HTML conserva distribución flexible: reserva, comida disponible, bloqueo; selección de almacén muestra inventario, capacidad usada/libre, empleados y conexión.
 - Verificación: npm run build correcto, 56 pruebas aprobadas y git diff --check sin errores; secuencia de saturación/ampliación verificada en simulación; pasos en docs/PRUEBAS_08C.md.
 - Pendiente validación visual/manual; persiste aviso conocido de tamaño de Phaser. Sin dependencias nuevas, ventas, salarios, demolición, transportistas ni avance a 08D.
+
+- 2026-11-04 — Etapa 08D implementada: inventario de comida por mercado (100), operativo con conexión y al menos 1 empleado; reposición configurable cada 5 s desde almacenes operativos de la misma red.
+- Transferencias reutilizan Inventories; sin duplicaciones, inventarios negativos ni consumo directo de almacenes. Totales globales incluyen reserva, almacenes y mercados, incluso temporalmente inactivos.
+- MarketCoverage calcula BFS separado del renderizado: máximo 6 casillas viales, compartida = 1; sin diagonales ni atajos por edificios/centro. Se prioriza el mercado cercano con existencias.
+- Cada vivienda consume hasta 0,1 comida/habitante/s desde mercados en cobertura; demanda no satisfecha no consume ni paga. Otro mercado cubierto puede completar una entrega parcial.
+- Inmigración filtrada por suministro local: previsión compartida de 5 s para residentes actuales/nuevos sin duplicar disponibilidad; una vivienda sin suministro no bloquea otras abastecidas.
+- Reserva inicial puente hasta operar el primer mercado; después queda cerrada permanentemente, sin regenerarse ni desaparecer su remanente. Arranque prioriza almacén, granja, mercado y completar la primera granja.
+- Eliminado oro pasivo: tesorería recibe 1 oro por comida efectivamente entregada desde mercados; ingresos provisionales hasta salarios, presupuestos de hogares e impuestos.
+- Interfaz muestra mercados (comida, empleo, cobertura, estado), suministro residencial, reserva abierta/cerrada e ingresos reales/s; pruebas manuales en docs/PRUEBAS_08D.md.
+- Verificación: npm run build correcto, 72 pruebas aprobadas y git diff --check sin errores; ciudad de referencia simulada 120 s, solares abastecidos crecen y solar a 7 tramos permanece vacío.
+- Pendiente validación visual/manual; persiste aviso conocido de tamaño de Phaser. Sin dependencias nuevas, transporte animado, mortalidad, emigración, felicidad ni avance a otra etapa.

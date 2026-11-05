@@ -30,6 +30,12 @@ export class Population {
   private workplaces = new Map<string, Workplace>();
   private migrationCredit = 0;
 
+  get residencesSnapshot(): readonly { cell: Cell; residents: number }[] {
+    return [...this.residences.values()].map(home => ({
+      cell: { ...home.cell }, residents: home.residents,
+    }));
+  }
+
   get total(): number {
     return [...this.residences.values()].reduce((sum, plot) => sum + plot.residents, 0);
   }
@@ -122,8 +128,9 @@ export class Population {
   }
 
   // A score from 0 to 100; food and connected housing remain hard requirements.
-  migrationAttractiveness(food: number): number {
-    const supported = this.foodSupportedArrivals(food);
+  migrationAttractiveness(food: number, supply?: ReadonlyMap<string, number>): number {
+    const supported = supply ? [...supply.values()].reduce((sum, count) => sum + count, 0)
+      : this.foodSupportedArrivals(food);
     if (this.availableHousing === 0 || supported === 0) return 0;
     const rules = populationRules.migration;
     const housing = Math.min(1, this.availableHousing / populationRules.familySize);
@@ -138,8 +145,8 @@ export class Population {
 
   // Evaluated once per immigration interval. Fractional credit slows arrivals
   // predictably as attraction falls; no random rolls or accumulating backlog.
-  immigrate(food: number): number {
-    const attractiveness = this.migrationAttractiveness(food);
+  immigrate(food: number, supply?: ReadonlyMap<string, number>): number {
+    const attractiveness = this.migrationAttractiveness(food, supply);
     if (attractiveness === 0) {
       this.migrationCredit = 0;
       return 0;
@@ -147,14 +154,17 @@ export class Population {
     this.migrationCredit = Math.min(populationRules.familySize,
       this.migrationCredit + populationRules.familySize * attractiveness / 100);
     let remaining = Math.min(Math.floor(this.migrationCredit),
-      this.foodSupportedArrivals(food), this.availableHousing);
+      supply ? [...supply.values()].reduce((sum, count) => sum + count, 0)
+        : this.foodSupportedArrivals(food), this.availableHousing);
     if (remaining <= 0) return 0;
     const plots = [...this.residences.values()]
-      .filter(plot => plot.connected && plot.residents < populationRules.residentsPerPlot)
+      .filter(plot => plot.connected && plot.residents < populationRules.residentsPerPlot
+        && (!supply || (supply.get(key(plot.cell)) ?? 0) > 0))
       .sort((a, b) => a.residents - b.residents);
     let arrived = 0;
     for (const plot of plots) {
-      const count = Math.min(remaining, populationRules.residentsPerPlot - plot.residents);
+      const count = Math.min(remaining, populationRules.residentsPerPlot - plot.residents,
+        supply?.get(key(plot.cell)) ?? populationRules.familySize);
       plot.residents += count;
       remaining -= count;
       arrived += count;
@@ -168,14 +178,21 @@ export class Population {
   private assignWorkers(): void {
     let available = this.activePopulation;
     for (const workplace of this.workplaces.values()) workplace.workers = 0;
-    // Minimal bootstrap: prioritize one storage worker and one food worker.
+    // Bootstrap uses one existing worker per link: storage, farm and market.
     // This is the same allocator; no workers are created or counted twice.
-    for (const type of ['warehouse', 'farm'] as const) {
+    for (const type of ['warehouse', 'farm', 'market'] as const) {
       const workplace = [...this.workplaces.values()].find(entry => entry.type === type);
       if (available > 0 && workplace) {
         workplace.workers = 1;
         available--;
       }
+    }
+    // Complete food production before secondary posts to avoid a distribution deadlock.
+    const farm = [...this.workplaces.values()].find(entry => entry.type === 'farm');
+    if (farm) {
+      const assigned = Math.min(available, farm.capacity - farm.workers);
+      farm.workers += assigned;
+      available -= assigned;
     }
     for (const workplace of this.workplaces.values()) {
       const assigned = Math.min(available, workplace.capacity - workplace.workers);

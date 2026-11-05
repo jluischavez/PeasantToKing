@@ -1,3 +1,4 @@
+import { Distribution } from './Distribution.ts';
 import { Storage } from './Storage.ts';
 import { unitsPerResource } from './Inventories.ts';
 import type { StoredResource } from './Inventories';
@@ -23,7 +24,7 @@ const productionByType: Record<ConstructionType, Readonly<Resources>> = {
   farm: { gold: 0, food: 2, wood: 0 },
   lumberjack: { gold: 0, food: 0, wood: 2 },
   warehouse: { gold: 0, food: 0, wood: 0 },
-  market: { gold: 1, food: 0, wood: 0 },
+  market: { gold: 0, food: 0, wood: 0 },
   villageCenter: { gold: 0, food: 0, wood: 0 },
 };
 
@@ -39,6 +40,7 @@ const asResources = (units: Resources): Resources => ({
 export class Economy {
   private goldUnits: number;
   readonly storage: Storage;
+  readonly distribution: Distribution;
   private context: { map: ConstructionMap; connections: RoadConnections; workforce: Workforce } | null = null;
   private batches: { cell: Cell; resource: StoredResource; units: number }[] = [];
   private productionUnits: Resources = { gold: 0, food: 0, wood: 0 };
@@ -52,15 +54,17 @@ export class Economy {
       food: Math.round(initial.food * unitsPerResource),
       wood: Math.round(initial.wood * unitsPerResource),
     });
+    this.distribution = new Distribution(this.storage);
   }
 
   get resources(): Readonly<Resources> {
     const goods = this.storage.totalsUnits;
+    goods.food += this.distribution.totalMarketFoodUnits;
     return asResources({ gold: this.goldUnits, food: goods.food, wood: goods.wood });
   }
 
   get availableFood(): number {
-    return this.storage.availableFoodUnits / unitsPerResource;
+    return this.distribution.availableFood;
   }
 
   get blockedProducers(): number {
@@ -68,7 +72,7 @@ export class Economy {
   }
 
   get perSecond(): Readonly<Resources> {
-    return asResources(this.productionUnits);
+    return { ...asResources(this.productionUnits), gold: this.distribution.salesPerSecond };
   }
 
   productivityAt(cell: Cell): BuildingProductivity | undefined {
@@ -79,6 +83,7 @@ export class Economy {
   recalculate(map: ConstructionMap, connections: RoadConnections, workforce: Workforce): void {
     this.context = { map, connections, workforce };
     this.storage.sync(map, connections, workforce);
+    this.distribution.sync(map, connections, workforce);
     const spaces = this.storage.availableSpaces();
     this.batches = [];
     const total: Resources = { gold: 0, food: 0, wood: 0 };
@@ -112,6 +117,19 @@ export class Economy {
     this.productionUnits = total;
   }
 
+  consumeHomes(population: Pick<Population, 'residencesSnapshot'>, foodPerResident: number): void {
+    // Provisional revenue: one gold per resource unit delivered by a market.
+    // No revenue from replenishment, reserve consumption or unsatisfied demand.
+    this.goldUnits += this.distribution.consumeHomes(population.residencesSnapshot, foodPerResident);
+    this.refresh();
+  }
+
+  immigrationSupply(population: Pick<Population, 'residencesSnapshot'>, maxResidents: number, seconds: number,
+    foodPerResident: number, residentialCapacity: number): ReadonlyMap<string, number> {
+    return this.distribution.immigrationPlan(population.residencesSnapshot, maxResidents,
+      seconds, foodPerResident, residentialCapacity);
+  }
+
   private refresh(): void {
     if (this.context) {
       const { map, connections, workforce } = this.context;
@@ -121,7 +139,8 @@ export class Economy {
 
   consumeFood(amount: number): boolean {
     if (!Number.isFinite(amount) || amount < 0) return false;
-    const fed = this.storage.consumeFood(Math.round(amount * unitsPerResource));
+    const fed = amount === 0 || (this.distribution.bootstrapActive
+      && this.storage.consumeFood(Math.round(amount * unitsPerResource)));
     this.refresh();
     return fed;
   }
@@ -135,10 +154,11 @@ export class Economy {
     // Capacity is shared and can fill between seconds, even within one update.
     for (let second = 0; second < seconds; second++) {
       this.refresh();
-      this.goldUnits += this.productionUnits.gold;
+
       for (const batch of this.batches) {
         this.storage.depositProduction(batch.cell, batch.resource, batch.units);
       }
+      this.distribution.advanceSecond();
     }
     this.refresh();
     return true;

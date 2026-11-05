@@ -1,0 +1,195 @@
+import { unitsPerResource as U } from './Inventories.ts';
+import { MarketCoverage } from '../map/MarketCoverage.ts';
+import type { Storage } from './Storage';
+import type { Cell } from '../map/CellSelection';
+import type { ConstructionMap } from '../map/ConstructionMap';
+import type { RoadConnections } from '../map/RoadConnections';
+import type { Population } from '../population/Population';
+
+export const distributionRules = { marketCapacity: 100, restockIntervalSeconds: 5, coverageRoadTiles: 6 } as const;
+export type Residence = Readonly<{ cell: Cell; residents: number }>;
+export type MarketSnapshot = Readonly<{
+  food: number; capacity: number; workers: number; workerCapacity: number;
+  connected: boolean; operational: boolean; coveredHomes: number; range: number;
+}>;
+export type HousingSupply = Readonly<{ status: 'reserve' | 'market' | 'unserved'; market?: Cell; distance?: number }>;
+type Workforce = Pick<Population, 'workersAt' | 'capacityFor'>;
+type Market = { id: string; cell: Cell; workers: number; workerCapacity: number; connected: boolean };
+const key = (cell: Cell): string => `${cell.column},${cell.row}`;
+
+export class Distribution {
+  private readonly storage: Storage;
+  readonly coverage = new MarketCoverage();
+  private readonly markets = new Map<string, Market>();
+  private connections: RoadConnections | null = null;
+  private coverageRevision = -1;
+  private coverageMap: ConstructionMap | null = null;
+  private restockSeconds = 0;
+  private bootstrap = true;
+  private salesUnits = 0;
+
+  constructor(storage: Storage) {
+    this.storage = storage;
+  }
+
+  get bootstrapActive(): boolean { return this.bootstrap; }
+  get salesPerSecond(): number { return this.salesUnits / U; }
+
+  sync(map: ConstructionMap, connections: RoadConnections, workforce: Workforce): void {
+    this.connections = connections;
+    if (this.coverageMap !== map || this.coverageRevision !== connections.revision) {
+      this.coverage.recalculate(map, connections, distributionRules.coverageRoadTiles);
+      this.coverageMap = map;
+      this.coverageRevision = connections.revision;
+    }
+    for (const market of this.markets.values()) {
+      market.connected = false;
+      market.workers = 0;
+      this.storage.inventories.setAccess(market.id, null, false);
+    }
+    for (let row = 0; row < map.rows; row++) {
+      for (let column = 0; column < map.columns; column++) {
+        const cell = { column, row };
+        if (map.getConstruction(cell) !== 'market') continue;
+        const id = 'market:' + key(cell);
+        const network = connections.networkFor(cell);
+        const workerCapacity = workforce.capacityFor('market');
+        const workers = network ? Math.min(workerCapacity, Math.max(0, workforce.workersAt(cell))) : 0;
+        if (!this.markets.has(id)) {
+          this.storage.inventories.create(id, {
+            kind: 'market', capacity: distributionRules.marketCapacity * U,
+            network, operational: workers > 0,
+          });
+        }
+        this.markets.set(id, { id, cell, workers, workerCapacity, connected: network !== null });
+        this.storage.inventories.setAccess(id, network, workers > 0);
+        // One-way transition: closing the bootstrap never restores spent reserve.
+        if (workers > 0 && this.bootstrap) {
+          this.bootstrap = false;
+          this.storage.inventories.setAccess('initial-reserve', null, false);
+        }
+      }
+    }
+  }
+
+  marketAt(cell: Cell): MarketSnapshot | undefined {
+    const market = this.markets.get('market:' + key(cell));
+    if (!market) return undefined;
+    const inventory = this.storage.inventories.snapshot(market.id)!;
+    return {
+      food: inventory.goods.food / U, capacity: distributionRules.marketCapacity,
+      workers: market.workers, workerCapacity: market.workerCapacity,
+      connected: market.connected, operational: inventory.operational,
+      coveredHomes: this.coverage.coveredHomes(cell), range: distributionRules.coverageRoadTiles,
+    };
+  }
+
+  get totalMarketFoodUnits(): number {
+    return [...this.markets.keys()].reduce((sum, id) => sum + this.storage.inventories.snapshot(id)!.goods.food, 0);
+  }
+
+  get availableFood(): number {
+    let units = this.bootstrap ? this.storage.initialFoodReserve * U : 0;
+    for (const id of this.markets.keys()) {
+      const inventory = this.storage.inventories.snapshot(id)!;
+      if (inventory.operational) units += inventory.goods.food;
+    }
+    return units / U;
+  }
+
+  // A single settlement clock controls replenishment, never UI reconstruction.
+  advanceSecond(): void {
+    this.restockSeconds++;
+    if (this.restockSeconds < distributionRules.restockIntervalSeconds) return;
+    this.restockSeconds = 0;
+    for (const market of this.markets.values()) {
+      const destination = this.storage.inventories.snapshot(market.id)!;
+      if (!destination.operational) continue;
+      let free = destination.free;
+      for (const id of this.storage.operationalWarehouseIds()) {
+        const source = this.storage.inventories.snapshot(id)!;
+        if (source.network !== destination.network) continue;
+        const quantity = Math.min(free, source.goods.food);
+        if (quantity > 0 && this.storage.inventories.transfer(id, market.id, 'food', quantity)) free -= quantity;
+        if (free === 0) break;
+      }
+    }
+  }
+
+  private sources(cell: Cell): { id: string; distance: number; cell?: Cell }[] {
+    if (!this.connections?.isConnected(cell)) return [];
+    if (this.bootstrap) return [{ id: 'initial-reserve', distance: 0 }];
+    return [...this.markets.values()].flatMap(market => {
+      const distance = this.coverage.distance(market.cell, cell);
+      const inventory = this.storage.inventories.snapshot(market.id)!;
+      return inventory.operational && distance !== undefined
+        ? [{ id: market.id, distance, cell: market.cell }] : [];
+    }).sort((a, b) => a.distance - b.distance
+      || a.cell!.row - b.cell!.row || a.cell!.column - b.cell!.column);
+  }
+
+  supplyAt(cell: Cell): HousingSupply {
+    const source = this.sources(cell).find(entry => this.storage.inventories.snapshot(entry.id)!.goods.food > 0);
+    if (!source) return { status: 'unserved' };
+    return source.id === 'initial-reserve' ? { status: 'reserve' }
+      : { status: 'market', market: { ...source.cell! }, distance: source.distance };
+  }
+
+  consumeHomes(homes: readonly Residence[], foodPerResident: number): number {
+    this.salesUnits = 0;
+    for (const home of homes) {
+      let remaining = Math.round(home.residents * foodPerResident * U);
+      for (const source of this.sources(home.cell)) {
+        const delivered = this.storage.consumeInventoryFood(source.id, remaining);
+        remaining -= delivered;
+        if (source.id !== 'initial-reserve') this.salesUnits += delivered;
+        if (remaining === 0) break;
+      }
+    }
+    return this.salesUnits;
+  }
+
+  // Forecast shared inventories once, reserving existing household demand first.
+  // This plan never moves goods and never promises the same food to two homes.
+  immigrationPlan(homes: readonly Residence[], maxResidents: number, seconds: number,
+    foodPerResident: number, residentialCapacity: number): ReadonlyMap<string, number> {
+    const budgets = new Map<string, number>();
+    budgets.set('initial-reserve', this.bootstrap ? Math.round(this.storage.initialFoodReserve * U) : 0);
+    for (const id of this.markets.keys()) {
+      const inventory = this.storage.inventories.snapshot(id)!;
+      budgets.set(id, inventory.operational ? inventory.goods.food : 0);
+    }
+    const reserve = (cell: Cell, units: number, requireFull: boolean): boolean => {
+      const plan: { id: string; units: number }[] = [];
+      let remaining = units;
+      for (const source of this.sources(cell)) {
+        const quantity = Math.min(remaining, budgets.get(source.id) ?? 0);
+        plan.push({ id: source.id, units: quantity });
+        remaining -= quantity;
+        if (remaining === 0) break;
+      }
+      if (remaining > 0 && requireFull) return false;
+      for (const entry of plan) budgets.set(entry.id, budgets.get(entry.id)! - entry.units);
+      return remaining === 0;
+    };
+    const fed = new Set<string>();
+    const unitDemand = Math.round(seconds * foodPerResident * U);
+    for (const home of homes) {
+      if (reserve(home.cell, home.residents * unitDemand, false)) fed.add(key(home.cell));
+    }
+    const result = new Map<string, number>();
+    let remaining = maxResidents;
+    for (const home of [...homes].sort((a, b) => a.residents - b.residents)) {
+      if (!fed.has(key(home.cell))) continue;
+      let count = 0;
+      while (remaining > 0 && home.residents + count < residentialCapacity
+        && reserve(home.cell, unitDemand, true)) {
+        count++;
+        remaining--;
+      }
+      if (count > 0) result.set(key(home.cell), count);
+      if (remaining === 0) break;
+    }
+    return result;
+  }
+}

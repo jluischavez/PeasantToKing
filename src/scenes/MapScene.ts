@@ -42,9 +42,12 @@ export class MapScene extends Phaser.Scene {
     const renderSummary = (): void => {
       resourceBar.render(economy.resources, economy.perSecond, {
         reserve: economy.storage.initialFoodReserve, availableFood: economy.availableFood,
-        blocked: economy.blockedProducers,
+        blocked: economy.blockedProducers, bootstrap: economy.distribution.bootstrapActive,
       });
-      populationPanel.render(population, economy.availableFood);
+      populationPanel.render(population, economy.availableFood,
+        economy.immigrationSupply(population, populationRules.familySize,
+          populationRules.immigrationIntervalSeconds, populationRules.foodPerResidentPerSecond,
+          populationRules.residentsPerPlot));
     };
     renderSummary();
     const renderSelected = (): void => {
@@ -52,7 +55,9 @@ export class MapScene extends Phaser.Scene {
       panel.render(cell, cell ? constructions.getConstruction(cell) : null,
         cell !== null && connections.isConnected(cell), cell ? population.residentsAt(cell) : 0,
         cell ? economy.productivityAt(cell) : undefined,
-        cell ? economy.storage.warehouseAt(cell) : undefined);
+        cell ? economy.storage.warehouseAt(cell) : undefined,
+        cell ? economy.distribution.marketAt(cell) : undefined,
+        cell && constructions.getConstruction(cell) === 'house' ? economy.distribution.supplyAt(cell) : undefined);
     };
     const updateSimulation = (_time: number, delta: number): void => {
       const previousPopulation = population.total;

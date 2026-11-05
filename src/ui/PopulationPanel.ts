@@ -16,16 +16,16 @@ export class PopulationPanel {
 
   constructor() {
     this.active.title = `Participación laboral: ${populationRules.laborParticipationRate * 100} % de la población, redondeada hacia abajo.`;
-    this.attractiveness.title = `Las llegadas se detienen con ${populationRules.migration.stopUnemploymentRate * 100} % de desempleo, sin espacio conectado o sin reserva de alimentos.`;
+    this.attractiveness.title = `Las llegadas se detienen con ${populationRules.migration.stopUnemploymentRate * 100} % de desempleo, sin espacio conectado o sin abastecimiento de alimentos.`;
   }
 
-  render(population: Population, food: number): void {
+  render(population: Population, food: number, supply: ReadonlyMap<string, number>): void {
     this.total.textContent = String(population.total);
     this.active.textContent = String(population.activePopulation);
     this.unemploymentRate.textContent = (population.unemploymentRate * 100).toLocaleString('es', {
       maximumFractionDigits: 1,
     });
-    this.attractiveness.textContent = String(population.migrationAttractiveness(food));
+    this.attractiveness.textContent = String(population.migrationAttractiveness(food, supply));
     this.capacity.textContent = String(population.residentialCapacity);
     this.connected.textContent = String(population.connectedCapacity);
     this.jobs.textContent = String(population.jobCapacity);
