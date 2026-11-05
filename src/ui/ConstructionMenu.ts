@@ -19,7 +19,7 @@ export class ConstructionMenu {
     }
     this.onClick = (event) => {
       const target = event.target;
-      if (!(target instanceof HTMLButtonElement)) return;
+      if (!(target instanceof HTMLButtonElement) || target.disabled) return;
       const value = target.dataset.construction;
       if (!isConstructionType(value) && value !== 'cancel') return;
       const type = value === 'cancel' ? null : value;
@@ -41,6 +41,11 @@ export class ConstructionMenu {
     this.status.textContent = type
       ? `${constructionNames[type]}: haz clic en una casilla disponible. Rojo: casilla ocupada.`
       : 'Selecciona un tipo de construcción.';
+  }
+
+  disableVillageCenter(): void {
+    this.root.querySelector<HTMLButtonElement>('[data-construction="villageCenter"]')!.disabled = true;
+    this.render(null);
   }
 
   destroy(): void {

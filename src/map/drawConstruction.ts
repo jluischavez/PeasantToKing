@@ -1,5 +1,6 @@
 import type Phaser from 'phaser';
 import type { ConstructionType } from './ConstructionMap';
+import { drawRoad } from './RoadAppearance';
 
 type ConstructionDrawer = (
   graphics: Phaser.GameObjects.Graphics,
@@ -7,9 +8,23 @@ type ConstructionDrawer = (
   y: number,
   size: number,
   alpha: number,
+  roadMask?: number,
 ) => void;
 
 const constructionDrawers: Record<ConstructionType, ConstructionDrawer> = {
+  villageCenter(graphics, x, y, size, alpha) {
+    graphics.fillStyle(0xc5c3ad, alpha);
+    graphics.fillRect(x + size * 0.18, y + size * 0.4, size * 0.64, size * 0.48);
+    graphics.fillStyle(0x687f99, alpha);
+    graphics.fillTriangle(x + size * 0.08, y + size * 0.42,
+      x + size * 0.5, y + size * 0.16, x + size * 0.92, y + size * 0.42);
+    graphics.fillStyle(0x564231, alpha);
+    graphics.fillRect(x + size * 0.42, y + size * 0.62, size * 0.16, size * 0.26);
+    graphics.fillRect(x + size * 0.48, y + size * 0.05, size * 0.04, size * 0.22);
+    graphics.fillStyle(0xe8c75e, alpha);
+    graphics.fillTriangle(x + size * 0.52, y + size * 0.05,
+      x + size * 0.78, y + size * 0.11, x + size * 0.52, y + size * 0.17);
+  },
   house(graphics, x, y, size, alpha) {
     graphics.fillStyle(0xe4c68e, alpha);
     graphics.fillRect(x + size * 0.2, y + size * 0.42, size * 0.6, size * 0.45);
@@ -22,13 +37,7 @@ const constructionDrawers: Record<ConstructionType, ConstructionDrawer> = {
     graphics.fillStyle(0x503a29, alpha);
     graphics.fillRect(x + size * 0.43, y + size * 0.62, size * 0.16, size * 0.25);
   },
-  road(graphics, x, y, size, alpha) {
-    graphics.fillStyle(0xb99b6a, alpha);
-    graphics.fillRect(x + size * 0.04, y + size * 0.3, size * 0.92, size * 0.4);
-    graphics.fillStyle(0xd4bb8e, alpha);
-    graphics.fillRect(x + size * 0.15, y + size * 0.38, size * 0.22, size * 0.1);
-    graphics.fillRect(x + size * 0.58, y + size * 0.53, size * 0.22, size * 0.1);
-  },
+  road: drawRoad,
   farm(graphics, x, y, size, alpha) {
     graphics.fillStyle(0x795238, alpha);
     graphics.fillRect(x + size * 0.08, y + size * 0.08, size * 0.84, size * 0.84);
@@ -93,6 +102,7 @@ export function drawConstruction(
   y: number,
   size: number,
   alpha = 1,
+  roadMask = 0,
 ): void {
-  constructionDrawers[type](graphics, x, y, size, alpha);
+  constructionDrawers[type](graphics, x, y, size, alpha, roadMask);
 }

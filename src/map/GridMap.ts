@@ -2,6 +2,8 @@ import type Phaser from 'phaser';
 import type { Cell } from './CellSelection';
 import type { ConstructionMap, ConstructionType } from './ConstructionMap';
 import { drawConstruction } from './drawConstruction';
+import type { RoadConnections } from './RoadConnections';
+import { getRoadMask } from './RoadAppearance';
 
 export class GridMap {
   readonly columns = 20;
@@ -11,6 +13,7 @@ export class GridMap {
   private readonly preview: Phaser.GameObjects.Graphics;
   private readonly highlight: Phaser.GameObjects.Graphics;
   private readonly selection: Phaser.GameObjects.Graphics;
+  private readonly connectionIndicators: Phaser.GameObjects.Graphics;
   private x = 0;
   private y = 0;
   private cellSize = 0;
@@ -21,6 +24,7 @@ export class GridMap {
     this.preview = scene.add.graphics().setDepth(1);
     this.highlight = scene.add.graphics();
     this.selection = scene.add.graphics();
+    this.connectionIndicators = scene.add.graphics().setDepth(0.5);
   }
 
   layout(x: number, y: number, size: number): void {
@@ -32,6 +36,7 @@ export class GridMap {
     this.preview.clear();
     this.clearHighlight();
     this.selection.clear();
+    this.connectionIndicators.clear();
     if (size <= 0) return;
 
     this.terrain.fillStyle(0x527b43);
@@ -78,26 +83,36 @@ export class GridMap {
     this.highlight.clear();
   }
 
-  renderConstructions(map: ConstructionMap): void {
+  renderConstructions(map: ConstructionMap, connections: RoadConnections): void {
     this.constructions.clear();
+    this.connectionIndicators.clear();
     if (this.cellSize <= 0) return;
     for (let row = 0; row < map.rows; row++) {
       for (let column = 0; column < map.columns; column++) {
         const type = map.getConstruction({ column, row });
         if (type) {
           drawConstruction(this.constructions, type,
-            this.x + column * this.cellSize, this.y + row * this.cellSize, this.cellSize);
+            this.x + column * this.cellSize, this.y + row * this.cellSize, this.cellSize,
+            1, type === 'road' ? getRoadMask(map, { column, row }) : 0);
+          if (type !== 'road' && !connections.isConnected({ column, row })) {
+            const markerX = this.x + (column + 0.86) * this.cellSize;
+            const markerY = this.y + (row + 0.14) * this.cellSize;
+            this.connectionIndicators.fillStyle(0x1c211d);
+            this.connectionIndicators.fillCircle(markerX, markerY, this.cellSize * 0.1);
+            this.connectionIndicators.fillStyle(0xe8b65a);
+            this.connectionIndicators.fillCircle(markerX, markerY, this.cellSize * 0.065);
+          }
         }
       }
     }
   }
 
-  renderPreview(cell: Cell | null, type: ConstructionType | null, available: boolean): void {
+  renderPreview(cell: Cell | null, type: ConstructionType | null, available: boolean, roadMask = 0): void {
     this.preview.clear();
     if (!cell || !type || this.cellSize <= 0) return;
     const x = this.x + cell.column * this.cellSize;
     const y = this.y + cell.row * this.cellSize;
-    if (available) drawConstruction(this.preview, type, x, y, this.cellSize, 0.55);
+    if (available) drawConstruction(this.preview, type, x, y, this.cellSize, 0.55, roadMask);
     this.preview.fillStyle(available ? 0xa4e69c : 0xf05252, 0.25);
     this.preview.fillRect(x, y, this.cellSize, this.cellSize);
     this.preview.lineStyle(2, available ? 0xa4e69c : 0xf05252);

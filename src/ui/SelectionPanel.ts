@@ -15,11 +15,13 @@ export class SelectionPanel {
     this.render(null);
   }
 
-  render(cell: Cell | null, construction: ConstructionType | null = null): void {
+  render(cell: Cell | null, construction: ConstructionType | null = null, connected = false): void {
     this.coordinates.textContent = cell ? `X: ${cell.column} · Y: ${cell.row}` : 'X: — · Y: —';
     this.terrain.textContent = cell ? 'césped' : '—';
     this.status.textContent = cell
-      ? (construction ? `ocupada — ${constructionNames[construction]}` : 'disponible')
+      ? (construction
+        ? `ocupada — ${constructionNames[construction]} · ${connected ? 'Conectado' : 'Sin conexión'}`
+        : 'disponible')
       : 'Sin selección';
     this.cancel.disabled = cell === null;
   }

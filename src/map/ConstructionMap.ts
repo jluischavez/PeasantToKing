@@ -7,6 +7,7 @@ export const constructionNames = {
   lumberjack: 'Leñador',
   warehouse: 'Almacén',
   market: 'Mercado',
+  villageCenter: 'Centro de Aldea',
 } as const;
 
 export type ConstructionType = keyof typeof constructionNames;
@@ -17,6 +18,7 @@ export function isConstructionType(value: string | undefined): value is Construc
 
 export class ConstructionMap {
   private readonly cells: (ConstructionType | null)[];
+  private center: Cell | null = null;
   readonly columns: number;
   readonly rows: number;
 
@@ -36,13 +38,19 @@ export class ConstructionMap {
     return this.contains(cell) ? this.cells[cell.row * this.columns + cell.column]! : null;
   }
 
-  canPlace(cell: Cell): boolean {
-    return this.contains(cell) && this.getConstruction(cell) === null;
+  get villageCenter(): Cell | null {
+    return this.center;
+  }
+
+  canPlace(cell: Cell, type?: ConstructionType): boolean {
+    return this.contains(cell) && this.getConstruction(cell) === null
+      && (type !== 'villageCenter' || this.center === null);
   }
 
   place(cell: Cell, type: ConstructionType): boolean {
-    if (!this.canPlace(cell)) return false;
+    if (!this.canPlace(cell, type)) return false;
     this.cells[cell.row * this.columns + cell.column] = type;
+    if (type === 'villageCenter') this.center = { column: cell.column, row: cell.row };
     return true;
   }
 }

@@ -1,6 +1,6 @@
-# De Campesino a Rey — Plan incremental para Codex
+# Peasant to King — Plan incremental para Codex
 
-**Versión:** 0.1 · **Fecha:** 4 de noviembre de 2026  
+**Versión:** 0.2 · **Actualizado:** 4 de noviembre de 2026  
 **Propósito:** crear un pequeño *city builder idle* medieval para navegador, construyéndolo por entregas cortas y comprobables, sin consumir innecesariamente el cupo de Codex.
 
 ## 1. Concepto y alcance
@@ -54,7 +54,30 @@ Multijugador, login, servidor, cuentas en nube, ranking global, combate, ejérci
 
 **Primer alto recomendable:** tras la tarea **03**, evaluar si la experiencia de construir ya resulta agradable. **Segundo alto:** tras la **06**, decidir si seguir o cambiar el diseño. **Tercer alto:** tras la **09**, el MVP ya debe ser jugable.
 
-## 5. Cómo usar Codex de forma eficiente
+## 5. Estado real al cierre del 4 de noviembre de 2026
+
+**Nombre definitivo:** Peasant to King. **Etapas 00–05:** implementadas y probadas por el usuario, incluyendo la corrección del indicador de ocupación y la **unión gráfica automática de caminos** (tramos rectos, esquinas y cruces). La etapa 05 incorpora el Centro de Aldea y la conectividad lógica de edificios mediante caminos ortogonales.
+
+**Importante:** el plan original de las etapas 02 y 04 mencionaba recursos/costos, pero el alcance realmente implementado se centró en selección y edificios **sin economía**. **No dar por terminados los costos ni los recursos.** Se incorporan a las etapas económicas posteriores según el estado real del código. Antes de empezar cada entrega, Codex debe consultar `docs/ESTADO.md` y verificar el código, no asumir que todo lo previsto en la tabla ya existe.
+
+**Siguiente entrega:** 06 — producción/economía básica, definiendo primero los recursos, costos y reglas mínimas; la producción debe depender de conectividad. Después seguir 07–11 para completar el MVP funcional.
+
+### Funcionalidad futura reservada: evolución visual de la ciudad
+
+**Prioridad:** después de finalizar, probar y publicar el MVP funcional (etapas 06–11), **no antes**. Es una expansión planificada, no un requisito inmediato ni una orden de implementación automática. Dividir en tareas pequeñas independientes:
+
+| ID futuro | Función | Regla propuesta |
+|---|---|---|
+| F01 | Prosperidad y servicios | Calcular por vivienda una puntuación basada en acceso por caminos, abastecimiento, mercado, seguridad y otros servicios; ajustar las reglas tras probar la economía. |
+| F02 | Evolución de viviendas | Casas de nivel 1 (humilde) a niveles superiores (madera mejorada, piedra, residencia próspera), con gráficos distintos y requisitos claros; evitar cambios instantáneos constantes por pequeñas fluctuaciones. |
+| F03 | Mejoras de calles | Camino de tierra → grava → piedra → piedra pulida/real; mantener las uniones automáticas de rectas, curvas, T y cruces en todos los niveles. |
+| F04 | Evolución de edificios | Granja, leñador/aserradero, almacén y mercado tendrán apariencias más desarrolladas según nivel/mejoras económicas; siempre reconocibles. |
+| F05 | Centro de aldea y defensa | Centro de Aldea → ayuntamiento/casa señorial → castillo; añadir torres de vigilancia, guardias, murallas y portones por etapas posteriores. |
+| F06 | Pulido visual | Barrios pobres y prósperos distinguibles, decoración y animaciones ligeras; sin exigir simulación de ciudadanos ni rehacer el motor. |
+
+**Principio de diseño:** el crecimiento visual debe reflejar desarrollo y funcionamiento de la ciudad, no solo tiempo transcurrido. Algunas mejoras pueden requerir acciones del jugador y recursos, en vez de ser todas automáticas. Acordar reglas y balance antes de codificarlas. **No gastar tokens en el arte final todavía**; reutilizar el sistema gráfico existente mientras probamos mecánicas.
+
+## 6. Cómo usar Codex de forma eficiente
 
 1. Revisar el cupo en **Configuración → Uso** antes de tareas nuevas. Reservar de manera orientativa la mayor parte del cupo para tu trabajo profesional; si no tienes cupo suficiente, no iniciar otra tarea.
 2. Usar un modelo más económico para cambios pequeños cuando esté disponible; reservar modelos más capaces para errores complejos o decisiones de arquitectura.
@@ -66,15 +89,15 @@ Multijugador, login, servidor, cuentas en nube, ranking global, combate, ejérci
 
 ### Plantilla para solicitudes posteriores
 
-> Continúa el proyecto «De Campesino a Rey». Revisa `docs/PLAN.md`, `docs/ESTADO.md` y únicamente los archivos relevantes. Ejecuta **solo la tarea [ID]** según el plan. Mantén la solución simple y no implementes tareas posteriores. Cuando termines, ejecuta `npm run build`, resume archivos modificados y describe cómo lo compruebo manualmente. Si algo falla, indícalo; no lo declares terminado. Actualiza `docs/ESTADO.md` en un máximo de 10 líneas nuevas. No publiques ni hagas push.
+> Continúa el proyecto «Peasant to King». Revisa `docs/PLAN.md`, `docs/ESTADO.md` y únicamente los archivos relevantes. Ejecuta **solo la tarea [ID]** según el plan. Mantén la solución simple y no implementes tareas posteriores. Cuando termines, ejecuta `npm run build`, resume archivos modificados y describe cómo lo compruebo manualmente. Si algo falla, indícalo; no lo declares terminado. Actualiza `docs/ESTADO.md` en un máximo de 10 líneas nuevas. No publiques ni hagas push.
 
-## 6. Primer mensaje listo para pegar en Codex (tarea 00)
+## 7. Primer mensaje histórico para Codex (tarea 00)
 
-> Vamos a crear por etapas un juego web 2D medieval llamado provisionalmente «De Campesino a Rey». La meta inicial es construir una aldea en un mapa de casillas, NO desarrollar todo el juego de una vez. Trabaja en el repositorio actual (si está vacío, inicialízalo) con **Vite + TypeScript + Phaser**, sin React ni backend. Configura un proyecto mínimo que funcione con `npm install`, `npm run dev` y `npm run build`. Muestra una pantalla inicial con el título del juego y el texto «Prototipo — Etapa 00», sin mapas, economía ni edificios todavía. Crea `docs/PLAN.md` con la descripción del alcance y la secuencia 00–11 de este plan (si el archivo ya existe, respétalo), y `docs/ESTADO.md` con el estado de esta entrega. Mantén el código simple, sin recursos gráficos externos ni dependencias innecesarias. Ejecuta `npm run build` y dime qué archivos modificaste, si la compilación pasó y exactamente qué debo revisar en el navegador. No implementes etapas posteriores. No publiques ni hagas push.
+> Vamos a crear por etapas un juego web 2D medieval llamado provisionalmente «Peasant to King». La meta inicial es construir una aldea en un mapa de casillas, NO desarrollar todo el juego de una vez. Trabaja en el repositorio actual (si está vacío, inicialízalo) con **Vite + TypeScript + Phaser**, sin React ni backend. Configura un proyecto mínimo que funcione con `npm install`, `npm run dev` y `npm run build`. Muestra una pantalla inicial con el título del juego y el texto «Prototipo — Etapa 00», sin mapas, economía ni edificios todavía. Crea `docs/PLAN.md` con la descripción del alcance y la secuencia 00–11 de este plan (si el archivo ya existe, respétalo), y `docs/ESTADO.md` con el estado de esta entrega. Mantén el código simple, sin recursos gráficos externos ni dependencias innecesarias. Ejecuta `npm run build` y dime qué archivos modificaste, si la compilación pasó y exactamente qué debo revisar en el navegador. No implementes etapas posteriores. No publiques ni hagas push.
 
 **Después de aprobar 00:** prueba la página, captura cualquier error de consola y marca 00 como terminado. Solo entonces solicita 01.
 
-## 7. Qué guardar del desarrollo
+## 8. Qué guardar del desarrollo
 
 | Fecha | Tarea | Cupo antes/después | Iteraciones | Resultado | Commit |
 |---|---|---|---|---|---|

@@ -16,6 +16,25 @@
 - Granja con cultivos, Leñador con árbol y troncos, Almacén con portón doble y Mercado con toldo a rayas.
 - Se reutilizan ocupación y colocación múltiple de una casilla; consulta muestra nombre y coordenadas.
 - Correcciones del cursor, indicadores verde/rojo, selección y cancelación sin cambios.
-- Sin costos, producción, economía, población, conexiones de caminos ni dependencias nuevas; etapa 05 pendiente.
+- Entrega 04 sin costos, producción, economía, población, conexiones de caminos ni dependencias nuevas.
 - Verificación de 04: `npm run build` correcto; pruebas locales de seis tipos, múltiples colocaciones, solapamientos, gráficos y transparencia correctas.
+- 2026-11-04 — Tarea 05 implementada: Centro de Aldea gratuito de una casilla, único en el modelo y deshabilitado en el menú tras colocarlo.
+- `RoadConnections` calcula BFS desde el centro: solo caminos ortogonales; edificios adyacentes a caminos alcanzables quedan conectados y no transmiten la conexión.
+- El centro funciona sin caminos; edificios sin acceso muestran un punto ámbar discreto y el panel indica «Conectado» o «Sin conexión».
+- Conexiones recalculadas tras cada construcción; indicadores conservados al redimensionar; cursor, selección y cancelación mantienen sus reglas.
+- Sin recursos, producción, población, ciudadanos, economía ni dependencias nuevas; no se implementó la etapa 06.
+- Verificación de 05: `npm run build` correcto y 9 pruebas en `node --test tests/roadConnections.test.ts` aprobadas (centro único, diagonales, cortes, bucles y conexión tardía).
+- 2026-11-04 — Mejora visual de caminos: máscara N/E/S/O de cuatro bits para los 16 patrones, desde camino aislado hasta cruce completo.
+- Superficie continua hasta el borde compartido, conservando colores; el redibujado existente actualiza el nuevo camino y sus vecinos inmediatamente.
+- Vista previa reutiliza el dibujo y la máscara; BFS, selección e indicadores verde/rojo conservan su funcionamiento.
+- Verificación: `npm run build` correcto y 12 pruebas aprobadas con `node --test tests/roadAppearance.test.ts tests/roadConnections.test.ts`; sin nuevas dependencias ni funciones posteriores.
 - Pendiente: prueba visual y aprobación del usuario; sigue la advertencia de tamaño de Phaser; proyecto sin publicar.
+
+- 2026-11-04 — Etapa 06 implementada: oro, comida y madera iniciales en 0; economía independiente de Phaser en `src/economy/Economy.ts`.
+- Producción por edificio conectado: Granja +2 comida/s, Leñador +2 madera/s, Mercado +1 oro/s; restantes tipos y desconectados producen 0.
+- Tasas acumuladas mediante `RoadConnections`, recalculadas tras construir; conectar edificios existentes activa su producción.
+- Un único ciclo de escena acumula milisegundos y entrega recursos cada segundo; se retira al cerrar la escena.
+- Barra superior HTML fuera del canvas con cantidades y tasas; distribución flexible y adaptable al ancho disponible.
+- Sin costos, trabajadores, consumo, límites, niveles, guardado ni funcionalidades posteriores; controles conservados.
+- Verificación: `npm run build` correcto y 18 pruebas aprobadas (6 económicas y 12 previas); sin dependencias nuevas.
+- Pendiente: comprobación visual/manual y aprobación del usuario; persiste advertencia de tamaño de Phaser. No se avanzó a 07 ni se publicó.
