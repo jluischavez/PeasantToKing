@@ -10,17 +10,33 @@ export class SelectionPanel {
   private readonly terrain = document.querySelector<HTMLElement>('#cell-terrain')!;
   private readonly status = document.querySelector<HTMLElement>('#cell-status')!;
   private readonly cancel = document.querySelector<HTMLButtonElement>('#cancel-selection')!;
-  private readonly onCancel: () => void;
+  private readonly demolition = document.querySelector<HTMLElement>('#demolition-confirmation')!;
+  private readonly demolitionTarget = document.querySelector<HTMLElement>('#demolition-target')!;
+  private readonly demolitionIssue = document.querySelector<HTMLElement>('#demolition-issue')!;
+  private readonly confirmDemolition = document.querySelector<HTMLButtonElement>('#confirm-demolition')!;
+  private readonly cancelDemolition = document.querySelector<HTMLButtonElement>('#cancel-demolition')!;
+  private readonly events = new AbortController();
 
-  constructor(onCancel: () => void) {
-    this.onCancel = onCancel;
-    this.cancel.addEventListener('click', onCancel);
+  constructor(onCancel: () => void, onConfirmDemolition: () => void, onCancelDemolition: () => void) {
+    const options = { signal: this.events.signal };
+    this.cancel.addEventListener('click', onCancel, options);
+    this.confirmDemolition.addEventListener('click', onConfirmDemolition, options);
+    this.cancelDemolition.addEventListener('click', onCancelDemolition, options);
     this.render(null);
+    this.renderDemolition(null);
+  }
+
+  renderDemolition(target: string | null, issue: string | null = null): void {
+    this.demolition.hidden = target === null;
+    this.demolitionTarget.textContent = target;
+    this.demolitionIssue.hidden = issue === null;
+    this.demolitionIssue.textContent = issue;
+    this.confirmDemolition.disabled = issue !== null;
   }
 
   render(cell: Cell | null, construction: ConstructionType | null = null, connected = false, residents = 0,
     productivity?: BuildingProductivity, warehouse?: WarehouseSnapshot, market?: MarketSnapshot,
-    supply?: HousingSupply): void {
+    supply?: HousingSupply, foodShortage = 0): void {
     this.coordinates.textContent = cell ? `X: ${cell.column} · Y: ${cell.row}` : 'X: — · Y: —';
     this.terrain.textContent = cell ? 'césped' : '—';
     this.status.textContent = cell
@@ -51,11 +67,14 @@ export class SelectionPanel {
         : supply.status === 'market' ? ` · Mercado con existencias a ${supply.distance} tramos`
         : ' · Sin acceso a alimentos: inmigración detenida';
     }
+    if (foodShortage > 0) {
+      this.status.textContent += ' · Comida sin entregar en el último ciclo: ' + foodShortage.toLocaleString('es');
+    }
     if (cell && market) this.status.textContent += ` · ${market.reason}`;
     this.cancel.disabled = cell === null;
   }
 
   destroy(): void {
-    this.cancel.removeEventListener('click', this.onCancel);
+    this.events.abort();
   }
 }

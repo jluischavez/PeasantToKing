@@ -165,7 +165,7 @@ test('disabled food markets cannot steal the essential slot from an authorized c
 
 test('initial reserve is not closed by an employed but empty market and never regenerates', () => {
   const { map, roads, population } = town(4, 0);
-  const economy = new Economy();
+  const economy = new Economy({ gold: 0, food: 20, wood: 0 });
   const simulation = new SettlementSimulation(economy, population, 5, map, roads);
   simulation.recalculate();
   assert.equal(population.workersAt(market), 1);
@@ -245,7 +245,7 @@ test('markets serving distinct inhabited areas receive minimum staff before extr
   map.place(c(8, 1), 'warehouse');
   map.place(c(1, 3), 'house');
   map.place(c(12, 3), 'house');
-  const population = new Population(), roads = new RoadConnections(), economy = new Economy();
+  const population = new Population(), roads = new RoadConnections(), economy = new Economy({ gold: 0, food: 20, wood: 0 });
   roads.recalculate(map);
   population.recalculate(map, roads);
   for (let i = 0; i < 4; i++) population.immigrate(100);

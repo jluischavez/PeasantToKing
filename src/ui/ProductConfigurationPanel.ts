@@ -11,20 +11,26 @@ export class ProductConfigurationPanel {
   private readonly root = document.querySelector<HTMLFieldSetElement>('#product-configuration')!;
   private readonly title = document.querySelector<HTMLElement>('#product-config-title')!;
   private readonly options = document.querySelector<HTMLElement>('#product-config-options')!;
+  private readonly drain = document.querySelector<HTMLElement>('#warehouse-drain')!;
+  private readonly drainButton = document.querySelector<HTMLButtonElement>('#toggle-warehouse-drain')!;
+  private readonly drainStatus = document.querySelector<HTMLElement>('#warehouse-drain-status')!;
+  private readonly events = new AbortController();
   private readonly fields = new Map<ProductId, { input: HTMLInputElement; status: HTMLElement }>();
   private cell: Cell | null = null;
   private kind: BuildingKind | null = null;
-  private readonly onChange: (event: Event) => void;
 
-  constructor(onChange: OnChange) {
-    this.onChange = event => {
+  constructor(onChange: OnChange, onDrainToggle: (cell: Cell) => void) {
+    const options = { signal: this.events.signal };
+    this.root.addEventListener('change', event => {
       const input = event.target;
       if (!(input instanceof HTMLInputElement) || !this.cell || !this.kind) return;
       const product = input.dataset.product;
       if (!isProductId(product) || this.fields.get(product)?.input !== input) return;
       onChange({ ...this.cell }, this.kind, product, input.checked);
-    };
-    this.root.addEventListener('change', this.onChange);
+    }, options);
+    this.drainButton.addEventListener('click', () => {
+      if (this.cell && this.kind === 'warehouse') onDrainToggle({ ...this.cell });
+    }, options);
     this.render(null);
   }
 
@@ -57,6 +63,10 @@ export class ProductConfigurationPanel {
     this.cell = { ...cell };
     this.kind = kind;
     this.root.hidden = false;
+    this.drain.hidden = !warehouse;
+    this.drainButton.textContent = warehouse?.draining ? 'Cancelar vaciado' : 'Vaciar almacén';
+    const drainMessage = warehouse?.draining ? 'En vaciado. Entradas cerradas. ' + warehouse.drainStatus : '';
+    if (this.drainStatus.textContent !== drainMessage) this.drainStatus.textContent = drainMessage;
     const enabled: Readonly<ProductFlags> = warehouse ? warehouse.accepts : market!.sells;
     // Reuse controls during simulation ticks to preserve keyboard/touch focus.
     for (const [product, { input, status }] of this.fields) {
@@ -66,7 +76,7 @@ export class ProductConfigurationPanel {
   }
 
   destroy(): void {
-    this.root.removeEventListener('change', this.onChange);
+    this.events.abort();
     this.render(null);
   }
 }

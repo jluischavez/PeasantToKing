@@ -23,7 +23,7 @@ function village() {
   map.place(cell(4, 1), 'house');
   map.place(cell(5, 1), 'house');
 
-  const economy = new Economy(), population = new Population(), roads = new RoadConnections();
+  const economy = new Economy({ gold: 0, food: 20, wood: 0 }), population = new Population(), roads = new RoadConnections();
   const simulation = new SettlementSimulation(economy, population, populationRules.immigrationIntervalSeconds, map, roads);
   simulation.recalculate();
   for (let i = 0; i < 3; i++) population.immigrate(economy.availableFood);

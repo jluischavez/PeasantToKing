@@ -30,14 +30,24 @@ export class Distribution {
   private coverageMap: ConstructionMap | null = null;
   private restockSeconds = 0;
   private bootstrap = true;
-  private salesUnits = 0;
+  private readonly marketSales = new Map<string, number>();
+  private readonly lastHomeShortages = new Map<string, { cell: Cell; units: number }>();
+  private shortageUnits = 0;
 
   constructor(storage: Storage) {
     this.storage = storage;
   }
 
   get bootstrapActive(): boolean { return this.bootstrap; }
-  get salesPerSecond(): number { return this.salesUnits / U; }
+  get salesPerSecond(): number {
+    return [...this.marketSales.values()].reduce((total, units) => total + units, 0) / U;
+  }
+
+  get cumulativeFoodShortage(): number { return this.shortageUnits / U; }
+
+  foodShortageAt(cell: Cell): number {
+    return (this.lastHomeShortages.get(key(cell))?.units ?? 0) / U;
+  }
 
   sync(map: ConstructionMap, connections: RoadConnections, workforce: Workforce): void {
     this.connections = connections;
@@ -45,11 +55,16 @@ export class Distribution {
       this.coverage.recalculate(map, connections, distributionRules.coverageRoadTiles);
       this.coverageMap = map;
       this.coverageRevision = connections.revision;
+      for (const [id, shortage] of this.lastHomeShortages) {
+        if (map.getConstruction(shortage.cell) !== 'house') this.lastHomeShortages.delete(id);
+      }
     }
     for (const market of this.markets.values()) {
-      market.connected = false;
-      market.workers = 0;
-      this.storage.inventories.setAccess(market.id, null, false);
+      if (map.getConstruction(market.cell) !== 'market') {
+        this.storage.inventories.removeEmptyBuilding(market.id);
+        this.markets.delete(market.id);
+        this.marketSales.delete(market.id);
+      }
     }
     for (let row = 0; row < map.rows; row++) {
       for (let column = 0; column < map.columns; column++) {
@@ -57,6 +72,7 @@ export class Distribution {
         if (map.getConstruction(cell) !== 'market') continue;
         const id = 'market:' + key(cell);
         const network = connections.networkFor(cell);
+        if (network === null) this.marketSales.delete(id);
         const workerCapacity = workforce.capacityFor('market');
         const workers = network ? Math.min(workerCapacity, Math.max(0, workforce.workersAt(cell))) : 0;
         if (!this.markets.has(id)) {
@@ -205,7 +221,9 @@ export class Distribution {
   consumeHomes(homes: readonly Residence[], foodPerResident: number,
     onSale?: (market: string, household: string, units: number) => void): number {
     this.finishBootstrapIfStocked();
-    this.salesUnits = 0;
+    this.marketSales.clear();
+    this.lastHomeShortages.clear();
+    let totalSales = 0;
     for (const home of homes) {
       let remaining = Math.round(home.residents * foodPerResident * U);
       const household = 'house:' + key(home.cell);
@@ -213,13 +231,18 @@ export class Distribution {
         const delivered = this.storage.consumeInventoryFood(source.id, remaining, household);
         remaining -= delivered;
         if (delivered > 0 && source.id !== 'initial-reserve') {
-          this.salesUnits += delivered;
+          totalSales += delivered;
+          this.marketSales.set(source.id, (this.marketSales.get(source.id) ?? 0) + delivered);
           onSale?.(source.id, household, delivered);
         }
         if (remaining === 0) break;
       }
+      if (remaining > 0) {
+        this.lastHomeShortages.set(key(home.cell), { cell: home.cell, units: remaining });
+        this.shortageUnits += remaining;
+      }
     }
-    return this.salesUnits;
+    return totalSales;
   }
 
   // Forecast shared inventories once, reserving existing household demand first.

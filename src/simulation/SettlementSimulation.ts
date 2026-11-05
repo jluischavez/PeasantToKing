@@ -1,16 +1,25 @@
 import { populationRules } from '../population/Population.ts';
-import type { ConstructionMap } from '../map/ConstructionMap';
+import { constructionCosts, demolitionCost } from '../map/ConstructionCosts.ts';
+import type { ConstructionCost } from '../map/ConstructionCosts';
+import type { Cell } from '../map/CellSelection';
+import type { ConstructionMap, ConstructionType } from '../map/ConstructionMap';
 import type { RoadConnections } from '../map/RoadConnections';
 import type { Economy } from '../economy/Economy';
 import type { Population } from '../population/Population';
 
 export type SimulationSpeed = 1 | 2 | 3;
+type DemolitionTarget = Readonly<{ cell: Readonly<Cell>; type: ConstructionType }>;
+
+function buildingId(cell: Cell, type: ConstructionType): string {
+  return type + ':' + cell.column + ',' + cell.row;
+}
 
 export class SettlementSimulation {
   private elapsedMs = 0;
   private isPaused = false;
   private multiplier: SimulationSpeed = 1;
   private immigrationSeconds = 0;
+  private demolition: DemolitionTarget | null = null;
   private readonly economy: Economy;
   private readonly population: Population;
   private readonly immigrationIntervalSeconds: number;
@@ -32,6 +41,77 @@ export class SettlementSimulation {
 
   setPaused(paused: boolean): void { this.isPaused = paused; }
   setSpeed(speed: SimulationSpeed): void { this.multiplier = speed; }
+
+  costIssue(cost: ConstructionCost): string | null {
+    const missing = this.economy.missingCost(cost);
+    const quantities = [];
+    const format = (value: number) => value.toLocaleString('es', { maximumFractionDigits: 3 });
+    if (missing.gold > 0) quantities.push(format(missing.gold) + ' oro');
+    if (missing.wood > 0) quantities.push(format(missing.wood) + ' madera disponible');
+    return quantities.length ? 'Recursos insuficientes. Faltan ' + quantities.join(' y ') + '.' : null;
+  }
+
+  constructionIssue(cell: Cell, type: ConstructionType): string | null {
+    if (this.paused) return 'Reanuda la simulación para construir.';
+    if (!this.map.canPlace(cell, type)) return 'La casilla no está disponible para esta construcción.';
+    return this.costIssue(constructionCosts[type]);
+  }
+
+  build(cell: Cell, type: ConstructionType): string | null {
+    const issue = this.constructionIssue(cell, type);
+    if (issue) return issue;
+    if (!this.map.place(cell, type)) return 'La casilla no está disponible para esta construcción.';
+    // Placement does not change the inventories used by the validated charge.
+    if (!this.economy.payBuildingCost(constructionCosts[type], 'construction', buildingId(cell, type))) {
+      throw new Error('A validated construction charge failed');
+    }
+    this.recalculate();
+    return null;
+  }
+
+  demolitionIssue(cell: Cell): string | null {
+    if (this.paused) return 'Reanuda la simulación para demoler.';
+    const type = this.map.getConstruction(cell);
+    if (!type) return 'Selecciona una construcción existente.';
+    if (type === 'villageCenter') return 'El Centro de Aldea está protegido.';
+    if (type === 'warehouse' || type === 'market') {
+      const inventory = this.economy.storage.inventories.snapshot(buildingId(cell, type));
+      if (inventory && inventory.used > 0) {
+        return type === 'warehouse' ? 'El inventario debe estar vacío. Usa «Vaciar almacén» en el inspector.'
+          : 'El inventario debe estar vacío.';
+      }
+    }
+    return this.costIssue(demolitionCost);
+  }
+
+  get demolitionTarget(): DemolitionTarget | null { return this.demolition; }
+
+  requestDemolition(cell: Cell): string | null {
+    this.cancelDemolition();
+    const issue = this.demolitionIssue(cell);
+    if (issue) return issue;
+    this.demolition = { cell: { ...cell }, type: this.map.getConstruction(cell)! };
+    return null;
+  }
+
+  cancelDemolition(): void { this.demolition = null; }
+
+  confirmDemolition(): string | null {
+    const target = this.demolition;
+    if (!target || this.map.getConstruction(target.cell) !== target.type) {
+      this.cancelDemolition();
+      return 'Selecciona una construcción para demoler.';
+    }
+    const issue = this.demolitionIssue(target.cell);
+    if (issue) return issue;
+    if (!this.map.remove(target.cell)) return 'La construcción ya no está disponible.';
+    if (!this.economy.payBuildingCost(demolitionCost, 'demolition', buildingId(target.cell, target.type))) {
+      throw new Error('A validated demolition charge failed');
+    }
+    this.cancelDemolition();
+    this.recalculate();
+    return null;
+  }
 
   recalculate(): void {
     this.connections.recalculate(this.map);

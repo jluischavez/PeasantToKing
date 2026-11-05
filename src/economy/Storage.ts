@@ -1,4 +1,5 @@
 import type { EconomicHistory } from './EconomicHistory';
+import { productIds, productNames } from './Products.ts';
 import type { ProductId, ProductFlags } from './Products';
 import { Inventories, unitsPerResource } from './Inventories.ts';
 import type { Goods, StoredResource } from './Inventories';
@@ -11,10 +12,11 @@ export const storageRules = { warehouseCapacity: 300 } as const;
 export type WarehouseSnapshot = Readonly<{
   food: number; wood: number; used: number; free: number; capacity: number;
   workers: number; workerCapacity: number; connected: boolean; operational: boolean;
-  accepts: Readonly<ProductFlags>;
+  accepts: Readonly<ProductFlags>; draining: boolean; drainStatus: string;
 }>;
 type Warehouse = { id: string; cell: Cell; workers: number; workerCapacity: number; connected: boolean };
 type Allocation = { destination: string; units: number };
+type InventorySnapshot = NonNullable<ReturnType<Inventories['snapshot']>>;
 type Workforce = Pick<Population, 'workersAt' | 'capacityFor'>;
 const key = (cell: Cell): string => `warehouse:${cell.column},${cell.row}`;
 
@@ -28,16 +30,20 @@ export class Storage {
     this.inventories = new Inventories(history);
     this.inventories.create('initial-reserve', {
       kind: 'reserve', capacity: Number.MAX_SAFE_INTEGER, network: null, operational: true,
-    }, initial);
+    }, { food: initial.food, wood: 0 });
+    this.inventories.create('construction-reserve', {
+      kind: 'construction-reserve', capacity: Number.MAX_SAFE_INTEGER, network: null, operational: true,
+    }, { food: 0, wood: initial.wood });
   }
 
   sync(map: ConstructionMap, connections: RoadConnections, workforce: Workforce): void {
     this.connections = connections;
     this.producers.clear();
     for (const warehouse of this.warehouses.values()) {
-      warehouse.connected = false;
-      warehouse.workers = 0;
-      this.inventories.setAccess(warehouse.id, null, false);
+      if (map.getConstruction(warehouse.cell) !== 'warehouse') {
+        this.inventories.removeEmptyBuilding(warehouse.id);
+        this.warehouses.delete(warehouse.id);
+      }
     }
     for (let row = 0; row < map.rows; row++) {
       for (let column = 0; column < map.columns; column++) {
@@ -73,6 +79,7 @@ export class Storage {
       capacity: inventory.capacity / unitsPerResource,
       workers: warehouse.workers, workerCapacity: warehouse.workerCapacity,
       connected: warehouse.connected, operational: inventory.operational, accepts: inventory.products,
+      draining: inventory.draining, drainStatus: inventory.draining ? this.drainStatus(inventory) : '',
     };
   }
 
@@ -80,12 +87,64 @@ export class Storage {
     return this.warehouses.has(key(cell)) && this.inventories.setProductEnabled(key(cell), product, enabled);
   }
 
+  setDraining(cell: Cell, draining: boolean): boolean {
+    return this.inventories.setDraining(key(cell), draining);
+  }
+
+  private drainDestinations(network: string): string[] {
+    return this.operationalWarehouseIds().filter(id => {
+      const inventory = this.inventories.snapshot(id)!;
+      return inventory.network === network && !inventory.draining;
+    });
+  }
+
+  private drainStatus(source: InventorySnapshot): string {
+    if (source.used === 0) return 'Vacío. Puedes demoler este almacén.';
+    if (source.network === null) return 'Vaciado bloqueado: conecta este almacén por caminos.';
+    if (!source.operational) return 'Vaciado bloqueado: este almacén necesita empleados.';
+    const destinations = this.drainDestinations(source.network);
+    if (destinations.length === 0) return 'Traslado bloqueado: falta otro almacén operativo conectado que no esté en vaciado.';
+
+    const blocked = [];
+    for (const product of productIds) {
+      if (source.goods[product] === 0) continue;
+      const accepting = destinations.filter(id => this.inventories.acceptsIncoming(id, product));
+      if (accepting.length === 0) blocked.push(productNames[product] + ': ningún destino lo acepta');
+      else if (accepting.every(id => this.inventories.snapshot(id)!.free === 0)) {
+        blocked.push(productNames[product] + ': los destinos que lo aceptan están llenos');
+      }
+    }
+    return blocked.length ? 'Sin destino de almacén para ' + blocked.join(' · ') + '.' : 'Traslado a otros almacenes en el próximo ciclo.';
+  }
+
+  advanceDrain(): void {
+    for (const id of this.operationalWarehouseIds()) {
+      const source = this.inventories.snapshot(id)!;
+      if (!source.draining || source.network === null || source.used === 0) continue;
+      const destinations = this.drainDestinations(source.network);
+      for (const product of productIds) {
+        let remaining = source.goods[product];
+        for (const destination of destinations) {
+          if (remaining === 0) break;
+          if (!this.inventories.acceptsIncoming(destination, product)) continue;
+          const quantity = Math.min(remaining, this.inventories.snapshot(destination)!.free);
+          if (quantity > 0 && this.inventories.transfer(id, destination, product, quantity)) remaining -= quantity;
+        }
+      }
+    }
+  }
+
   get initialFoodReserve(): number {
     return this.inventories.snapshot('initial-reserve')!.goods.food / unitsPerResource;
   }
 
+  get constructionWoodReserve(): number {
+    return this.inventories.snapshot('construction-reserve')!.goods.wood / unitsPerResource;
+  }
+
   get totalsUnits(): Goods {
     const total = { ...this.inventories.snapshot('initial-reserve')!.goods };
+    total.wood += this.inventories.snapshot('construction-reserve')!.goods.wood;
     for (const warehouse of this.warehouses.values()) {
       const goods = this.inventories.snapshot(warehouse.id)!.goods;
       total.food += goods.food;
@@ -123,7 +182,7 @@ export class Storage {
     const spaces = new Map<string, number>();
     for (const warehouse of this.warehouses.values()) {
       const inventory = this.inventories.snapshot(warehouse.id)!;
-      if (inventory.operational) spaces.set(warehouse.id, inventory.free);
+      if (inventory.operational && !inventory.draining) spaces.set(warehouse.id, inventory.free);
     }
     return spaces;
   }
@@ -140,7 +199,7 @@ export class Storage {
     for (const [id, free] of spaces) {
       const inventory = this.inventories.snapshot(id);
       if (!inventory?.operational || inventory.network !== network
-        || !this.inventories.isProductEnabled(id, product)) continue;
+        || !this.inventories.acceptsIncoming(id, product)) continue;
       const quantity = Math.min(free, remaining);
       if (quantity > 0) plan.push({ destination: id, units: quantity });
       remaining -= quantity;

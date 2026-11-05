@@ -21,7 +21,7 @@ function setup(marketWorkers = 1) {
   map.place(warehouse, 'warehouse');
   map.place(market, 'market');
   for (const home of [near, boundary, outside]) map.place(home, 'house');
-  const roads = new RoadConnections(), economy = new Economy(), population = new Population();
+  const roads = new RoadConnections(), economy = new Economy({ gold: 0, food: 20, wood: 0 }), population = new Population();
   const counts = new Map([['4,1', marketWorkers]]);
   const workforce = {
     capacityFor: (type: Parameters<Population['capacityFor']>[0]) => population.capacityFor(type),
@@ -291,7 +291,7 @@ test('supply chain starts and remains deterministic using only the existing work
     map.place(cell(2, 1), 'farm');
     map.place(cell(3, 1), 'market');
     for (let x = 4; x <= 8; x++) map.place(cell(x, 1), 'house');
-    const economy = new Economy(), population = new Population(), roads = new RoadConnections();
+    const economy = new Economy({ gold: 0, food: 20, wood: 0 }), population = new Population(), roads = new RoadConnections();
     const simulation = new SettlementSimulation(economy, population,
       populationRules.immigrationIntervalSeconds, map, roads);
     simulation.recalculate();
@@ -361,7 +361,7 @@ test('simulation moves farm food through the warehouse and market before househo
   map.place(cell(4, 1), 'house');
   map.place(cell(5, 1), 'house');
 
-  const roads = new RoadConnections(), population = new Population(), economy = new Economy();
+  const roads = new RoadConnections(), population = new Population(), economy = new Economy({ gold: 0, food: 20, wood: 0 });
   const simulation = new SettlementSimulation(economy, population,
     populationRules.immigrationIntervalSeconds, map, roads);
   simulation.recalculate();

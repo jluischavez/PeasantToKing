@@ -3,6 +3,8 @@ import type { Resource, Resources } from '../economy/Economy';
 
 export class ResourceBar {
   private readonly reserve = document.querySelector<HTMLElement>('#initial-food-reserve')!;
+  private readonly constructionWood = document.querySelector<HTMLElement>('#construction-wood')!;
+  private readonly constructionReserve = document.querySelector<HTMLElement>('#construction-reserve')!;
   private readonly reserveStatus = document.querySelector<HTMLElement>('#reserve-status')!;
   private readonly available = document.querySelector<HTMLElement>('#available-food')!;
   private readonly storageStatus = document.querySelector<HTMLElement>('#storage-status')!;
@@ -13,10 +15,15 @@ export class ResourceBar {
   }));
 
   render(resources: Readonly<Resources>, perSecond: Readonly<Resources>,
-    storage: { reserve: number; availableFood: number; blocked: number; bootstrap: boolean }): void {
+    storage: {
+      reserve: number; availableFood: number; blocked: number; bootstrap: boolean;
+      constructionReserve: number; constructionWood: number;
+    }): void {
     this.reserveStatus.textContent = storage.reserve === 0 ? 'agotada' : storage.bootstrap ? 'reserva de arranque' : 'cerrada: consumo por mercados';
     this.reserve.textContent = storage.reserve.toLocaleString('es', { maximumFractionDigits: 2 });
     this.available.textContent = storage.availableFood.toLocaleString('es', { maximumFractionDigits: 2 });
+    this.constructionWood.textContent = storage.constructionWood.toLocaleString('es', { maximumFractionDigits: 2 });
+    this.constructionReserve.textContent = storage.constructionReserve.toLocaleString('es', { maximumFractionDigits: 2 });
     const storageMessage = storage.blocked > 0
       ? `Producción bloqueada por falta de almacenamiento: ${storage.blocked} edificio(s).`
       : 'Almacenamiento sin bloqueos.';

@@ -4,10 +4,11 @@ import Phaser from 'phaser';
 import { GridMap } from '../map/GridMap';
 import { CellSelection } from '../map/CellSelection';
 import type { Cell } from '../map/CellSelection';
-import { ConstructionMap } from '../map/ConstructionMap';
-import type { ConstructionType } from '../map/ConstructionMap';
+import { ConstructionMap, constructionNames } from '../map/ConstructionMap';
+import { constructionCosts, demolitionCost } from '../map/ConstructionCosts';
 import { SelectionPanel } from '../ui/SelectionPanel';
-import { ConstructionMenu } from '../ui/ConstructionMenu';
+import { ConstructionMenu, formatCost } from '../ui/ConstructionMenu';
+import type { ConstructionMode } from '../ui/ConstructionMenu';
 import { RoadConnections } from '../map/RoadConnections';
 import { getRoadMask } from '../map/RoadAppearance';
 import { Economy } from '../economy/Economy';
@@ -43,40 +44,49 @@ export class MapScene extends Phaser.Scene {
     const populationPanel = new PopulationPanel();
     const renderSummary = (): void => {
       resourceBar.render(economy.resources, economy.perSecond, {
-        reserve: economy.storage.initialFoodReserve, availableFood: economy.availableFood,
+        reserve: economy.storage.initialFoodReserve, availableFood: population.connectedCapacity > 0 ? economy.availableFood : 0,
         blocked: economy.blockedProducers, bootstrap: economy.distribution.bootstrapActive,
+        constructionReserve: economy.storage.constructionWoodReserve, constructionWood: economy.availableConstructionWood,
       });
       const supply = economy.immigrationSupply(population, populationRules.familySize,
         populationRules.immigrationIntervalSeconds, populationRules.foodPerResidentPerSecond,
         populationRules.residentsPerPlot);
-      populationPanel.render(population, economy.availableFood, supply, economy.migrationReason(population, supply));
+      populationPanel.render(population, economy.availableFood, supply, economy.migrationReason(population, supply),
+        economy.distribution.cumulativeFoodShortage);
+      menu.renderCosts(cost => simulation.costIssue(cost));
     };
-    renderSummary();
     const renderSelected = (): void => {
       const cell = selection.selected;
-      panel.render(cell, cell ? constructions.getConstruction(cell) : null,
-        cell !== null && connections.isConnected(cell), cell ? population.residentsAt(cell) : 0,
-        cell ? economy.productivityAt(cell) : undefined,
-        cell ? economy.storage.warehouseAt(cell) : undefined,
-        cell ? economy.distribution.marketAt(cell) : undefined,
-        cell && constructions.getConstruction(cell) === 'house' ? economy.distribution.supplyAt(cell) : undefined);
-      const type = cell && constructions.getConstruction(cell);
+      const type = cell ? constructions.getConstruction(cell) : null;
+      const warehouse = cell && type === 'warehouse' ? economy.storage.warehouseAt(cell) : undefined;
+      const market = cell && type === 'market' ? economy.distribution.marketAt(cell) : undefined;
+      const home = type === 'house' ? cell : null;
+      panel.render(cell, type,
+        cell !== null && connections.isConnected(cell), home ? population.residentsAt(home) : 0,
+        cell ? economy.productivityAt(cell) : undefined, warehouse, market,
+        home ? economy.distribution.supplyAt(home) : undefined, home ? economy.distribution.foodShortageAt(home) : 0);
+      const demolition = simulation.demolitionTarget;
+      const departing = demolition?.type === 'house' ? population.residentsAt(demolition.cell) : 0;
+      const departure = departing === 1 ? ' · 1 habitante abandonará la ciudad.'
+        : departing > 1 ? ' · ' + departing + ' habitantes abandonarán la ciudad.' : '';
+      panel.renderDemolition(demolition ? constructionNames[demolition.type] + ' · ' + formatCost(demolitionCost) + departure : null,
+        demolition ? simulation.demolitionIssue(demolition.cell) : null);
       simulationPanel.render(cell && type ? type + ':' + cell.column + ',' + cell.row : null);
-      configuration.render(cell, cell ? economy.storage.warehouseAt(cell) : undefined,
-        cell ? economy.distribution.marketAt(cell) : undefined);
+      configuration.render(cell, warehouse, market);
     };
     const updateSimulation = (_time: number, delta: number): void => {
       const previousPopulation = population.total;
       if (simulation.advance(delta)) {
         renderSummary();
         renderSelected();
+        updatePointerFeedback();
         if (population.total !== previousPopulation) {
           map.renderConstructions(constructions, connections, population);
         }
       }
     };
     this.events.on(Phaser.Scenes.Events.UPDATE, updateSimulation);
-    let buildType: ConstructionType | null = null;
+    let mode: ConstructionMode = null;
     let hoveredCell: Cell | null = null;
     const updatePointerFeedback = (): void => {
       if (simulation.paused) {
@@ -84,15 +94,34 @@ export class MapScene extends Phaser.Scene {
         map.renderPreview(null, null, false);
         return;
       }
-      map.renderHover(buildType ? hoveredCell : null);
+      const buildType = mode === 'demolish' ? null : mode;
+      map.renderHover(mode ? hoveredCell : null);
       map.renderPreview(hoveredCell, buildType,
-        hoveredCell !== null && constructions.canPlace(hoveredCell, buildType ?? undefined),
+        !!(hoveredCell && buildType && simulation.constructionIssue(hoveredCell, buildType) === null),
         buildType === 'road' && hoveredCell ? getRoadMask(constructions, hoveredCell) : 0);
     };
-    const panel = new SelectionPanel(() => {
+    const clearSelection = (): void => {
+      simulation.cancelDemolition();
       selection.clear();
       map.renderSelection(selection.selected);
       renderSelected();
+    };
+    const panel = new SelectionPanel(clearSelection, () => {
+      const issue = simulation.confirmDemolition();
+      if (issue) {
+        menu.showStatus(issue);
+        renderSelected();
+        return;
+      }
+      clearSelection();
+      renderSummary();
+      map.renderConstructions(constructions, connections, population);
+      updatePointerFeedback();
+      menu.showStatus('Demolición realizada. Selecciona otra construcción o cancela el modo.');
+    }, () => {
+      simulation.cancelDemolition();
+      renderSelected();
+      menu.renderMode(mode);
     });
     const settings = document.querySelector<HTMLFieldSetElement>('#product-configuration')!;
     const constructionControls = document.querySelector<HTMLElement>('#construction-menu')!;
@@ -104,6 +133,7 @@ export class MapScene extends Phaser.Scene {
     const simulationPanel = new SimulationPanel(simulation, economy.history, () => {
       updatePauseControls();
       updatePointerFeedback();
+      renderSelected();
     });
     const configuration = new ProductConfigurationPanel((cell, kind, product, enabled) => {
       if (simulation.paused || constructions.getConstruction(cell) !== kind) return;
@@ -111,13 +141,27 @@ export class MapScene extends Phaser.Scene {
       else economy.setMarketSale(cell, product, enabled);
       renderSummary();
       renderSelected();
+    }, cell => {
+      if (simulation.paused) return;
+      const warehouse = economy.storage.warehouseAt(cell);
+      if (!warehouse) return;
+      economy.setWarehouseDraining(cell, !warehouse.draining);
+      renderSummary();
+      renderSelected();
     });
-    const menu = new ConstructionMenu((type) => {
-      buildType = type;
+    const menu = new ConstructionMenu((choice) => {
+      mode = choice;
+      simulation.cancelDemolition();
+      if (mode && mode !== 'demolish') {
+        const issue = simulation.costIssue(constructionCosts[mode]);
+        if (issue) menu.showStatus(issue);
+      }
+      renderSelected();
       updatePointerFeedback();
     });
 
     if (constructions.villageCenter) menu.disableVillageCenter();
+    renderSummary();
 
     const layout = (): void => {
       const { width, height } = this.scale;
@@ -147,13 +191,21 @@ export class MapScene extends Phaser.Scene {
       const cell = map.getCellAt(pointer.x, pointer.y);
       if (!cell) return;
       selection.select(cell);
-      if (!simulation.paused && buildType && constructions.place(cell, buildType)) {
-        simulation.recalculate();
-        renderSummary();
-        map.renderConstructions(constructions, connections, population);
-        if (buildType === 'villageCenter') {
-          menu.disableVillageCenter();
-          buildType = null;
+      if (mode === 'demolish') {
+        const issue = simulation.requestDemolition(cell);
+        menu.showStatus(issue ?? 'Revisa el costo y confirma la demolición en el inspector.');
+      } else if (mode && !simulation.paused) {
+        const issue = simulation.build(cell, mode);
+        if (issue) {
+          menu.showStatus(issue);
+        } else {
+          renderSummary();
+          map.renderConstructions(constructions, connections, population);
+          if (mode === 'villageCenter') {
+            menu.disableVillageCenter();
+            mode = null;
+          }
+          menu.renderMode(mode);
         }
       }
       map.renderSelection(selection.selected);

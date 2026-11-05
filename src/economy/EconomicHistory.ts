@@ -1,7 +1,7 @@
 import type { ProductId } from './Products';
 
 export type AuditResource = ProductId | 'gold';
-export type AuditOperation = 'production' | 'transfer' | 'consumption' | 'sale';
+export type AuditOperation = 'production' | 'transfer' | 'consumption' | 'sale' | 'construction' | 'construction-material' | 'demolition';
 type Balance = Readonly<{ before: number; after: number }>;
 type Movement = Readonly<{
   resource: AuditResource;

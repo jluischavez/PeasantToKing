@@ -70,7 +70,7 @@ canvas {
 }
 
 #controls button,
-#cancel-selection {
+#selection-panel button {
   padding: 8px 12px;
   border: 1px solid #c1c7b7;
   border-radius: 4px;
@@ -81,7 +81,7 @@ canvas {
 }
 
 #controls button:disabled,
-#cancel-selection:disabled {
+#selection-panel button:disabled {
   opacity: 0.5;
   cursor: default;
 }
@@ -101,7 +101,7 @@ canvas {
 }
 
 #construction-menu {
-  padding: 10px 16px 0;
+  padding: 6px 16px 0;
   text-align: center;
   color: #c1c7b7;
   font: 14px Arial, sans-serif;
@@ -119,8 +119,30 @@ canvas {
   background: #527b43;
 }
 
+#construction-menu button[data-unaffordable] {
+  border-color: #d68d79;
+  color: #ffc4b5;
+}
+
+#demolition-confirmation {
+  padding: 8px 0;
+}
+
+#demolition-confirmation button {
+  margin-block-end: 6px;
+}
+
+#construction-menu .construction-buttons button {
+  padding-block: 6px;
+}
+
+.construction-cost {
+  display: block;
+  font-size: 0.85em;
+}
+
 #construction-status {
-  margin: 8px 0;
+  margin: 0 0 4px;
 }
 
 #resource-bar {
@@ -176,6 +198,14 @@ canvas {
   min-block-size: 44px;
   padding-inline: 8px;
   cursor: pointer;
+}
+
+#warehouse-drain {
+  margin-block-start: 8px;
+}
+
+#selection-panel #warehouse-drain-status {
+  margin-block-start: 6px;
 }
 
 #product-config-options input {

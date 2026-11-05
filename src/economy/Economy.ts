@@ -8,6 +8,7 @@ import { Storage } from './Storage.ts';
 import { unitsPerResource } from './Inventories.ts';
 import type { StoredResource } from './Inventories';
 import type { Cell } from '../map/CellSelection';
+import type { ConstructionCost } from '../map/ConstructionCosts';
 import type { ConstructionMap, ConstructionType } from '../map/ConstructionMap';
 import type { RoadConnections } from '../map/RoadConnections';
 import type { Population } from '../population/Population';
@@ -17,7 +18,7 @@ export type Resource = keyof typeof resourceNames;
 export type Resources = Record<Resource, number>;
 
 export const economyRules = {
-  initialResources: { gold: 0, food: 20, wood: 0 },
+  initialResources: { gold: 150, food: 20, wood: 50 },
   recovery: { populationLimit: 12, arrivalsPerEvaluation: 1 },
 } as const;
 
@@ -72,6 +73,34 @@ export class Economy {
     const goods = this.storage.totalsUnits;
     goods.food += this.distribution.totalMarketFoodUnits;
     return asResources({ gold: this.goldUnits, food: goods.food, wood: goods.wood });
+  }
+
+  get availableConstructionWood(): number {
+    return this.storage.inventories.availableConstructionWoodUnits / unitsPerResource;
+  }
+
+  missingCost(cost: ConstructionCost): ConstructionCost {
+    return {
+      gold: Math.max(0, Math.round(cost.gold * unitsPerResource) - this.goldUnits) / unitsPerResource,
+      wood: Math.max(0, Math.round(cost.wood * unitsPerResource)
+        - this.storage.inventories.availableConstructionWoodUnits) / unitsPerResource,
+    };
+  }
+
+  payBuildingCost(cost: ConstructionCost, operation: 'construction' | 'demolition', destination: string): boolean {
+    const gold = Math.round(cost.gold * unitsPerResource);
+    const wood = Math.round(cost.wood * unitsPerResource);
+    if (!Number.isSafeInteger(gold) || gold < 0 || gold > this.goldUnits
+      || !this.storage.inventories.spendConstructionWood(wood, destination)) return false;
+    if (gold > 0) {
+      const before = this.goldUnits;
+      this.goldUnits -= gold;
+      this.history.record({
+        operation, resource: 'gold', units: gold, origin: 'treasury', destination,
+        originBalance: { before, after: this.goldUnits },
+      });
+    }
+    return true;
   }
 
   get availableFood(): number {
@@ -186,6 +215,12 @@ export class Economy {
     return normal.size === 0 ? 'Recuperación limitada: hasta 1 habitante por evaluación con alimentos reales.'
       : 'Suministro previsto suficiente para inmigración.';
   }
+  setWarehouseDraining(cell: Cell, draining: boolean): boolean {
+    const changed = this.storage.setDraining(cell, draining);
+    if (changed) this.refresh();
+    return changed;
+  }
+
   setWarehouseAcceptance(cell: Cell, product: ProductId, enabled: boolean): boolean {
     const changed = this.storage.setAcceptance(cell, product, enabled);
     if (changed) this.refresh();
@@ -228,6 +263,7 @@ export class Economy {
         this.storage.depositProduction(batch.cell, batch.resource, batch.units);
       }
       this.distribution.advanceSecond();
+      this.storage.advanceDrain();
     }
     this.refresh();
     return true;

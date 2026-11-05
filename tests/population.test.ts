@@ -11,7 +11,7 @@ const cell = (column: number, row: number) => ({ column, row });
 function setup() {
   const map = new ConstructionMap(20, 20);
   const connections = new RoadConnections();
-  const economy = new Economy();
+  const economy = new Economy({ gold: 0, food: 20, wood: 0 });
   const population = new Population();
   const simulation = new SettlementSimulation(economy, population, populationRules.immigrationIntervalSeconds, map, connections);
   const recalculate = () => {

@@ -10,7 +10,7 @@ const cell = (column: number, row: number) => ({ column, row });
 function setup() {
   const map = new ConstructionMap(20, 20);
   const connections = new RoadConnections();
-  const economy = new Economy();
+  const economy = new Economy({ gold: 0, food: 20, wood: 0 });
   const population = new Population();
   map.place(cell(0, 0), 'villageCenter');
   map.place(cell(19, 1), 'warehouse');

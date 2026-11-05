@@ -5,14 +5,14 @@ import type { ProductId, ProductFlags } from './Products';
 export const unitsPerResource = 30;
 export type StoredResource = ProductId;
 export type Goods = Record<StoredResource, number>;
-type InventoryKind = 'reserve' | 'warehouse' | 'market' | 'production' | 'consumer';
+type InventoryKind = 'reserve' | 'construction-reserve' | 'warehouse' | 'market' | 'production' | 'consumer';
 export type InventoryAccess = {
   kind: InventoryKind;
   capacity: number;
   network: string | null;
   operational: boolean;
 };
-type Inventory = InventoryAccess & { goods: Goods; products: ProductFlags; auditId: string };
+type Inventory = InventoryAccess & { goods: Goods; products: ProductFlags; auditId: string; draining: boolean };
 
 export class Inventories {
   private readonly entries = new Map<string, Inventory>();
@@ -27,7 +27,7 @@ export class Inventories {
     if (this.entries.has(id)) throw new Error('Inventory already exists: ' + id);
     if (![access.capacity, goods.food, goods.wood].every(value => Number.isSafeInteger(value) && value >= 0)
       || goods.food + goods.wood > access.capacity) throw new Error('Invalid inventory');
-    this.entries.set(id, { ...access, auditId, goods: { ...goods },
+    this.entries.set(id, { ...access, auditId, draining: false, goods: { ...goods },
       products: productFlags(access.kind === 'market' ? marketProductIds : productIds) });
     if (access.kind === 'production' && this.history) {
       for (const resource of productIds) {
@@ -39,7 +39,7 @@ export class Inventories {
     }
   }
 
-  snapshot(id: string): (InventoryAccess & { goods: Readonly<Goods>; products: Readonly<ProductFlags>; used: number; free: number }) | undefined {
+  snapshot(id: string): (InventoryAccess & { goods: Readonly<Goods>; products: Readonly<ProductFlags>; used: number; free: number; draining: boolean }) | undefined {
     const entry = this.entries.get(id);
     if (!entry) return undefined;
     const used = entry.goods.food + entry.goods.wood;
@@ -56,6 +56,18 @@ export class Inventories {
 
   isProductEnabled(id: string, product: ProductId): boolean {
     return isProductId(product) && this.entries.get(id)?.products[product] === true;
+  }
+
+  setDraining(id: string, draining: boolean): boolean {
+    const entry = this.entries.get(id);
+    if (entry?.kind !== 'warehouse') return false;
+    entry.draining = draining;
+    return true;
+  }
+
+  acceptsIncoming(id: string, product: ProductId): boolean {
+    const entry = this.entries.get(id);
+    return !!entry?.operational && !entry.draining && this.isProductEnabled(id, product);
   }
 
   // For warehouses this means acceptance; for markets it authorizes both
@@ -84,7 +96,7 @@ export class Inventories {
       || (source.kind === 'market' && destination.kind === 'consumer' && marketProductIds.includes(resource));
     if (!allowed || (destination.kind === 'market' && !marketProductIds.includes(resource))) return false;
     if ((destination.kind === 'warehouse' || destination.kind === 'market')
-      && !this.isProductEnabled(destinationId, resource)) return false;
+      && !this.acceptsIncoming(destinationId, resource)) return false;
     if (source.kind === 'market' && !this.isProductEnabled(sourceId, resource)) return false;
     if (destination.kind !== 'consumer'
       && (source.network === null || source.network !== destination.network)) return false;
@@ -101,6 +113,48 @@ export class Inventories {
         : { before: destination.goods[resource] - units, after: destination.goods[resource] },
     });
     return true;
+  }
+
+  private *constructionWoodSources(): Iterable<Inventory> {
+    const reserve = this.entries.get('construction-reserve');
+    if (reserve) yield reserve;
+    for (const entry of this.entries.values()) {
+      if (entry.kind === 'warehouse' && entry.operational && entry.network !== null) yield entry;
+    }
+  }
+
+  get availableConstructionWoodUnits(): number {
+    let units = 0;
+    for (const source of this.constructionWoodSources()) units += source.goods.wood;
+    return units;
+  }
+
+  spendConstructionWood(units: number, destination: string): boolean {
+    if (!Number.isSafeInteger(units) || units < 0 || units > this.availableConstructionWoodUnits) return false;
+    if (units === 0) return true;
+    // The full amount is available before any source is debited.
+    for (const source of this.constructionWoodSources()) {
+      const before = source.goods.wood;
+      const quantity = Math.min(units, before);
+      if (quantity === 0) continue;
+      source.goods.wood -= quantity;
+      this.history?.record({
+        operation: 'construction-material', resource: 'wood', units: quantity,
+        origin: source.auditId, destination, originBalance: { before, after: source.goods.wood },
+      });
+      units -= quantity;
+      if (units === 0) break;
+    }
+    return true;
+  }
+
+  removeEmptyBuilding(id: string): void {
+    const entry = this.entries.get(id);
+    if ((entry?.kind !== 'warehouse' && entry?.kind !== 'market')
+      || productIds.some(product => entry.goods[product] !== 0)) {
+      throw new Error('Only empty building inventories can be removed: ' + id);
+    }
+    this.entries.delete(id);
   }
 
   discardTransient(id: string): void {

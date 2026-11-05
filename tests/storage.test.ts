@@ -182,7 +182,7 @@ test('production blocking is visible and stops resource growth until operational
   map.place(farm, 'farm');
   const connections = new RoadConnections();
   connections.recalculate(map);
-  const economy = new Economy();
+  const economy = new Economy({ gold: 0, food: 20, wood: 0 });
   const population = new Population();
   const workforce = {
     workersAt: () => 1,
@@ -208,7 +208,7 @@ test('production blocking is visible and stops resource growth until operational
 
 test('global totals count warehouse food once and legacy consumption withdraws only the initial reserve', () => {
   const { map, connections, workforce } = setup();
-  const economy = new Economy();
+  const economy = new Economy({ gold: 0, food: 20, wood: 0 });
   economy.recalculate(map, connections, workforce);
   economy.advance(3000); // Farm: 1.5 food; camp: 2 wood.
   const inventory = economy.storage.warehouseAt(first)!;
@@ -231,7 +231,7 @@ test('minimal workforce priority bootstraps storage and food even when a camp co
   map.place(cell(4, 3), 'farm');
   for (let x = 5; x <= 8; x++) map.place(cell(x, 3), 'house');
   const connections = new RoadConnections();
-  const economy = new Economy();
+  const economy = new Economy({ gold: 0, food: 20, wood: 0 });
   const population = new Population();
   const simulation = new SettlementSimulation(economy, population,
     populationRules.immigrationIntervalSeconds, map, connections);
@@ -261,7 +261,7 @@ test('snapshots cannot mutate inventories or create resources', () => {
 test('inaccessible warehouse food is included globally but cannot enable immigration', () => {
   const { map, connections, workforce } = setup();
   map.place(cell(6, 1), 'house');
-  const economy = new Economy();
+  const economy = new Economy({ gold: 0, food: 20, wood: 0 });
   economy.recalculate(map, connections, workforce);
   economy.storage.depositProduction(farm, 'food', 5 * U);
   economy.consumeFood(20);
@@ -290,4 +290,62 @@ test.each([
   assert.equal(ledger.transfer('origin', 'destination', 'food', quantity), false);
   assert.deepEqual(ledger.snapshot('origin'), originBefore);
   assert.deepEqual(ledger.snapshot('destination'), destinationBefore);
+});
+
+test('draining warehouses block production and warehouse deliveries until drainage is cancelled', () => {
+  const { map, storage, sync } = setup();
+  map.place(second, 'warehouse');
+  sync();
+  const from = 'warehouse:4,1', to = 'warehouse:5,1';
+  assert.ok(storage.depositProduction(farm, 'food', 3));
+  assert.equal(storage.setAcceptance(second, 'wood', false), true);
+  assert.equal(storage.setDraining(second, true), true);
+  assert.equal(storage.inventories.transfer(from, to, 'food', 1), false);
+  assert.equal(storage.setAcceptance(first, 'food', false), true);
+  assert.equal(storage.depositProduction(farm, 'food', 3), false);
+  assert.equal(storage.setDraining(second, false), true);
+  assert.equal(storage.warehouseAt(second)?.accepts.wood, false);
+  assert.equal(storage.depositProduction(farm, 'food', 3), true);
+  assert.equal(storage.inventories.transfer(from, to, 'food', 1), true);
+});
+
+test('drainage moves only accepted products within remaining capacity and conserves fractional stock', () => {
+  const { map, storage, sync } = setup();
+  assert.ok(storage.depositProduction(farm, 'food', 3));
+  assert.ok(storage.depositProduction(camp, 'wood', 5));
+  map.place(second, 'warehouse');
+  sync();
+  assert.equal(storage.setDraining(first, true), true);
+  assert.equal(storage.setAcceptance(second, 'wood', false), true);
+  assert.ok(storage.depositProduction(farm, 'food', 8999));
+  const before = storage.totalsUnits;
+  storage.advanceDrain();
+  assert.equal(storage.warehouseAt(first)?.food, 2 / U);
+  assert.equal(storage.warehouseAt(first)?.wood, 5 / U);
+  assert.equal(storage.warehouseAt(second)?.used, 300);
+  assert.match(storage.warehouseAt(first)!.drainStatus, /llenos.*ningún destino/);
+  assert.deepEqual(storage.totalsUnits, before);
+});
+
+test('warehouses draining simultaneously cannot swap stock or create transfer cycles', () => {
+  const { map, storage, sync } = setup();
+  assert.ok(storage.depositProduction(camp, 'wood', 5));
+  map.place(second, 'warehouse');
+  sync();
+  assert.equal(storage.setDraining(first, true), true);
+  assert.ok(storage.depositProduction(farm, 'food', 3));
+  assert.equal(storage.setDraining(second, true), true);
+
+  const firstBefore = storage.warehouseAt(first);
+  const secondBefore = storage.warehouseAt(second);
+  assert.match(firstBefore!.drainStatus, /falta otro almacén/);
+  for (let i = 0; i < 10; i++) storage.advanceDrain();
+  assert.deepEqual(storage.warehouseAt(first), firstBefore);
+  assert.deepEqual(storage.warehouseAt(second), secondBefore);
+
+  assert.equal(storage.setDraining(second, false), true);
+  storage.advanceDrain();
+  assert.equal(storage.warehouseAt(first)?.used, 0);
+  assert.equal(storage.warehouseAt(second)?.food, 3 / U);
+  assert.equal(storage.warehouseAt(second)?.wood, 5 / U);
 });

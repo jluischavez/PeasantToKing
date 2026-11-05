@@ -6,10 +6,13 @@ import type { SettlementSimulation } from '../simulation/SettlementSimulation';
 
 const operationNames = {
   production: 'Producción', transfer: 'Transferencia', consumption: 'Consumo', sale: 'Venta',
+  construction: 'Costo de construcción', 'construction-material': 'Material de construcción',
+  demolition: 'Costo de demolición',
 } as const;
 const endpointNames: Readonly<Record<string, string>> = {
   production: 'Producción local', treasury: 'Tesorería',
   'initial-reserve': 'Reserva inicial', 'food-consumption': 'Consumo',
+  'construction-reserve': 'Reserva de construcción',
 };
 
 function endpointName(id: string): string {

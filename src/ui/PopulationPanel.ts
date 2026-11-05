@@ -15,13 +15,17 @@ export class PopulationPanel {
   private readonly available = document.querySelector<HTMLElement>('#jobs-available')!;
   private readonly consumption = document.querySelector<HTMLElement>('#food-consumption')!;
 
+  private readonly shortage = document.querySelector<HTMLElement>('#food-shortage')!;
+
   constructor() {
+    this.shortage.title = 'Comida que los hogares necesitaron y no recibieron desde el inicio de la partida.';
     this.active.title = `Participación laboral: ${populationRules.laborParticipationRate * 100} % de la población, redondeada hacia abajo.`;
     this.attractiveness.title = `Las llegadas se detienen con ${populationRules.migration.stopUnemploymentRate * 100} % de desempleo, sin espacio conectado o sin abastecimiento de alimentos.`;
   }
 
-  render(population: Population, food: number, supply: ReadonlyMap<string, number>, reason: string): void {
+  render(population: Population, food: number, supply: ReadonlyMap<string, number>, reason: string, shortage: number): void {
     this.reason.textContent = reason;
+    this.shortage.textContent = shortage.toLocaleString('es', { maximumFractionDigits: 2 });
     this.total.textContent = String(population.total);
     this.active.textContent = String(population.activePopulation);
     this.unemploymentRate.textContent = (population.unemploymentRate * 100).toLocaleString('es', {

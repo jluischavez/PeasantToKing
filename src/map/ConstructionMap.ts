@@ -48,6 +48,13 @@ export class ConstructionMap {
       && (type !== 'villageCenter' || this.center === null);
   }
 
+  remove(cell: Cell): boolean {
+    const type = this.getConstruction(cell);
+    if (!type || type === 'villageCenter') return false;
+    this.cells[cell.row * this.columns + cell.column] = null;
+    return true;
+  }
+
   place(cell: Cell, type: ConstructionType): boolean {
     if (!this.canPlace(cell, type)) return false;
     this.cells[cell.row * this.columns + cell.column] = type;

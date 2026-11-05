@@ -23,7 +23,7 @@ function setup() {
     [farm, 'farm'], [camp, 'lumberjack'], [firstWarehouse, 'warehouse'],
     [secondWarehouse, 'warehouse'], [firstMarket, 'market'], [secondMarket, 'market'], [home, 'house'],
   ] as const) map.place(position, type);
-  const economy = new Economy(), roads = new RoadConnections(), population = new Population();
+  const economy = new Economy({ gold: 0, food: 20, wood: 0 }), roads = new RoadConnections(), population = new Population();
   const counts = new Map<string, number>();
   const workforce = {
     workersAt: (position: { column: number; row: number }) =>
