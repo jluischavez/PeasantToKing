@@ -65,21 +65,21 @@ test('central transfer moves rather than copies stock and rejects invalid quanti
 
 test('warehouse capacity is shared exactly between fractional food and wood quantities', () => {
   const { storage } = setup();
-  assert.equal(storage.depositProduction(farm, 'food', 8999), true);
+  assert.equal(storage.depositProduction(farm, 'food', 300 * U - 1), true);
   assert.equal(storage.depositProduction(camp, 'wood', 1), true);
   assert.equal(storage.warehouseAt(first)!.used, 300);
   assert.equal(storage.warehouseAt(first)!.free, 0);
   assert.equal(storage.depositProduction(camp, 'wood', 1), false);
-  assert.equal(storage.warehouseAt(first)!.food, 8999 / U);
+  assert.equal(storage.warehouseAt(first)!.food, (300 * U - 1) / U);
   assert.equal(storage.warehouseAt(first)!.wood, 1 / U);
-  assert.deepEqual(storage.totalsUnits, { food: 600 + 8999, wood: 1 });
+  assert.deepEqual(storage.totalsUnits, { food: 320 * U - 1, wood: 1 });
 });
 
 test('one batch can be split across operational warehouses without duplicating units', () => {
   const { map, storage, sync } = setup();
   map.place(second, 'warehouse');
   sync();
-  storage.depositProduction(farm, 'food', 8999);
+  storage.depositProduction(farm, 'food', 300 * U - 1);
   assert.equal(storage.depositProduction(camp, 'wood', 20), true);
   assert.equal(storage.warehouseAt(first)!.used, 300);
   assert.equal(storage.warehouseAt(first)!.wood, 1 / U);
@@ -90,7 +90,7 @@ test('one batch can be split across operational warehouses without duplicating u
 
 test('a batch that cannot fit is discarded whole and does not partially fill or reserve space', () => {
   const { storage } = setup();
-  storage.depositProduction(farm, 'food', 8990);
+  storage.depositProduction(farm, 'food', 300 * U - 10);
   const before = storage.totalsUnits;
   assert.equal(storage.depositProduction(camp, 'wood', 20), false);
   assert.deepEqual(storage.totalsUnits, before);
@@ -103,7 +103,7 @@ test('workers, real producer type and center-connected road network are all requ
   const { storage, map, sync, setWorkers } = setup();
   setWorkers(0);
   sync();
-  assert.equal(storage.depositProduction(farm, 'food', 30), false);
+  assert.equal(storage.depositProduction(farm, 'food', U), false);
   assert.equal(storage.warehouseAt(first)!.operational, false);
   setWorkers(1);
   sync();
@@ -115,7 +115,7 @@ test('workers, real producer type and center-connected road network are all requ
   sync();
   assert.equal(storage.depositProduction(cell(10, 10), 'food', 30), false);
   assert.equal(storage.warehouseAt(cell(12, 10))!.operational, false);
-  assert.equal(storage.depositProduction(farm, 'food', 30), true);
+  assert.equal(storage.depositProduction(farm, 'food', U), true);
   assert.equal(storage.warehouseAt(first)!.food, 1);
   assert.equal(storage.warehouseAt(cell(12, 10))!.food, 0);
 });
@@ -317,7 +317,7 @@ test('drainage moves only accepted products within remaining capacity and conser
   sync();
   assert.equal(storage.setDraining(first, true), true);
   assert.equal(storage.setAcceptance(second, 'wood', false), true);
-  assert.ok(storage.depositProduction(farm, 'food', 8999));
+  assert.ok(storage.depositProduction(farm, 'food', 300 * U - 1));
   const before = storage.totalsUnits;
   storage.advanceDrain();
   assert.equal(storage.warehouseAt(first)?.food, 2 / U);

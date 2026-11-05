@@ -147,8 +147,8 @@ test('household consumption uses the nearest stocked market and can finish at th
   sync();
   food(10.1);
   const ledger = economy.storage.inventories;
-  assert.equal(ledger.transfer(warehouseId, marketId, 'food', 3), true);
-  assert.equal(ledger.transfer(warehouseId, 'market:8,1', 'food', 300), true);
+  assert.equal(ledger.transfer(warehouseId, marketId, 'food', U / 10), true);
+  assert.equal(ledger.transfer(warehouseId, 'market:8,1', 'food', 10 * U), true);
   assert.deepEqual(economy.distribution.supplyAt(near), { status: 'market', market, distance: 2 });
   consume([{ cell: near, residents: 4 }]);
   assert.equal(economy.distribution.marketAt(market)!.food, 0);
@@ -269,7 +269,7 @@ test('an unfed house does not prevent immigration into another house with adequa
   assert.equal(economy.resources.gold, 0.4);
 });
 
-test('central transfers reject wood into markets, direct warehouse consumption and market production deposits', () => {
+test('central transfers reject unavailable wood, direct warehouse consumption and market production deposits', () => {
   const { economy, food } = setup();
   food(1);
   const ledger = economy.storage.inventories;

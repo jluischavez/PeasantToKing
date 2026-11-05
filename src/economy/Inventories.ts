@@ -1,8 +1,8 @@
 import type { EconomicHistory } from './EconomicHistory';
 import { isProductId, marketProductIds, productFlags, productIds } from './Products.ts';
 import type { ProductId, ProductFlags } from './Products';
-// Integer units preserve all current production fractions and food consumption.
-export const unitsPerResource = 30;
+// Integer units preserve thirds in production and 1/50 wood per resident per simulated second.
+export const unitsPerResource = 150;
 export type StoredResource = ProductId;
 export type Goods = Record<StoredResource, number>;
 type InventoryKind = 'reserve' | 'construction-reserve' | 'warehouse' | 'market' | 'production' | 'consumer';
@@ -90,7 +90,7 @@ export class Inventories {
       || !Number.isSafeInteger(units) || units <= 0
       || !isProductId(resource)
       || !source.operational || !destination.operational) return false;
-    const allowed = (source.kind === 'reserve' && destination.kind === 'consumer')
+    const allowed = (source.kind === 'reserve' && destination.kind === 'consumer' && resource === 'food')
       || (source.kind === 'production' && destination.kind === 'warehouse')
       || (source.kind === 'warehouse' && (destination.kind === 'warehouse' || destination.kind === 'market'))
       || (source.kind === 'market' && destination.kind === 'consumer' && marketProductIds.includes(resource));

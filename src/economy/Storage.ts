@@ -233,19 +233,23 @@ export class Storage {
     return [...this.warehouses.keys()].filter(id => this.inventories.snapshot(id)!.operational);
   }
 
-  // Homes can consume only reserve or market food, never warehouse stocks.
-  consumeInventoryFood(id: string, units: number, destination = 'food-consumption'): number {
+  // Only markets can supply both products. The initial reserve supplies only food.
+  consumeInventory(id: string, product: ProductId, units: number, destination = 'food-consumption'): number {
     if (!Number.isSafeInteger(units) || units <= 0) return 0;
     const source = this.inventories.snapshot(id);
-    if (!source?.operational || (source.kind !== 'reserve' && source.kind !== 'market')) return 0;
-    const quantity = Math.min(units, source.goods.food);
+    if (!source?.operational || (source.kind !== 'market' && (source.kind !== 'reserve' || product !== 'food'))) return 0;
+    const quantity = Math.min(units, source.goods[product]);
     if (quantity === 0) return 0;
     this.inventories.create('food-consumption', {
       kind: 'consumer', capacity: quantity, network: null, operational: true,
     }, undefined, destination);
-    const transferred = this.inventories.transfer(id, 'food-consumption', 'food', quantity);
+    const transferred = this.inventories.transfer(id, 'food-consumption', product, quantity);
     this.inventories.discardTransient('food-consumption');
     return transferred ? quantity : 0;
+  }
+
+  consumeInventoryFood(id: string, units: number): number {
+    return this.consumeInventory(id, 'food', units);
   }
 
   consumeFood(units: number): boolean {

@@ -1,7 +1,7 @@
 import type { ProductId } from './Products';
 
 export type AuditResource = ProductId | 'gold';
-export type AuditOperation = 'production' | 'transfer' | 'consumption' | 'sale' | 'construction' | 'construction-material' | 'demolition' | 'wages' | 'maintenance';
+export type AuditOperation = 'production' | 'transfer' | 'consumption' | 'sale' | 'construction' | 'construction-material' | 'demolition' | 'wages' | 'maintenance' | 'tax';
 type Balance = Readonly<{ before: number; after: number }>;
 type Movement = Readonly<{
   resource: AuditResource;
@@ -13,6 +13,7 @@ type Movement = Readonly<{
   originBalance?: Balance;
   destinationBalance?: Balance;
   household?: string;
+  soldProduct?: ProductId;
 }>;
 export type EconomicEvent = Movement & Readonly<{ id: number; timeMs: number; result: 'completed' | 'unpaid' }>;
 

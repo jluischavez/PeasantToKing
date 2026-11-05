@@ -149,14 +149,14 @@ export class SettlementSimulation {
       this.economy.recalculate(this.map, this.connections, this.population);
       this.economy.advance(1000);
       this.economy.consumeHomes(this.population, populationRules.foodPerResidentPerSecond);
-      this.economy.accountOperatingSecond(this.population.employed);
+      this.economy.accountOperatingSecond(this.population.employed, this.population.total);
       this.immigrationSeconds++;
       if (this.immigrationSeconds === this.immigrationIntervalSeconds) {
         this.immigrationSeconds = 0;
         const supply = this.economy.immigrationSupply(this.population, populationRules.familySize,
           this.immigrationIntervalSeconds, populationRules.foodPerResidentPerSecond,
           populationRules.residentsPerPlot);
-        if (this.population.immigrate(this.economy.availableFood, supply) > 0) {
+        if (this.population.immigrate(this.economy.availableFood, supply, this.economy.taxMigrationModifier) > 0) {
           this.economy.recalculate(this.map, this.connections, this.population);
         }
       }

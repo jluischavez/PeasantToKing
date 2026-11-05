@@ -1,5 +1,7 @@
 import { EconomicHistory } from './EconomicHistory.ts';
 import { Treasury } from './Treasury.ts';
+import { taxPolicies, taxRules } from './TaxPolicy.ts';
+import type { TaxPolicy } from './TaxPolicy';
 import { centsPerGold, maintenanceByType, wagePerWorker } from './OperatingCosts.ts';
 import type { OperatingCosts } from './OperatingCosts';
 import { simulatedMsPerGameHour } from '../simulation/GameTime.ts';
@@ -26,7 +28,7 @@ export const economyRules = {
   recovery: { populationLimit: 12, arrivalsPerEvaluation: 1 },
 } as const;
 
-// 1/30 represents halves, thirds and consumption in tenths exactly.
+// Inventory units represent production and consumption fractions exactly.
 // Public amounts use resource units; internal balances are never rounded per tick.
 
 const productionByType: Record<ConstructionType, Readonly<Resources>> = {
@@ -50,6 +52,7 @@ const asResources = (units: Resources): Resources => ({
 
 export class Economy {
   private readonly treasury: Treasury;
+  private taxPolicy: TaxPolicy = taxRules.defaultPolicy;
   private maintenanceRate = 0;
   readonly storage: Storage;
   readonly distribution: Distribution;
@@ -76,7 +79,9 @@ export class Economy {
 
   get resources(): Readonly<Resources> {
     const goods = this.storage.totalsUnits;
-    goods.food += this.distribution.totalMarketFoodUnits;
+    const markets = this.distribution.totalMarketUnits;
+    goods.food += markets.food;
+    goods.wood += markets.wood;
     return { gold: this.treasury.gold, food: goods.food / unitsPerResource, wood: goods.wood / unitsPerResource };
   }
 
@@ -106,8 +111,21 @@ export class Economy {
 
   get operatingDeficits(): OperatingCosts { return this.treasury.deficits; }
 
-  accountOperatingSecond(employed: number): void {
-    this.treasury.accrueSecond({ wages: employed * wagePerWorker, maintenance: this.maintenanceRate });
+  get currentTaxPolicy(): TaxPolicy { return this.taxPolicy; }
+
+  setTaxPolicy(policy: TaxPolicy): void { this.taxPolicy = policy; }
+
+  get taxMigrationModifier(): number { return taxPolicies[this.taxPolicy].migrationModifier; }
+
+  private taxHundredthsOfCentPerHour(residents: number): number {
+    return residents * taxRules.baseCentsPerResident * taxPolicies[this.taxPolicy].percent;
+  }
+
+  taxIncomePerHour(residents: number): number { return this.taxHundredthsOfCentPerHour(residents) / centsPerGold ** 2; }
+
+  accountOperatingSecond(employed: number, residents: number): void {
+    this.treasury.accrueSecond({ wages: employed * wagePerWorker, maintenance: this.maintenanceRate },
+      this.taxHundredthsOfCentPerHour(residents));
     if (this.completedMs % simulatedMsPerGameHour === 0) this.treasury.closeHour();
   }
 
@@ -168,10 +186,10 @@ export class Economy {
   }
 
   consumeHomes(population: Pick<Population, 'residencesSnapshot'>, foodPerResident: number): void {
-    // Provisional revenue: one gold per resource unit delivered by a market.
+    // Provisional municipal revenue: one gold per food or wood unit consumed from a market.
     // No revenue from replenishment, reserve consumption or unsatisfied demand.
     this.distribution.consumeHomes(population.residencesSnapshot, foodPerResident,
-      (market, household, units) => this.treasury.creditSale(market, household, units));
+      (market, household, units, product) => this.treasury.creditSale(market, household, units, product));
     this.refresh();
   }
 
@@ -208,7 +226,7 @@ export class Economy {
   }
 
   migrationReason(population: Population, supply: ReadonlyMap<string, number>): string {
-    const blocked = population.migrationBlockReason(this.availableFood, supply);
+    const blocked = population.migrationBlockReason(this.availableFood, supply, this.taxMigrationModifier);
     if (blocked && supply.size === 0 && population.availableHousing > 0
       && population.unemploymentRate < populationRules.migration.stopUnemploymentRate) {
       return this.distribution.supplyBlockReason(population.residencesSnapshot);

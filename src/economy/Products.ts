@@ -2,7 +2,7 @@
 // not a physical product. No unimplemented products are registered here.
 export const productCatalog = {
   food: { name: 'Comida', marketSale: true },
-  wood: { name: 'Madera', marketSale: false },
+  wood: { name: 'Madera', marketSale: true },
 } as const;
 
 export type ProductId = keyof typeof productCatalog;

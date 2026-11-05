@@ -98,19 +98,20 @@ test('occupied cells and a second village center never charge again', () => {
 
 test('wood is spent from the construction reserve before the operational warehouse, even after food bootstrap ends', () => {
   const { economy, simulation } = staffed({ gold: 150, food: 20, wood: 3 });
-  assert.ok(economy.storage.depositProduction(lumberjack, 'wood', 8 * U + 20));
+  assert.equal(economy.setMarketSale(market, 'wood', false), true);
+  assert.ok(economy.storage.depositProduction(lumberjack, 'wood', 8 * U + 2 * U / 3));
   assert.ok(economy.storage.depositProduction(farm, 'food', 2 * U));
   for (let i = 0; i < 5; i++) economy.distribution.advanceSecond();
   assert.equal(economy.distribution.bootstrapActive, false);
   assert.equal(simulation.build(cell(8, 2), 'farm'), null);
 
   assert.equal(economy.storage.constructionWoodReserve, 0);
-  assert.equal(economy.storage.warehouseAt(warehouse)?.wood, 50 / U);
-  assert.equal(economy.resources.wood, 50 / U);
+  assert.equal(economy.storage.warehouseAt(warehouse)?.wood, 5 / 3);
+  assert.equal(economy.resources.wood, 5 / 3);
   const debits = economy.history.read('wood', 'farm:8,2');
   assert.deepEqual(debits.map(event => [event.origin, event.units, event.originBalance]), [
-    ['construction-reserve', 90, { before: 90, after: 0 }],
-    [warehouseId, 210, { before: 260, after: 50 }],
+    ['construction-reserve', 3 * U, { before: 3 * U, after: 0 }],
+    [warehouseId, 7 * U, { before: 26 * U / 3, after: 5 * U / 3 }],
   ]);
 });
 
@@ -218,7 +219,7 @@ test('a warehouse that fills during confirmation cannot be demolished and a stoc
 test('empty warehouse and market inventories are removed and rebuilt with fresh permissions', () => {
   const { economy, simulation } = staffed();
   economy.setWarehouseAcceptance(warehouse, 'wood', false);
-  assert.ok(economy.storage.depositProduction(farm, 'food', 3));
+  assert.ok(economy.storage.depositProduction(farm, 'food', U / 10));
   for (let i = 0; i < 5; i++) economy.distribution.advanceSecond();
   economy.consumeHomes({ residencesSnapshot: [{ cell: home, residents: 1 }] }, 0.1);
   assert.equal(economy.perSecond.gold, 0.1);

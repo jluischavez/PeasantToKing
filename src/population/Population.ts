@@ -143,10 +143,11 @@ export class Population {
   }
 
   // A score from 0 to 100; food and connected housing remain hard requirements.
-  migrationAttractiveness(food: number, supply?: ReadonlyMap<string, number>): number {
+  migrationAttractiveness(food: number, supply?: ReadonlyMap<string, number>, modifier = 0): number {
     const supported = supply ? [...supply.values()].reduce((sum, count) => sum + count, 0)
       : this.foodSupportedArrivals(food);
-    if (this.availableHousing === 0 || supported === 0) return 0;
+    if (this.availableHousing === 0 || supported === 0
+      || this.unemploymentRate >= populationRules.migration.stopUnemploymentRate) return 0;
     const rules = populationRules.migration;
     const housing = Math.min(1, this.availableHousing / populationRules.familySize);
     const foodAvailability = Math.min(1, supported / populationRules.familySize);
@@ -155,22 +156,24 @@ export class Population {
     const weights = rules.housingWeight + rules.foodWeight + rules.jobsWeight;
     const base = (rules.housingWeight * housing + rules.foodWeight * foodAvailability
       + rules.jobsWeight * opportunities) / weights;
-    return Math.round(100 * base * employmentFactor);
+    return Math.max(0, Math.min(100, Math.round(100 * base * employmentFactor) + modifier));
   }
 
-  migrationBlockReason(food: number, supply?: ReadonlyMap<string, number>): string | null {
+  migrationBlockReason(food: number, supply?: ReadonlyMap<string, number>, modifier = 0): string | null {
     if (this.availableHousing === 0) return 'No hay solares conectados con espacio.';
     if (this.unemploymentRate >= populationRules.migration.stopUnemploymentRate) return 'Desempleo demasiado alto.';
     const supported = supply ? [...supply.values()].reduce((sum, count) => sum + count, 0)
       : this.foodSupportedArrivals(food);
     if (supported <= 0) return 'No hay alimento suficiente para admitir habitantes.';
-    return this.migrationAttractiveness(food, supply) === 0 ? 'El desempleo reduce el atractivo a cero.' : null;
+    if (this.migrationAttractiveness(food, supply, modifier) > 0) return null;
+    return modifier < 0 ? 'La presión tributaria reduce el atractivo a cero.'
+      : 'El desempleo reduce el atractivo a cero.';
   }
 
   // Evaluated once per immigration interval. Fractional credit slows arrivals
   // predictably as attraction falls; no random rolls or accumulating backlog.
-  immigrate(food: number, supply?: ReadonlyMap<string, number>): number {
-    const attractiveness = this.migrationAttractiveness(food, supply);
+  immigrate(food: number, supply?: ReadonlyMap<string, number>, modifier = 0): number {
+    const attractiveness = this.migrationAttractiveness(food, supply, modifier);
     if (attractiveness === 0) {
       this.migrationCredit = 0;
       return 0;

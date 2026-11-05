@@ -21,4 +21,4 @@ Vitest usa Vite y el TypeScript del proyecto. Las pruebas se ejecutan en Node e 
 4. Comprueba el resultado observable. Para una transferencia, verifica el saldo de origen y destino, el total y los ingresos cuando procedan. Para un rechazo, verifica ambos saldos.
 5. Ejecuta primero el archivo afectado y después npm test y npm run build.
 
-Las unidades enteras de inventario representan fracciones de 1/30. Usa unitsPerResource para preparar existencias en pruebas de Inventories. Los saldos públicos de Economy se expresan en unidades de comida, madera y oro.
+Las unidades enteras de inventario representan fracciones de 1/150 desde 09C. Los movimientos de tesorería que incluyen una fracción más fina indican su escala en unitScale. Usa unitsPerResource para preparar existencias en pruebas de Inventories. Los saldos públicos de Economy se expresan en unidades de comida, madera y oro.

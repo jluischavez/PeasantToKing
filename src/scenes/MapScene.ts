@@ -40,20 +40,23 @@ export class MapScene extends Phaser.Scene {
     const simulation = this.simulation ??= new SettlementSimulation(
       economy, population, populationRules.immigrationIntervalSeconds, constructions, connections);
     simulation.recalculate();
-    const resourceBar = new ResourceBar();
+    const resourceBar = new ResourceBar(economy.currentTaxPolicy, policy => {
+      economy.setTaxPolicy(policy);
+      renderSummary();
+    });
     const populationPanel = new PopulationPanel();
     const renderSummary = (): void => {
       resourceBar.render(economy.resources, economy.perSecond, {
         reserve: economy.storage.initialFoodReserve, availableFood: population.connectedCapacity > 0 ? economy.availableFood : 0,
         blocked: economy.blockedProducers, bootstrap: economy.distribution.bootstrapActive,
         constructionReserve: economy.storage.constructionWoodReserve, constructionWood: economy.availableConstructionWood,
-        costs: economy.operatingCostsPerHour(population.employed),
+        costs: economy.operatingCostsPerHour(population.employed), taxes: economy.taxIncomePerHour(population.total),
       });
       const supply = economy.immigrationSupply(population, populationRules.familySize,
         populationRules.immigrationIntervalSeconds, populationRules.foodPerResidentPerSecond,
         populationRules.residentsPerPlot);
       populationPanel.render(population, economy.availableFood, supply, economy.migrationReason(population, supply),
-        economy.distribution.cumulativeFoodShortage);
+        economy.distribution.cumulativeFoodShortage, economy.taxMigrationModifier);
       menu.renderCosts(cost => simulation.costIssue(cost));
     };
     const renderSelected = (): void => {
@@ -65,7 +68,8 @@ export class MapScene extends Phaser.Scene {
       panel.render(cell, type,
         cell !== null && connections.isConnected(cell), home ? population.residentsAt(home) : 0,
         cell ? economy.productivityAt(cell) : undefined, warehouse, market,
-        home ? economy.distribution.supplyAt(home) : undefined, home ? economy.distribution.foodShortageAt(home) : 0);
+        home ? economy.distribution.supplyAt(home) : undefined, home ? economy.distribution.foodShortageAt(home) : 0,
+        home ? economy.distribution.supplyAt(home, 'wood') : undefined, home ? economy.distribution.woodShortageAt(home) : 0);
       const demolition = simulation.demolitionTarget;
       const departing = demolition?.type === 'house' ? population.residentsAt(demolition.cell) : 0;
       const departure = departing === 1 ? ' · 1 habitante abandonará la ciudad.'
@@ -229,6 +233,7 @@ export class MapScene extends Phaser.Scene {
       this.scale.off(Phaser.Scale.Events.RESIZE, layout);
       this.events.off(Phaser.Scenes.Events.UPDATE, updateSimulation);
       sceneEvents.abort();
+      resourceBar.destroy();
       simulationPanel.destroy();
       configuration.destroy();
       panel.destroy();

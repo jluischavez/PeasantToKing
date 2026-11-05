@@ -44,15 +44,15 @@ function setup() {
 
 test('product identifiers are centralized and only current products are configurable', () => {
   assert.deepEqual(productIds, ['food', 'wood']);
-  assert.deepEqual(marketProductIds, ['food']);
+  assert.deepEqual(marketProductIds, ['food', 'wood']);
   assert.deepEqual(productNames, { food: 'Comida', wood: 'Madera' });
   for (const value of ['stone', 'clay', 'gold', '__proto__', 'constructor', undefined, null]) {
     assert.equal(isProductId(value), false);
   }
   const { economy } = setup();
   assert.equal(economy.setWarehouseAcceptance(firstWarehouse, 'stone' as ProductId, true), false);
-  assert.equal(economy.setMarketSale(firstMarket, 'wood', true), false);
-  assert.equal(economy.setMarketSale(firstMarket, 'wood', false), false);
+  assert.equal(economy.setMarketSale(firstMarket, 'wood', true), true);
+  assert.equal(economy.setMarketSale(firstMarket, 'wood', false), true);
   assert.equal(economy.setMarketSale(firstMarket, 'food', 'yes' as unknown as boolean), false);
   assert.equal(economy.setWarehouseAcceptance(cell(19, 19), 'food', false), false);
   assert.equal(economy.setMarketSale(firstWarehouse, 'food', false), false);
@@ -61,7 +61,7 @@ test('product identifiers are centralized and only current products are configur
 test('default settings are enabled and each building keeps independent configuration', () => {
   const { economy, sync } = setup();
   assert.deepEqual(economy.storage.warehouseAt(firstWarehouse)!.accepts, { food: true, wood: true });
-  assert.deepEqual(economy.distribution.marketAt(firstMarket)!.sells, { food: true, wood: false });
+  assert.deepEqual(economy.distribution.marketAt(firstMarket)!.sells, { food: true, wood: true });
   economy.setWarehouseAcceptance(firstWarehouse, 'food', false);
   economy.setMarketSale(firstMarket, 'food', false);
   for (let i = 0; i < 10; i++) sync();

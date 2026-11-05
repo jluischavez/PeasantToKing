@@ -82,7 +82,9 @@ test('recovery uses no extra food: warehouse stocks plus food-sale treasury rema
     const expenses = economy.history.read('gold')
       .filter(event => event.result === 'completed' && (event.operation === 'wages' || event.operation === 'maintenance'))
       .reduce((total, event) => total + event.units / (event.unitScale ?? U), 0);
-    assert.ok(Math.abs(economy.resources.food + economy.resources.gold + expenses - 77.5) < 1e-9);
+    const taxes = economy.history.read('gold').filter(event => event.operation === 'tax')
+      .reduce((total, event) => total + event.units / (event.unitScale ?? U), 0);
+    assert.ok(Math.abs(economy.resources.food + economy.resources.gold + expenses - taxes - 77.5) < 1e-9);
     assert.equal(economy.storage.initialFoodReserve, 0);
     assert.equal(population.employed + population.unemployed, population.activePopulation);
     assert.equal(economy.storage.warehouseAt(warehouse)!.accepts.food, false);

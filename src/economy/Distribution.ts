@@ -1,7 +1,8 @@
 import type { ProductId, ProductFlags } from './Products';
 import { populationRules } from '../population/Population.ts';
 import { unitsPerResource as U } from './Inventories.ts';
-import { gameMinutesForSeconds } from '../simulation/GameTime.ts';
+import type { Goods } from './Inventories';
+import { gameMinutesForSeconds, gameTimeRules } from '../simulation/GameTime.ts';
 import { MarketCoverage } from '../map/MarketCoverage.ts';
 import type { Storage } from './Storage';
 import type { Cell } from '../map/CellSelection';
@@ -9,10 +10,10 @@ import type { ConstructionMap } from '../map/ConstructionMap';
 import type { RoadConnections } from '../map/RoadConnections';
 import type { Population } from '../population/Population';
 
-export const distributionRules = { marketCapacity: 100, restockIntervalSeconds: 5, coverageRoadTiles: 6 } as const;
+export const distributionRules = { marketCapacity: 100, restockIntervalSeconds: 5, coverageRoadTiles: 6, woodPerResidentPerHour: 0.5 } as const;
 export type Residence = Readonly<{ cell: Cell; residents: number }>;
 export type MarketSnapshot = Readonly<{
-  food: number; capacity: number; workers: number; workerCapacity: number;
+  food: number; wood: number; capacity: number; workers: number; workerCapacity: number;
   connected: boolean; operational: boolean; coveredHomes: number; range: number;
   sells: Readonly<ProductFlags>;
   reason: string;
@@ -32,7 +33,7 @@ export class Distribution {
   private restockSeconds = 0;
   private bootstrap = true;
   private readonly marketSales = new Map<string, number>();
-  private readonly lastHomeShortages = new Map<string, { cell: Cell; units: number }>();
+  private readonly lastHomeShortages = new Map<string, { cell: Cell; units: Goods }>();
   private shortageUnits = 0;
 
   constructor(storage: Storage) {
@@ -47,7 +48,11 @@ export class Distribution {
   get cumulativeFoodShortage(): number { return this.shortageUnits / U; }
 
   foodShortageAt(cell: Cell): number {
-    return (this.lastHomeShortages.get(key(cell))?.units ?? 0) / U;
+    return (this.lastHomeShortages.get(key(cell))?.units.food ?? 0) / U;
+  }
+
+  woodShortageAt(cell: Cell): number {
+    return (this.lastHomeShortages.get(key(cell))?.units.wood ?? 0) / U;
   }
 
   sync(map: ConstructionMap, connections: RoadConnections, workforce: Workforce): void {
@@ -107,15 +112,16 @@ export class Distribution {
     if (!market) return undefined;
     const inventory = this.storage.inventories.snapshot(market.id)!;
     return {
-      food: inventory.goods.food / U, capacity: distributionRules.marketCapacity,
+      food: inventory.goods.food / U, wood: inventory.goods.wood / U, capacity: distributionRules.marketCapacity,
       workers: market.workers, workerCapacity: market.workerCapacity,
       connected: market.connected, operational: inventory.operational,
       coveredHomes: this.coverage.coveredHomes(cell), range: distributionRules.coverageRoadTiles,
       sells: inventory.products,
       reason: !market.connected ? 'Sin conexión al Centro de Aldea'
         : market.workers === 0 ? 'Sin empleados asignados'
-        : !inventory.products.food ? 'Venta de comida deshabilitada'
-        : inventory.goods.food === 0 ? 'Sin comida; esperando reposición desde almacenes operativos'
+        : !inventory.products.food && !inventory.products.wood ? 'Ventas deshabilitadas'
+        : !(inventory.products.food && inventory.goods.food > 0) && !(inventory.products.wood && inventory.goods.wood > 0)
+          ? 'Sin existencias de productos habilitados; esperando reposición'
         : 'Abasteciendo viviendas en cobertura',
     };
   }
@@ -125,8 +131,14 @@ export class Distribution {
     return this.markets.has(id) && this.storage.inventories.setProductEnabled(id, product, enabled);
   }
 
-  get totalMarketFoodUnits(): number {
-    return [...this.markets.keys()].reduce((sum, id) => sum + this.storage.inventories.snapshot(id)!.goods.food, 0);
+  get totalMarketUnits(): Goods {
+    const total = { food: 0, wood: 0 };
+    for (const id of this.markets.keys()) {
+      const { goods } = this.storage.inventories.snapshot(id)!;
+      total.food += goods.food;
+      total.wood += goods.wood;
+    }
+    return total;
   }
 
   get availableFood(): number {
@@ -144,30 +156,42 @@ export class Distribution {
     this.restockSeconds++;
     if (this.restockSeconds < distributionRules.restockIntervalSeconds) return;
     this.restockSeconds = 0;
+    const ledger = this.storage.inventories;
+    const warehouses = this.storage.operationalWarehouseIds();
     for (const market of this.markets.values()) {
-      const destination = this.storage.inventories.snapshot(market.id)!;
-      if (!destination.operational || !this.storage.inventories.isProductEnabled(market.id, 'food')) continue;
-      let free = destination.free;
-      for (const id of this.storage.operationalWarehouseIds()) {
-        const source = this.storage.inventories.snapshot(id)!;
-        if (source.network !== destination.network) continue;
-        const quantity = Math.min(free, source.goods.food);
-        if (quantity > 0 && this.storage.inventories.transfer(id, market.id, 'food', quantity)) {
-          free -= quantity;
-          this.finishBootstrapIfStocked();
-        }
-        if (free === 0) break;
-      }
+      const destination = ledger.snapshot(market.id)!;
+      if (!destination.operational || destination.free === 0) continue;
+      const sources = warehouses.filter(id => ledger.snapshot(id)!.network === destination.network);
+      const woodAvailable = destination.products.wood
+        ? sources.reduce((sum, id) => sum + ledger.snapshot(id)!.goods.wood, 0) : 0;
+      // Give available wood a share of new space so a full food supply cannot starve it.
+      const woodSpace = Math.min(destination.free, woodAvailable,
+        Math.max(0, Math.floor(destination.capacity / 2) - destination.goods.wood));
+      const foodMoved = destination.products.food
+        ? this.restockProduct(market.id, 'food', sources, destination.free - woodSpace) : 0;
+      if (destination.products.wood) this.restockProduct(market.id, 'wood', sources, destination.free - foodMoved);
     }
+    this.finishBootstrapIfStocked();
   }
 
-  private sources(cell: Cell): { id: string; distance: number; cell?: Cell }[] {
+  private restockProduct(market: string, product: ProductId, sources: readonly string[], limit: number): number {
+    const ledger = this.storage.inventories;
+    let remaining = limit;
+    for (const id of sources) {
+      if (remaining === 0) break;
+      const quantity = Math.min(remaining, ledger.snapshot(id)!.goods[product]);
+      if (quantity > 0 && ledger.transfer(id, market, product, quantity)) remaining -= quantity;
+    }
+    return limit - remaining;
+  }
+
+  private sources(cell: Cell, product: ProductId = 'food'): { id: string; distance: number; cell?: Cell }[] {
     if (!this.connections?.isConnected(cell)) return [];
-    if (this.bootstrap) return [{ id: 'initial-reserve', distance: 0 }];
+    if (this.bootstrap && product === 'food') return [{ id: 'initial-reserve', distance: 0 }];
     return [...this.markets.values()].flatMap(market => {
       const distance = this.coverage.distance(market.cell, cell);
       const inventory = this.storage.inventories.snapshot(market.id)!;
-      return inventory.operational && this.storage.inventories.isProductEnabled(market.id, 'food') && distance !== undefined
+      return inventory.operational && inventory.products[product] && distance !== undefined
         ? [{ id: market.id, distance, cell: market.cell }] : [];
     }).sort((a, b) => a.distance - b.distance
       || a.cell!.row - b.cell!.row || a.cell!.column - b.cell!.column);
@@ -213,36 +237,42 @@ export class Distribution {
       + ' min del juego de consumo.';
   }
 
-  supplyAt(cell: Cell): HousingSupply {
+  supplyAt(cell: Cell, product: ProductId = 'food'): HousingSupply {
     this.finishBootstrapIfStocked();
-    const source = this.sources(cell).find(entry => this.storage.inventories.snapshot(entry.id)!.goods.food > 0);
+    const source = this.sources(cell, product).find(entry => this.storage.inventories.snapshot(entry.id)!.goods[product] > 0);
     if (!source) return { status: 'unserved' };
     return source.id === 'initial-reserve' ? { status: 'reserve' }
       : { status: 'market', market: { ...source.cell! }, distance: source.distance };
   }
 
   consumeHomes(homes: readonly Residence[], foodPerResident: number,
-    onSale?: (market: string, household: string, units: number) => void): number {
+    onSale?: (market: string, household: string, units: number, product: ProductId) => void): number {
     this.finishBootstrapIfStocked();
     this.marketSales.clear();
     this.lastHomeShortages.clear();
     let totalSales = 0;
     for (const home of homes) {
-      let remaining = Math.round(home.residents * foodPerResident * U);
+      if (home.residents === 0) continue;
+      const demand: Goods = {
+        food: Math.round(home.residents * foodPerResident * U),
+        wood: Math.round(home.residents * distributionRules.woodPerResidentPerHour * U / gameTimeRules.secondsPerHour),
+      };
       const household = 'house:' + key(home.cell);
-      for (const source of this.sources(home.cell)) {
-        const delivered = this.storage.consumeInventoryFood(source.id, remaining, household);
-        remaining -= delivered;
-        if (delivered > 0 && source.id !== 'initial-reserve') {
-          totalSales += delivered;
-          this.marketSales.set(source.id, (this.marketSales.get(source.id) ?? 0) + delivered);
-          onSale?.(source.id, household, delivered);
+      for (const product of ['food', 'wood'] as const) {
+        for (const source of this.sources(home.cell, product)) {
+          const delivered = this.storage.consumeInventory(source.id, product, demand[product], household);
+          demand[product] -= delivered;
+          if (delivered > 0 && source.id !== 'initial-reserve') {
+            totalSales += delivered;
+            this.marketSales.set(source.id, (this.marketSales.get(source.id) ?? 0) + delivered);
+            onSale?.(source.id, household, delivered, product);
+          }
+          if (demand[product] === 0) break;
         }
-        if (remaining === 0) break;
       }
-      if (remaining > 0) {
-        this.lastHomeShortages.set(key(home.cell), { cell: home.cell, units: remaining });
-        this.shortageUnits += remaining;
+      if (demand.food > 0 || demand.wood > 0) {
+        this.lastHomeShortages.set(key(home.cell), { cell: home.cell, units: demand });
+        this.shortageUnits += demand.food;
       }
     }
     return totalSales;

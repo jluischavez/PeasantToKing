@@ -24,7 +24,7 @@ export class PopulationPanel {
     this.attractiveness.title = `Las llegadas se detienen con ${populationRules.migration.stopUnemploymentRate * 100} % de desempleo, sin espacio conectado o sin abastecimiento de alimentos.`;
   }
 
-  render(population: Population, food: number, supply: ReadonlyMap<string, number>, reason: string, shortage: number): void {
+  render(population: Population, food: number, supply: ReadonlyMap<string, number>, reason: string, shortage: number, taxModifier: number): void {
     this.reason.textContent = reason;
     this.shortage.textContent = shortage.toLocaleString('es', { maximumFractionDigits: 2 });
     this.total.textContent = String(population.total);
@@ -32,7 +32,7 @@ export class PopulationPanel {
     this.unemploymentRate.textContent = (population.unemploymentRate * 100).toLocaleString('es', {
       maximumFractionDigits: 1,
     });
-    this.attractiveness.textContent = String(population.migrationAttractiveness(food, supply));
+    this.attractiveness.textContent = String(population.migrationAttractiveness(food, supply, taxModifier));
     this.capacity.textContent = String(population.residentialCapacity);
     this.connected.textContent = String(population.connectedCapacity);
     this.jobs.textContent = String(population.jobCapacity);

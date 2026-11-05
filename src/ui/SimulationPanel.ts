@@ -8,13 +8,13 @@ import { formatGameTime, gameTimeAt } from '../simulation/GameTime';
 const operationNames = {
   production: 'Producción', transfer: 'Transferencia', consumption: 'Consumo', sale: 'Venta',
   construction: 'Costo de construcción', 'construction-material': 'Material de construcción',
-  demolition: 'Costo de demolición', wages: 'Salarios', maintenance: 'Mantenimiento',
+  demolition: 'Costo de demolición', wages: 'Salarios', maintenance: 'Mantenimiento', tax: 'Impuestos',
 } as const;
 const endpointNames: Readonly<Record<string, string>> = {
   production: 'Producción local', treasury: 'Tesorería',
   'initial-reserve': 'Reserva inicial', 'food-consumption': 'Consumo',
   'construction-reserve': 'Reserva de construcción', workers: 'Trabajadores',
-  'building-maintenance': 'Mantenimiento de construcciones',
+  'building-maintenance': 'Mantenimiento de construcciones', 'tax-base': 'Base tributaria residencial',
 };
 
 function endpointName(id: string): string {
@@ -94,8 +94,10 @@ export class SimulationPanel {
       const row = document.createElement('li');
       const title = document.createElement('strong');
       const amount = (units: number) => exactAmount(units, event.unitScale);
+      const operation = event.soldProduct ? 'Venta de ' + resourceNames[event.soldProduct].toLowerCase()
+        : operationNames[event.operation];
       title.textContent = '#' + event.id + ' · ' + formatGameTime(gameTimeAt(event.timeMs)) + ' · '
-        + operationNames[event.operation] + (event.result === 'unpaid' ? ' (impago)' : '')
+        + operation + (event.result === 'unpaid' ? ' (impago)' : '')
         + ' · ' + resourceNames[event.resource] + ' ' + amount(event.units);
       const route = document.createElement('div');
       route.textContent = endpointName(event.origin) + ' → ' + endpointName(event.destination)

@@ -71,6 +71,13 @@ Multijugador, login, servidor, cuentas en nube, ranking global, combate, ejérci
 - Los gastos se prorratean por segundo de simulación y se liquidan al cierre de cada hora, después de las ventas. Los salarios tienen prioridad sobre el mantenimiento. El historial distingue los pagos de los importes que quedaron impagados. Esos importes quedan registrados sin cobro retroactivo.
 - El calendario reserva cuatro estaciones futuras de tres días cada una. A ×1 equivaldrán a 30 minutos reales por estación y 120 minutos por año. La fase actual solo indica día o noche mediante texto.
 
+### Reglas económicas de 09C
+
+- Los impuestos residenciales se calculan sobre una base provisional de 1 oro por habitante y hora del juego. La política baja cobra 5 % y suma 10 puntos de atractivo, la normal cobra 10 % y la alta cobra 20 % y resta 20 puntos. La política normal es la inicial.
+- Los impuestos se devengan según población y política vigentes en cada segundo de simulación. Se acreditan al cierre de hora, antes de salarios y mantenimiento.
+- Cada mercado comparte 100 unidades de capacidad entre comida y madera. Las viviendas cubiertas consumen hasta 0,5 unidades de madera por habitante y hora. El faltante se informa en el inspector.
+- La base tributaria y los ingresos municipales directos de 1 oro por unidad de comida o madera consumida son provisionales hasta introducir presupuestos familiares.
+
 ### Funcionalidad futura reservada: evolución visual de la ciudad
 
 **Prioridad:** después de finalizar, probar y publicar el MVP funcional (etapas 06–11), **no antes**. Es una expansión planificada, no un requisito inmediato ni una orden de implementación automática. Dividir en tareas pequeñas independientes:

@@ -14,7 +14,7 @@
       <p>Reserva inicial: <span id="initial-food-reserve">20</span> comida (<span id="reserve-status">reserva de arranque</span>) · Comida disponible para viviendas: <span id="available-food">20</span></p>
       <p id="storage-status" role="status">Almacenamiento sin bloqueos.</p>
       <p aria-label="Tesorería por hora del juego">
-        Salarios: <span id="wages-rate">0</span> oro/h · Mantenimiento: <span id="maintenance-rate">0</span> oro/h
+        Impuestos: <span id="tax-rate">0</span> oro/h · Salarios: <span id="wages-rate">0</span> oro/h · Mantenimiento: <span id="maintenance-rate">0</span> oro/h
         · Neto estimado: <strong id="net-rate">0</strong> oro/h
       </p>
       <section id="population-bar" aria-label="Población y empleo">
@@ -88,6 +88,7 @@
             <option value="3">×3</option>
           </select>
         </label>
+        <label>Impuestos <select id="tax-policy"></select></label>
         <span id="simulation-time">Año 1 · Día 1 · 00:00 · Noche</span>
       </nav>
       <nav id="construction-menu" aria-label="Construcción">

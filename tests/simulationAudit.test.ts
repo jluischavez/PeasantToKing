@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { EconomicHistory } from '../src/economy/EconomicHistory.ts';
 import { Economy } from '../src/economy/Economy.ts';
-import { Inventories } from '../src/economy/Inventories.ts';
+import { Inventories, unitsPerResource as U } from '../src/economy/Inventories.ts';
 import { ConstructionMap } from '../src/map/ConstructionMap.ts';
 import { RoadConnections } from '../src/map/RoadConnections.ts';
 import { Population, populationRules } from '../src/population/Population.ts';
@@ -88,7 +88,7 @@ test('resuming discards paused wall time, preserves the fractional tick and keep
   assert.deepEqual(state(), before);
   assert.equal(simulation.advance(1), true);
   assert.equal(simulation.simulatedTimeMs, 1000);
-  assert.equal(state().warehouse?.goods.food, 15);
+  assert.equal(state().warehouse?.goods.food, U / 2);
 });
 
 test.each([2, 3] as const)('speed ×%i matches an equal duration at ×1 across economic systems', speed => {
@@ -166,20 +166,20 @@ test('the audited food chain distinguishes production, transfers, consumption an
   const events = economy.history.read();
   const lastTick = events.filter(event => event.timeMs === 5000);
   const [production, deposit, restock] = lastTick;
-  assert.deepEqual([production.operation, production.destination, production.units], ['production', farmId, 15]);
+  assert.deepEqual([production.operation, production.destination, production.units], ['production', farmId, U / 2]);
   assert.deepEqual([deposit.operation, deposit.origin, deposit.destination, deposit.units],
-    ['transfer', farmId, warehouseId, 15]);
+    ['transfer', farmId, warehouseId, U / 2]);
   assert.deepEqual([restock.operation, restock.origin, restock.destination, restock.units],
-    ['transfer', warehouseId, marketId, 75]);
-  assert.deepEqual(restock.originBalance, { before: 75, after: 0 });
-  assert.deepEqual(restock.destinationBalance, { before: 0, after: 75 });
+    ['transfer', warehouseId, marketId, 2.5 * U]);
+  assert.deepEqual(restock.originBalance, { before: 2.5 * U, after: 0 });
+  assert.deepEqual(restock.destinationBalance, { before: 0, after: 2.5 * U });
 
   const meals = lastTick.filter(event => event.operation === 'consumption');
   const sales = lastTick.filter(event => event.operation === 'sale');
   assert.equal(meals.length, 2);
   assert.equal(sales.length, meals.length);
   let goldUnits = 0;
-  let marketUnits = 75;
+  let marketUnits = 2.5 * U;
   for (const [index, meal] of meals.entries()) {
     assert.equal(meal.resource, 'food');
     assert.equal(meal.origin, marketId);
@@ -195,8 +195,8 @@ test('the audited food chain distinguishes production, transfers, consumption an
     goldUnits += sale.units;
     marketUnits -= meal.units;
   }
-  assert.equal(goldUnits, 18);
-  assert.equal(marketUnits, 57);
+  assert.equal(goldUnits, 0.6 * U);
+  assert.equal(marketUnits, 1.9 * U);
   assert.equal(economy.resources.food, 19.5);
   assert.equal(economy.resources.gold, 0.6);
   assert.equal(events.filter(event => event.timeMs < 5000 && event.operation === 'sale').length, 0);

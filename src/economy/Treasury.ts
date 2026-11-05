@@ -1,16 +1,18 @@
 import type { EconomicHistory } from './EconomicHistory';
+import type { ProductId } from './Products';
 import { unitsPerResource } from './Inventories.ts';
 import { centsPerGold } from './OperatingCosts.ts';
 import type { OperatingCosts } from './OperatingCosts';
 import { gameTimeRules } from '../simulation/GameTime.ts';
 
-const unitsPerGold = unitsPerResource * centsPerGold * gameTimeRules.secondsPerHour;
+const unitsPerGold = unitsPerResource * centsPerGold ** 2 * gameTimeRules.secondsPerHour;
 const unitsPerInventoryUnit = unitsPerGold / unitsPerResource;
 const unitsPerCentSecond = unitsPerGold / (centsPerGold * gameTimeRules.secondsPerHour);
 type Movement = Omit<Parameters<EconomicHistory['record']>[0], 'resource' | 'unitScale'>;
 
 export class Treasury {
   private units: number;
+  private accruedTaxes = 0;
   private accruedWages = 0;
   private accruedMaintenance = 0;
   private unpaidWages = 0;
@@ -34,22 +36,32 @@ export class Treasury {
     this.debit(Math.round(gold * unitsPerGold), operation, destination);
   }
 
-  creditSale(market: string, household: string, inventoryUnits: number): void {
+  creditSale(market: string, household: string, inventoryUnits: number, soldProduct: ProductId): void {
     const units = inventoryUnits * unitsPerInventoryUnit;
     const before = this.units;
     this.units += units;
     this.record({
       operation: 'sale', units, origin: market, destination: 'treasury',
-      household, destinationBalance: { before, after: this.units },
+      household, soldProduct, destinationBalance: { before, after: this.units },
     });
   }
 
-  accrueSecond(costs: OperatingCosts): void {
+  accrueSecond(costs: OperatingCosts, taxHundredthsOfCentPerHour: number): void {
+    this.accruedTaxes += taxHundredthsOfCentPerHour * (unitsPerCentSecond / centsPerGold);
     this.accruedWages += costs.wages * unitsPerCentSecond;
     this.accruedMaintenance += costs.maintenance * unitsPerCentSecond;
   }
 
   closeHour(): void {
+    if (this.accruedTaxes > 0) {
+      const before = this.units;
+      this.units += this.accruedTaxes;
+      this.record({
+        operation: 'tax', units: this.accruedTaxes, origin: 'tax-base', destination: 'treasury',
+        destinationBalance: { before, after: this.units },
+      });
+      this.accruedTaxes = 0;
+    }
     this.unpaidWages += this.settle(this.accruedWages, 'wages', 'workers');
     this.unpaidMaintenance += this.settle(this.accruedMaintenance, 'maintenance', 'building-maintenance');
     this.accruedWages = 0;

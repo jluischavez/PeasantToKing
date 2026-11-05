@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { Economy } from '../src/economy/Economy.ts';
+import { EconomicHistory } from '../src/economy/EconomicHistory.ts';
 import type { EconomicEvent } from '../src/economy/EconomicHistory';
+import { Treasury } from '../src/economy/Treasury.ts';
 import { unitsPerResource } from '../src/economy/Inventories.ts';
 import { ConstructionMap } from '../src/map/ConstructionMap.ts';
 import { RoadConnections } from '../src/map/RoadConnections.ts';
@@ -40,7 +42,7 @@ const stamp = (year: number, day: number, hour: number, minute: number, daylight
 
 function charge(event: EconomicEvent) {
   const scale = event.unitScale ?? unitsPerResource;
-  const balance = event.originBalance!;
+  const balance = (event.originBalance ?? event.destinationBalance)!;
   return [event.operation, event.result, event.units / scale, balance.before / scale, balance.after / scale, event.timeMs];
 }
 
@@ -87,7 +89,7 @@ test('pause preserves the partial second and prevents calendar changes and charg
   simulation.setPaused(false);
   simulation.advance(100);
   assert.deepEqual(simulation.gameTime, stamp(1, 1, 1, 0));
-  assert.equal(economy.resources.gold, 149.83);
+  assert.equal(economy.resources.gold, 150.03);
 });
 
 test('suspension and the first resumed frame add no time or operating expenses', () => {
@@ -103,7 +105,7 @@ test('suspension and the first resumed frame add no time or operating expenses',
   assert.equal(economy.resources.gold, gold);
   assert.deepEqual(economy.history.read('gold'), []);
   simulation.advance(100);
-  assert.equal(economy.resources.gold, 149.83);
+  assert.equal(economy.resources.gold, 150.03);
 });
 
 test('speed changes prorate exactly the same simulated hour and never duplicate payments', () => {
@@ -117,9 +119,9 @@ test('speed changes prorate exactly the same simulated hour and never duplicate 
   assert.equal(accelerated.simulation.simulatedTimeMs, 25_000);
   assert.deepEqual(accelerated.economy.resources, normal.economy.resources);
   assert.deepEqual(accelerated.economy.history.read(), normal.economy.history.read());
-  assert.deepEqual(accelerated.economy.history.read('gold').map(charge), [
-    ['wages', 'completed', 0.1, 150, 149.9, 25_000],
-    ['maintenance', 'completed', 0.07, 149.9, 149.83, 25_000],
+  assert.deepEqual(accelerated.economy.history.read('gold').filter(event => event.operation !== 'tax').map(charge), [
+    ['wages', 'completed', 0.1, 150.2, 150.1, 25_000],
+    ['maintenance', 'completed', 0.07, 150.1, 150.03, 25_000],
   ]);
 });
 
@@ -159,11 +161,12 @@ test('cutting the road stops wage accrual and the demolished road stops incurrin
   simulation.advance(15_000);
   assert.deepEqual(economy.history.read('gold').map(charge), [
     ['demolition', 'completed', 5, 150, 145, 10_000],
-    ['wages', 'completed', 0.04, 145, 144.96, 25_000],
-    ['maintenance', 'completed', 0.064, 144.96, 144.896, 25_000],
+    ['tax', 'completed', 0.2, 145, 145.2, 25_000],
+    ['wages', 'completed', 0.04, 145.2, 145.16, 25_000],
+    ['maintenance', 'completed', 0.064, 145.16, 145.096, 25_000],
   ]);
   simulation.advance(25_000);
-  assert.equal(economy.resources.gold, 144.836);
+  assert.equal(economy.resources.gold, 145.236);
 });
 
 test('maintenance includes all existing construction types even without connections or workers', () => {
@@ -179,16 +182,23 @@ test('maintenance includes all existing construction types even without connecti
 });
 
 test('shortfalls are recorded separately from actual payments without spending beyond treasury funds', () => {
-  const { economy, simulation } = staffed(0.04);
-  simulation.advance(25_000);
-  assert.equal(economy.resources.gold, 0);
-  assert.deepEqual(economy.operatingDeficits, { wages: 0.06, maintenance: 0.07 });
-  assert.deepEqual(economy.history.read('gold').map(charge), [
+  let time = 0;
+  const history = new EconomicHistory(200, () => time);
+  const treasury = new Treasury(0.04, history);
+  const advanceHourWithoutIncome = () => {
+    for (let second = 0; second < 25; second++) treasury.accrueSecond({ wages: 10, maintenance: 7 }, 0);
+    time += 25_000;
+    treasury.closeHour();
+  };
+  advanceHourWithoutIncome();
+  assert.equal(treasury.gold, 0);
+  assert.deepEqual(treasury.deficits, { wages: 0.06, maintenance: 0.07 });
+  assert.deepEqual(history.read('gold').map(charge), [
     ['wages', 'completed', 0.04, 0.04, 0, 25_000],
     ['wages', 'unpaid', 0.06, 0, 0, 25_000],
     ['maintenance', 'unpaid', 0.07, 0, 0, 25_000],
   ]);
-  simulation.advance(25_000);
-  assert.equal(economy.resources.gold, 0);
-  assert.deepEqual(economy.operatingDeficits, { wages: 0.16, maintenance: 0.14 });
+  advanceHourWithoutIncome();
+  assert.equal(treasury.gold, 0);
+  assert.deepEqual(treasury.deficits, { wages: 0.16, maintenance: 0.14 });
 });

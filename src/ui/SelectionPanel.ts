@@ -38,7 +38,7 @@ export class SelectionPanel {
 
   render(cell: Cell | null, construction: ConstructionType | null = null, connected = false, residents = 0,
     productivity?: BuildingProductivity, warehouse?: WarehouseSnapshot, market?: MarketSnapshot,
-    supply?: HousingSupply, foodShortage = 0): void {
+    supply?: HousingSupply, foodShortage = 0, woodSupply?: HousingSupply, woodShortage = 0): void {
     this.coordinates.textContent = cell ? `X: ${cell.column} · Y: ${cell.row}` : 'X: — · Y: —';
     this.terrain.textContent = cell ? 'césped' : '—';
     this.status.textContent = cell
@@ -63,13 +63,19 @@ export class SelectionPanel {
     if (cell && market) {
       const restockMinutes = gameMinutesForSeconds(distributionRules.restockIntervalSeconds).toLocaleString('es');
       this.status.textContent += ' · Reposición cada ' + restockMinutes + ' min del juego';
-      const food = market.food.toLocaleString('es', { maximumFractionDigits: 2 });
-      this.status.textContent += ` · Comida: ${food}/${market.capacity} · Empleados: ${market.workers}/${market.workerCapacity} · Cobertura: ${market.coveredHomes} solares, hasta ${market.range} tramos de camino · ${market.operational ? 'Operativo' : 'Inactivo'}`;
+      const format = (amount: number) => amount.toLocaleString('es', { maximumFractionDigits: 2 });
+      this.status.textContent += ` · Comida: ${format(market.food)} · Madera: ${format(market.wood)} · Capacidad usada: ${format(market.food + market.wood)}/${market.capacity} · Empleados: ${market.workers}/${market.workerCapacity} · Cobertura: ${market.coveredHomes} solares, hasta ${market.range} tramos de camino · ${market.operational ? 'Operativo' : 'Inactivo'}`;
     }
     if (cell && construction === 'house' && supply) {
       this.status.textContent += supply.status === 'reserve' ? ' · Abastecimiento: reserva inicial'
         : supply.status === 'market' ? ` · Mercado con existencias a ${supply.distance} tramos`
         : ' · Sin acceso a alimentos: inmigración detenida';
+    }
+    if (woodSupply && residents > 0) {
+      this.status.textContent += woodSupply.status === 'market'
+        ? ' · Madera disponible en mercado a ' + woodSupply.distance + ' tramos'
+        : ' · Sin acceso a madera disponible';
+      if (woodShortage > 0) this.status.textContent += ' · Madera sin entregar en el último ciclo: ' + woodShortage.toLocaleString('es');
     }
     if (foodShortage > 0) {
       this.status.textContent += ' · Comida sin entregar en el último ciclo: ' + foodShortage.toLocaleString('es');
