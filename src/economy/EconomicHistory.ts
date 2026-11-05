@@ -1,11 +1,12 @@
 import type { ProductId } from './Products';
 
 export type AuditResource = ProductId | 'gold';
-export type AuditOperation = 'production' | 'transfer' | 'consumption' | 'sale' | 'construction' | 'construction-material' | 'demolition';
+export type AuditOperation = 'production' | 'transfer' | 'consumption' | 'sale' | 'construction' | 'construction-material' | 'demolition' | 'wages' | 'maintenance';
 type Balance = Readonly<{ before: number; after: number }>;
 type Movement = Readonly<{
   resource: AuditResource;
   units: number;
+  unitScale?: number;
   origin: string;
   destination: string;
   operation: AuditOperation;
@@ -13,7 +14,7 @@ type Movement = Readonly<{
   destinationBalance?: Balance;
   household?: string;
 }>;
-export type EconomicEvent = Movement & Readonly<{ id: number; timeMs: number; result: 'completed' }>;
+export type EconomicEvent = Movement & Readonly<{ id: number; timeMs: number; result: 'completed' | 'unpaid' }>;
 
 export class EconomicHistory {
   private readonly events: EconomicEvent[] = [];
@@ -29,10 +30,10 @@ export class EconomicHistory {
 
   get latestId(): number { return this.sequence; }
 
-  record(movement: Movement): void {
+  record(movement: Movement, result: EconomicEvent['result'] = 'completed'): void {
     const { originBalance, destinationBalance } = movement;
     this.events.push(Object.freeze({
-      ...movement, id: ++this.sequence, timeMs: this.time(), result: 'completed',
+      ...movement, id: ++this.sequence, timeMs: this.time(), result,
       originBalance: originBalance && Object.freeze({ ...originBalance }),
       destinationBalance: destinationBalance && Object.freeze({ ...destinationBalance }),
     }));

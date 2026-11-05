@@ -1,4 +1,6 @@
+import { distributionRules } from '../economy/Distribution';
 import type { MarketSnapshot, HousingSupply } from '../economy/Distribution';
+import { gameMinutesForSeconds } from '../simulation/GameTime';
 import type { WarehouseSnapshot } from '../economy/Storage';
 import type { BuildingProductivity } from '../economy/Economy';
 import type { Cell } from '../map/CellSelection';
@@ -59,6 +61,8 @@ export class SelectionPanel {
       this.status.textContent += ` · Comida: ${format(warehouse.food)} · Madera: ${format(warehouse.wood)} · Capacidad usada: ${format(warehouse.used)}/${warehouse.capacity} · Disponible: ${format(warehouse.free)} · Empleados: ${warehouse.workers}/${warehouse.workerCapacity} · ${warehouse.operational ? 'Operativo' : 'Inactivo'}`;
     }
     if (cell && market) {
+      const restockMinutes = gameMinutesForSeconds(distributionRules.restockIntervalSeconds).toLocaleString('es');
+      this.status.textContent += ' · Reposición cada ' + restockMinutes + ' min del juego';
       const food = market.food.toLocaleString('es', { maximumFractionDigits: 2 });
       this.status.textContent += ` · Comida: ${food}/${market.capacity} · Empleados: ${market.workers}/${market.workerCapacity} · Cobertura: ${market.coveredHomes} solares, hasta ${market.range} tramos de camino · ${market.operational ? 'Operativo' : 'Inactivo'}`;
     }

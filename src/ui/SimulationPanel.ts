@@ -3,16 +3,18 @@ import { resourceNames } from '../economy/Economy';
 import { unitsPerResource } from '../economy/Inventories';
 import { constructionNames, isConstructionType } from '../map/ConstructionMap';
 import type { SettlementSimulation } from '../simulation/SettlementSimulation';
+import { formatGameTime, gameTimeAt } from '../simulation/GameTime';
 
 const operationNames = {
   production: 'Producción', transfer: 'Transferencia', consumption: 'Consumo', sale: 'Venta',
   construction: 'Costo de construcción', 'construction-material': 'Material de construcción',
-  demolition: 'Costo de demolición',
+  demolition: 'Costo de demolición', wages: 'Salarios', maintenance: 'Mantenimiento',
 } as const;
 const endpointNames: Readonly<Record<string, string>> = {
   production: 'Producción local', treasury: 'Tesorería',
   'initial-reserve': 'Reserva inicial', 'food-consumption': 'Consumo',
-  'construction-reserve': 'Reserva de construcción',
+  'construction-reserve': 'Reserva de construcción', workers: 'Trabajadores',
+  'building-maintenance': 'Mantenimiento de construcciones',
 };
 
 function endpointName(id: string): string {
@@ -22,10 +24,12 @@ function endpointName(id: string): string {
     : endpointNames[id] ?? id;
 }
 
-function exactAmount(units: number): string {
-  if ((units * 10) % unitsPerResource === 0) return (units / unitsPerResource).toLocaleString('es');
-  const whole = Math.floor(units / unitsPerResource);
-  const fraction = (units % unitsPerResource) + '/' + unitsPerResource;
+function exactAmount(units: number, scale = unitsPerResource): string {
+  if ((units % scale * 10_000) % scale === 0) {
+    return (units / scale).toLocaleString('es', { maximumFractionDigits: 4 });
+  }
+  const whole = Math.floor(units / scale);
+  const fraction = (units % scale) + '/' + scale;
   return whole ? whole + ' + ' + fraction : fraction;
 }
 
@@ -64,11 +68,17 @@ export class SimulationPanel {
     this.render();
   }
 
+  renderClock(): void {
+    const time = this.simulation.gameTime;
+    const label = formatGameTime(time) + (time.daylight ? ' · Día' : ' · Noche');
+    if (this.time.textContent !== label) this.time.textContent = label;
+  }
+
   render(building = this.building): void {
     this.building = building;
     this.pause.textContent = this.simulation.paused ? 'Reanudar' : 'Pausar';
     this.speed.value = String(this.simulation.speed);
-    this.time.textContent = (this.simulation.simulatedTimeMs / 1000).toLocaleString('es') + ' s simulados';
+    this.renderClock();
     if (!this.audit.open) return;
 
     const target = this.selectedOnly.checked ? building : undefined;
@@ -83,18 +93,20 @@ export class SimulationPanel {
     this.list.replaceChildren(...[...events].reverse().map(event => {
       const row = document.createElement('li');
       const title = document.createElement('strong');
-      title.textContent = '#' + event.id + ' · ' + (event.timeMs / 1000).toLocaleString('es') + ' s · '
-        + operationNames[event.operation] + ' · ' + resourceNames[event.resource] + ' ' + exactAmount(event.units);
+      const amount = (units: number) => exactAmount(units, event.unitScale);
+      title.textContent = '#' + event.id + ' · ' + formatGameTime(gameTimeAt(event.timeMs)) + ' · '
+        + operationNames[event.operation] + (event.result === 'unpaid' ? ' (impago)' : '')
+        + ' · ' + resourceNames[event.resource] + ' ' + amount(event.units);
       const route = document.createElement('div');
       route.textContent = endpointName(event.origin) + ' → ' + endpointName(event.destination)
         + (event.household ? ' · Entrega a ' + endpointName(event.household) : '');
       const balances = document.createElement('small');
       const parts = [];
       if (event.originBalance) {
-        parts.push('Origen ' + exactAmount(event.originBalance.before) + ' → ' + exactAmount(event.originBalance.after));
+        parts.push('Origen ' + amount(event.originBalance.before) + ' → ' + amount(event.originBalance.after));
       }
       if (event.destinationBalance) {
-        parts.push('Destino ' + exactAmount(event.destinationBalance.before) + ' → ' + exactAmount(event.destinationBalance.after));
+        parts.push('Destino ' + amount(event.destinationBalance.before) + ' → ' + amount(event.destinationBalance.after));
       }
       balances.textContent = parts.join(' · ');
       row.append(title, route, balances);

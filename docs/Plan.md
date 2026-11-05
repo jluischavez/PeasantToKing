@@ -62,6 +62,15 @@ Multijugador, login, servidor, cuentas en nube, ranking global, combate, ejérci
 
 **Siguiente entrega:** 06 — producción/economía básica, definiendo primero los recursos, costos y reglas mínimas; la producción debe depender de conectividad. Después seguir 07–11 para completar el MVP funcional.
 
+### Reglas temporales de 09B
+
+- El calendario ficticio empieza en el año 1, día 1 a las 00:00. Cada día tiene 24 horas y cada año 12 días. El día va de 06:00 a 17:59 y la noche de 18:00 a 05:59.
+- Una hora del juego equivale a 25 segundos de simulación. Un día dura 600 segundos reales a ×1, 300 a ×2 y 200 a ×3. La pausa y la suspensión de la pestaña descartan el tiempo transcurrido mientras están activas.
+- Las tasas visibles se expresan por hora del juego y son independientes de la velocidad. La granja y el campamento maderero producen hasta 50 unidades/h y cada habitante demanda 2,5 comida/h.
+- El salario es de 0,10 oro por trabajador empleado y hora del juego. El mantenimiento por construcción y hora es 0,01 para caminos y solares, 0,05 para granjas y campamentos, 0,08 para almacenes y mercados, y gratuito para el Centro de Aldea.
+- Los gastos se prorratean por segundo de simulación y se liquidan al cierre de cada hora, después de las ventas. Los salarios tienen prioridad sobre el mantenimiento. El historial distingue los pagos de los importes que quedaron impagados. Esos importes quedan registrados sin cobro retroactivo.
+- El calendario reserva cuatro estaciones futuras de tres días cada una. A ×1 equivaldrán a 30 minutos reales por estación y 120 minutos por año. La fase actual solo indica día o noche mediante texto.
+
 ### Funcionalidad futura reservada: evolución visual de la ciudad
 
 **Prioridad:** después de finalizar, probar y publicar el MVP funcional (etapas 06–11), **no antes**. Es una expansión planificada, no un requisito inmediato ni una orden de implementación automática. Dividir en tareas pequeñas independientes:

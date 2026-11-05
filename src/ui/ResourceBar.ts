@@ -1,5 +1,7 @@
 import { resourceNames } from '../economy/Economy';
 import type { Resource, Resources } from '../economy/Economy';
+import type { OperatingCosts } from '../economy/OperatingCosts';
+import { perGameHour } from '../simulation/GameTime';
 
 export class ResourceBar {
   private readonly reserve = document.querySelector<HTMLElement>('#initial-food-reserve')!;
@@ -8,6 +10,9 @@ export class ResourceBar {
   private readonly reserveStatus = document.querySelector<HTMLElement>('#reserve-status')!;
   private readonly available = document.querySelector<HTMLElement>('#available-food')!;
   private readonly storageStatus = document.querySelector<HTMLElement>('#storage-status')!;
+  private readonly wages = document.querySelector<HTMLElement>('#wages-rate')!;
+  private readonly maintenance = document.querySelector<HTMLElement>('#maintenance-rate')!;
+  private readonly net = document.querySelector<HTMLElement>('#net-rate')!;
   private readonly fields = (Object.keys(resourceNames) as Resource[]).map(resource => ({
     resource,
     amount: document.querySelector<HTMLElement>(`#resource-${resource}`)!,
@@ -18,6 +23,7 @@ export class ResourceBar {
     storage: {
       reserve: number; availableFood: number; blocked: number; bootstrap: boolean;
       constructionReserve: number; constructionWood: number;
+      costs: OperatingCosts;
     }): void {
     this.reserveStatus.textContent = storage.reserve === 0 ? 'agotada' : storage.bootstrap ? 'reserva de arranque' : 'cerrada: consumo por mercados';
     this.reserve.textContent = storage.reserve.toLocaleString('es', { maximumFractionDigits: 2 });
@@ -28,10 +34,15 @@ export class ResourceBar {
       ? `Producción bloqueada por falta de almacenamiento: ${storage.blocked} edificio(s).`
       : 'Almacenamiento sin bloqueos.';
     if (this.storageStatus.textContent !== storageMessage) this.storageStatus.textContent = storageMessage;
+    const hourly = (amount: number) => amount.toLocaleString('es', { maximumFractionDigits: 3 });
+    this.wages.textContent = hourly(storage.costs.wages);
+    this.maintenance.textContent = hourly(storage.costs.maintenance);
+    const net = perGameHour(perSecond.gold) - storage.costs.wages - storage.costs.maintenance;
+    this.net.textContent = hourly(Math.round(net * 1000) / 1000 || 0);
     for (const { resource, amount, rate } of this.fields) {
       amount.textContent = resources[resource].toLocaleString('es', { maximumFractionDigits: 2 });
-      const value = perSecond[resource].toLocaleString('es', { maximumFractionDigits: 3 });
-      rate.textContent = resource === 'gold' ? `(ventas: +${value}/s)` : `(+${value}/s)`;
+      const value = hourly(perGameHour(perSecond[resource]));
+      rate.textContent = resource === 'gold' ? `(ventas: +${value}/h)` : `(+${value}/h)`;
     }
   }
 }

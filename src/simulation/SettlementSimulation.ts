@@ -1,4 +1,5 @@
 import { populationRules } from '../population/Population.ts';
+import { gameTimeAt } from './GameTime.ts';
 import { constructionCosts, demolitionCost } from '../map/ConstructionCosts.ts';
 import type { ConstructionCost } from '../map/ConstructionCosts';
 import type { Cell } from '../map/CellSelection';
@@ -17,6 +18,8 @@ function buildingId(cell: Cell, type: ConstructionType): string {
 export class SettlementSimulation {
   private elapsedMs = 0;
   private isPaused = false;
+  private suspended = false;
+  private discardResumingFrame = false;
   private multiplier: SimulationSpeed = 1;
   private immigrationSeconds = 0;
   private demolition: DemolitionTarget | null = null;
@@ -39,7 +42,16 @@ export class SettlementSimulation {
   get speed(): SimulationSpeed { return this.multiplier; }
   get simulatedTimeMs(): number { return this.economy.simulatedTimeMs; }
 
+  get gameTime(): ReturnType<typeof gameTimeAt> {
+    return gameTimeAt(this.simulatedTimeMs + this.elapsedMs);
+  }
+
   setPaused(paused: boolean): void { this.isPaused = paused; }
+
+  setSuspended(suspended: boolean): void {
+    if (this.suspended && !suspended) this.discardResumingFrame = true;
+    this.suspended = suspended;
+  }
   setSpeed(speed: SimulationSpeed): void { this.multiplier = speed; }
 
   costIssue(cost: ConstructionCost): string | null {
@@ -122,6 +134,11 @@ export class SettlementSimulation {
 
   // One shared clock processes production, consumption and immigration in order.
   advance(deltaMs: number): boolean {
+    if (this.suspended) return false;
+    if (this.discardResumingFrame) {
+      this.discardResumingFrame = false;
+      return false;
+    }
     if (this.paused || !Number.isFinite(deltaMs) || deltaMs <= 0) return false;
     this.elapsedMs += deltaMs * this.speed;
     let advanced = false;
@@ -132,6 +149,7 @@ export class SettlementSimulation {
       this.economy.recalculate(this.map, this.connections, this.population);
       this.economy.advance(1000);
       this.economy.consumeHomes(this.population, populationRules.foodPerResidentPerSecond);
+      this.economy.accountOperatingSecond(this.population.employed);
       this.immigrationSeconds++;
       if (this.immigrationSeconds === this.immigrationIntervalSeconds) {
         this.immigrationSeconds = 0;

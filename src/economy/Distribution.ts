@@ -1,6 +1,7 @@
 import type { ProductId, ProductFlags } from './Products';
 import { populationRules } from '../population/Population.ts';
 import { unitsPerResource as U } from './Inventories.ts';
+import { gameMinutesForSeconds } from '../simulation/GameTime.ts';
 import { MarketCoverage } from '../map/MarketCoverage.ts';
 import type { Storage } from './Storage';
 import type { Cell } from '../map/CellSelection';
@@ -207,7 +208,9 @@ export class Distribution {
       if (this.storage.connectedWarehouseFood(false) > 0) return 'Comida en almacenes sin empleados: falta activar almacenamiento.';
       return 'Mercados sin existencias: esperando producción de alimentos.';
     }
-    return 'Comida distribuida insuficiente para reservar 5 segundos de consumo.';
+    return 'Comida distribuida insuficiente para reservar '
+      + gameMinutesForSeconds(populationRules.immigrationIntervalSeconds).toLocaleString('es')
+      + ' min del juego de consumo.';
   }
 
   supplyAt(cell: Cell): HousingSupply {

@@ -7,12 +7,16 @@
     <title>Peasant to King</title>
   </head>
   <body>
-    <header id="resource-bar" aria-label="Recursos y producción por segundo">
-      <p>Oro: <strong id="resource-gold">150</strong> <span id="production-gold">(+0/s)</span></p>
-      <p>Comida: <strong id="resource-food">0</strong> <span id="production-food">(+0/s)</span></p>
-      <p>Madera: <strong id="resource-wood">50</strong> <span id="production-wood">(+0/s)</span> · Para construir: <span id="construction-wood">50</span> (reserva: <span id="construction-reserve">50</span>)</p>
+    <header id="resource-bar" aria-label="Recursos y tasas por hora del juego">
+      <p>Oro: <strong id="resource-gold">150</strong> <span id="production-gold">(+0/h)</span></p>
+      <p>Comida: <strong id="resource-food">0</strong> <span id="production-food">(+0/h)</span></p>
+      <p>Madera: <strong id="resource-wood">50</strong> <span id="production-wood">(+0/h)</span> · Para construir: <span id="construction-wood">50</span> (reserva: <span id="construction-reserve">50</span>)</p>
       <p>Reserva inicial: <span id="initial-food-reserve">20</span> comida (<span id="reserve-status">reserva de arranque</span>) · Comida disponible para viviendas: <span id="available-food">20</span></p>
       <p id="storage-status" role="status">Almacenamiento sin bloqueos.</p>
+      <p aria-label="Tesorería por hora del juego">
+        Salarios: <span id="wages-rate">0</span> oro/h · Mantenimiento: <span id="maintenance-rate">0</span> oro/h
+        · Neto estimado: <strong id="net-rate">0</strong> oro/h
+      </p>
       <section id="population-bar" aria-label="Población y empleo">
         <p>Población: <strong id="population-total">0</strong></p>
         <p>Población activa: <strong id="population-active">0</strong></p>
@@ -21,7 +25,7 @@
         <p>Empleados: <strong id="workers-employed">0</strong> · Desempleados: <span id="workers-unemployed">0</span> (<span id="unemployment-rate">0</span> %)</p>
         <p>Atractivo migratorio: <strong id="migration-attractiveness">0</strong>/100</p>
         <p id="migration-reason">Esperando condiciones para inmigración.</p>
-        <p>Demanda: <span id="food-consumption">0,0</span> comida/s · Déficit acumulado: <span id="food-shortage">0</span> comida</p>
+        <p>Demanda: <span id="food-consumption">0,0</span> comida/h · Déficit acumulado: <span id="food-shortage">0</span> comida</p>
       </section>
     </header>
     <div id="workspace">
@@ -69,7 +73,7 @@
               <label><input id="audit-selected-only" type="checkbox"> Edificio seleccionado</label>
             </div>
             <p id="audit-empty">Todavía no hay movimientos.</p>
-            <ol id="audit-list" aria-label="Movimientos completados"></ol>
+            <ol id="audit-list" aria-label="Movimientos y gastos impagados"></ol>
           </section>
         </details>
       </aside>
@@ -84,7 +88,7 @@
             <option value="3">×3</option>
           </select>
         </label>
-        <span id="simulation-time">0 s simulados</span>
+        <span id="simulation-time">Año 1 · Día 1 · 00:00 · Noche</span>
       </nav>
       <nav id="construction-menu" aria-label="Construcción">
         <p id="construction-status" aria-live="polite">Selecciona un tipo de construcción.</p>

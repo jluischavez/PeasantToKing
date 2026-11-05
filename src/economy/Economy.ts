@@ -1,4 +1,8 @@
 import { EconomicHistory } from './EconomicHistory.ts';
+import { Treasury } from './Treasury.ts';
+import { centsPerGold, maintenanceByType, wagePerWorker } from './OperatingCosts.ts';
+import type { OperatingCosts } from './OperatingCosts';
+import { simulatedMsPerGameHour } from '../simulation/GameTime.ts';
 import { populationRules } from '../population/Population.ts';
 import type { LaborContext } from '../population/Population';
 import { productNames } from './Products.ts';
@@ -45,7 +49,8 @@ const asResources = (units: Resources): Resources => ({
 });
 
 export class Economy {
-  private goldUnits: number;
+  private readonly treasury: Treasury;
+  private maintenanceRate = 0;
   readonly storage: Storage;
   readonly distribution: Distribution;
   private context: { map: ConstructionMap; connections: RoadConnections; workforce: Workforce } | null = null;
@@ -59,7 +64,7 @@ export class Economy {
   // Called once for a new settlement. Recalculation and UI never grant resources.
   constructor(initial: Readonly<Resources> = economyRules.initialResources, historyCapacity = 200) {
     this.history = new EconomicHistory(historyCapacity, () => this.completedMs);
-    this.goldUnits = Math.round(initial.gold * unitsPerResource);
+    this.treasury = new Treasury(initial.gold, this.history);
     this.storage = new Storage({
       food: Math.round(initial.food * unitsPerResource),
       wood: Math.round(initial.wood * unitsPerResource),
@@ -72,7 +77,7 @@ export class Economy {
   get resources(): Readonly<Resources> {
     const goods = this.storage.totalsUnits;
     goods.food += this.distribution.totalMarketFoodUnits;
-    return asResources({ gold: this.goldUnits, food: goods.food, wood: goods.wood });
+    return { gold: this.treasury.gold, food: goods.food / unitsPerResource, wood: goods.wood / unitsPerResource };
   }
 
   get availableConstructionWood(): number {
@@ -81,26 +86,29 @@ export class Economy {
 
   missingCost(cost: ConstructionCost): ConstructionCost {
     return {
-      gold: Math.max(0, Math.round(cost.gold * unitsPerResource) - this.goldUnits) / unitsPerResource,
+      gold: this.treasury.shortfall(cost.gold),
       wood: Math.max(0, Math.round(cost.wood * unitsPerResource)
         - this.storage.inventories.availableConstructionWoodUnits) / unitsPerResource,
     };
   }
 
   payBuildingCost(cost: ConstructionCost, operation: 'construction' | 'demolition', destination: string): boolean {
-    const gold = Math.round(cost.gold * unitsPerResource);
     const wood = Math.round(cost.wood * unitsPerResource);
-    if (!Number.isSafeInteger(gold) || gold < 0 || gold > this.goldUnits
+    if (!Number.isFinite(cost.gold) || cost.gold < 0 || this.treasury.shortfall(cost.gold) > 0
       || !this.storage.inventories.spendConstructionWood(wood, destination)) return false;
-    if (gold > 0) {
-      const before = this.goldUnits;
-      this.goldUnits -= gold;
-      this.history.record({
-        operation, resource: 'gold', units: gold, origin: 'treasury', destination,
-        originBalance: { before, after: this.goldUnits },
-      });
-    }
+    this.treasury.payBuilding(cost.gold, operation, destination);
     return true;
+  }
+
+  operatingCostsPerHour(employed: number): OperatingCosts {
+    return { wages: employed * wagePerWorker / centsPerGold, maintenance: this.maintenanceRate / centsPerGold };
+  }
+
+  get operatingDeficits(): OperatingCosts { return this.treasury.deficits; }
+
+  accountOperatingSecond(employed: number): void {
+    this.treasury.accrueSecond({ wages: employed * wagePerWorker, maintenance: this.maintenanceRate });
+    if (this.completedMs % simulatedMsPerGameHour === 0) this.treasury.closeHour();
   }
 
   get availableFood(): number {
@@ -128,11 +136,13 @@ export class Economy {
     this.batches = [];
     const total: Resources = { gold: 0, food: 0, wood: 0 };
     this.buildings.clear();
+    this.maintenanceRate = 0;
     for (let row = 0; row < map.rows; row++) {
       for (let column = 0; column < map.columns; column++) {
         const cell = { column, row };
         const type = map.getConstruction(cell);
         if (!type) continue;
+        this.maintenanceRate += maintenanceByType[type];
         const maximum = productionByType[type];
         if (maximum.gold + maximum.food + maximum.wood === 0) continue;
         const capacity = workforce.capacityFor(type);
@@ -160,14 +170,8 @@ export class Economy {
   consumeHomes(population: Pick<Population, 'residencesSnapshot'>, foodPerResident: number): void {
     // Provisional revenue: one gold per resource unit delivered by a market.
     // No revenue from replenishment, reserve consumption or unsatisfied demand.
-    this.distribution.consumeHomes(population.residencesSnapshot, foodPerResident, (market, household, units) => {
-      const before = this.goldUnits;
-      this.goldUnits += units;
-      this.history.record({
-        operation: 'sale', resource: 'gold', units, origin: market, destination: 'treasury',
-        household, destinationBalance: { before, after: this.goldUnits },
-      });
-    });
+    this.distribution.consumeHomes(population.residencesSnapshot, foodPerResident,
+      (market, household, units) => this.treasury.creditSale(market, household, units));
     this.refresh();
   }
 

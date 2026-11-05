@@ -1,5 +1,6 @@
 import { populationRules } from '../population/Population';
 import type { Population } from '../population/Population';
+import { perGameHour } from '../simulation/GameTime';
 
 export class PopulationPanel {
   private readonly total = document.querySelector<HTMLElement>('#population-total')!;
@@ -38,7 +39,7 @@ export class PopulationPanel {
     this.employed.textContent = String(population.employed);
     this.unemployed.textContent = String(population.unemployed);
     this.available.textContent = String(population.availableJobs);
-    this.consumption.textContent = population.foodConsumptionPerSecond.toLocaleString('es', {
+    this.consumption.textContent = perGameHour(population.foodConsumptionPerSecond).toLocaleString('es', {
       minimumFractionDigits: 1, maximumFractionDigits: 1,
     });
   }

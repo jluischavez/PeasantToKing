@@ -47,6 +47,7 @@ export class MapScene extends Phaser.Scene {
         reserve: economy.storage.initialFoodReserve, availableFood: population.connectedCapacity > 0 ? economy.availableFood : 0,
         blocked: economy.blockedProducers, bootstrap: economy.distribution.bootstrapActive,
         constructionReserve: economy.storage.constructionWoodReserve, constructionWood: economy.availableConstructionWood,
+        costs: economy.operatingCostsPerHour(population.employed),
       });
       const supply = economy.immigrationSupply(population, populationRules.familySize,
         populationRules.immigrationIntervalSeconds, populationRules.foodPerResidentPerSecond,
@@ -74,15 +75,25 @@ export class MapScene extends Phaser.Scene {
       simulationPanel.render(cell && type ? type + ':' + cell.column + ',' + cell.row : null);
       configuration.render(cell, warehouse, market);
     };
-    const updateSimulation = (_time: number, delta: number): void => {
+    const sceneEvents = new AbortController();
+    const syncVisibility = (): void => simulation.setSuspended(document.hidden);
+    const visibilityOptions = { signal: sceneEvents.signal };
+    document.addEventListener('visibilitychange', syncVisibility, visibilityOptions);
+    document.addEventListener('freeze', () => simulation.setSuspended(true), visibilityOptions);
+    document.addEventListener('resume', syncVisibility, visibilityOptions);
+    syncVisibility();
+
+    const updateSimulation = (): void => {
       const previousPopulation = population.total;
-      if (simulation.advance(delta)) {
+      if (simulation.advance(this.game.loop.rawDelta)) {
         renderSummary();
         renderSelected();
         updatePointerFeedback();
         if (population.total !== previousPopulation) {
           map.renderConstructions(constructions, connections, population);
         }
+      } else {
+        simulationPanel.renderClock();
       }
     };
     this.events.on(Phaser.Scenes.Events.UPDATE, updateSimulation);
@@ -131,6 +142,7 @@ export class MapScene extends Phaser.Scene {
     };
     updatePauseControls();
     const simulationPanel = new SimulationPanel(simulation, economy.history, () => {
+      this.game.loop.resetDelta();
       updatePauseControls();
       updatePointerFeedback();
       renderSelected();
@@ -216,6 +228,7 @@ export class MapScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off(Phaser.Scale.Events.RESIZE, layout);
       this.events.off(Phaser.Scenes.Events.UPDATE, updateSimulation);
+      sceneEvents.abort();
       simulationPanel.destroy();
       configuration.destroy();
       panel.destroy();
