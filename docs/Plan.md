@@ -104,6 +104,13 @@ Multijugador, login, servidor, cuentas en nube, ranking global, combate, ejérci
 - Voces de la aldea amplía su catálogo con 69 plantillas y rota entre temas y hogares. La cadencia se mide en tiempo simulado.
 - Alpha 0.1 cierra la etapa. El desarrollo continúa en `main` y la publicación web queda aplazada. El [README](../README.md) describe la verificación local.
 
+### Etapa 12A. Mapa grande y cámara móvil
+
+- El mundo de pasto mide 100 × 100 casillas. La vista inicial abarca 20 casillas por lado y se centra en el Centro de Aldea. Una partida nueva coloca el centro en la casilla (50, 50).
+- WASD, flechas y arrastre desplazan la cámara. La rueda hace zoom hacia el puntero. **Centrar aldea** regresa al Centro de Aldea con el zoom actual. El clic izquierdo se confirma al soltar y se cancela si el puntero se arrastró.
+- Los guardados incluyen dimensiones, posición y zoom. Las partidas de 20 × 20 se amplían al cargar usando el ancho original para conservar sus coordenadas.
+- Las dimensiones y el punto de inicio se definen por separado de la cámara. Los terrenos procedurales quedan para 12B y el camino exterior para 12C.
+
 ### Funcionalidad futura reservada: evolución visual de la ciudad
 
 **Prioridad:** después de finalizar, probar y publicar el MVP funcional (etapas 06–11), **no antes**. Es una expansión planificada, no un requisito inmediato ni una orden de implementación automática. Dividir en tareas pequeñas independientes:

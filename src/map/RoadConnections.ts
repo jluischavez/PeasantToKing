@@ -49,15 +49,11 @@ export class RoadConnections {
     }
 
     // Buildings can access a reachable road, but cannot relay its connection.
-    for (let row = 0; row < map.rows; row++) {
-      for (let column = 0; column < map.columns; column++) {
-        const cell = { column, row };
-        const type = map.getConstruction(cell);
-        if (type && type !== 'road' && type !== 'villageCenter'
-          && neighbors(cell).some(neighbor =>
-            map.getConstruction(neighbor) === 'road' && this.isConnected(neighbor))) {
-          this.connected.add(key(cell));
-        }
+    for (const { cell, type } of map.occupiedCells()) {
+      if (type !== 'road' && type !== 'villageCenter'
+        && neighbors(cell).some(neighbor =>
+          map.getConstruction(neighbor) === 'road' && this.isConnected(neighbor))) {
+        this.connected.add(key(cell));
       }
     }
   }

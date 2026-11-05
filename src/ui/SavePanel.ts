@@ -1,4 +1,5 @@
 import type { Cell } from '../map/CellSelection';
+import type { CameraView } from '../map/MapCamera';
 import { autosaveMs, saveSlots } from '../persistence/SaveSlots.ts';
 import type { SaveSlot, SaveSlots } from '../persistence/SaveSlots';
 import { Session } from '../persistence/Session.ts';
@@ -16,8 +17,8 @@ export class SavePanel {
   private readonly events = new AbortController();
   private readonly timer: number;
 
-  constructor(private readonly slots: SaveSlots, session: Session, selection: () => Cell | null,
-    replace: (session: Session, selection: Cell | null) => void) {
+  constructor(private readonly slots: SaveSlots, session: Session, selection: () => Cell | null, camera: () => CameraView,
+    replace: (session: Session, selection: Cell | null, camera?: CameraView) => void) {
     const options = { signal: this.events.signal };
     const onClick = (id: string, action: () => void) => {
       document.getElementById(id)!.addEventListener('click', action, options);
@@ -30,7 +31,7 @@ export class SavePanel {
       const slot = this.slot();
       const { raw } = this.slots.inspect(slot);
       if (this.slots.needsConfirmation(slot, raw) && !window.confirm('¿Sobrescribir la partida de la ranura ' + slot + '?')) return;
-      this.slots.save(slot, raw, session, selection());
+      this.slots.save(slot, raw, session, selection(), camera());
       this.report('Partida guardada en la ranura ' + slot + '.');
       this.refresh(slot);
     }));
@@ -40,18 +41,18 @@ export class SavePanel {
       const game = this.slots.load(slot);
       this.dialog.close();
       this.report('Partida cargada de la ranura ' + slot + '.');
-      replace(game.session, game.selection);
+      replace(game.session, game.selection, game.camera);
     }));
     onClick('new-game', () => this.run(() => {
       if (!window.confirm('¿Iniciar una nueva partida? Se perderá el progreso sin guardar de la partida activa.')) return;
       this.slots.detach();
       this.dialog.close();
       this.report('Nueva partida iniciada. Las ranuras guardadas se conservan.');
-      replace(new Session(), null);
+      replace(Session.start(), null);
     }));
 
     this.timer = window.setInterval(() => this.run(() => {
-      const slot = this.slots.autosave(session, selection());
+      const slot = this.slots.autosave(session, selection(), camera());
       this.report(slot === null ? 'Autoguardado pendiente. Elige una ranura para guardar.'
         : 'Autoguardado completado en la ranura ' + slot + '.');
       if (this.dialog.open) this.refresh(this.slot());

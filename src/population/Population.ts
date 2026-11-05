@@ -187,20 +187,15 @@ export class Population {
     this.laborContext = context;
     const residences = new Map<string, Residence>();
     const workplaces = new Map<string, Workplace>();
-    for (let row = 0; row < map.rows; row++) {
-      for (let column = 0; column < map.columns; column++) {
-        const cell = { column, row };
-        const type = map.getConstruction(cell);
-        if (!type) continue;
-        const connected = connections.isConnected(cell);
-        if (type === 'house') {
-          residences.set(key(cell), {
-            cell, connected, residents: this.residentsAt(cell), level: this.housingLevelAt(cell),
-          });
-        }
-        if (connected && jobsByType[type] > 0) {
-          workplaces.set(key(cell), { cell, type, capacity: jobsByType[type], workers: 0 });
-        }
+    for (const { cell, type } of map.occupiedCells()) {
+      const connected = connections.isConnected(cell);
+      if (type === 'house') {
+        residences.set(key(cell), {
+          cell, connected, residents: this.residentsAt(cell), level: this.housingLevelAt(cell),
+        });
+      }
+      if (connected && jobsByType[type] > 0) {
+        workplaces.set(key(cell), { cell, type, capacity: jobsByType[type], workers: 0 });
       }
     }
     this.residences = residences;

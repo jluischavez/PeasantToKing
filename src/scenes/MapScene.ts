@@ -3,6 +3,9 @@ import { VillageVoicesPanel } from '../ui/VillageVoicesPanel';
 import { ProductConfigurationPanel } from '../ui/ProductConfigurationPanel';
 import Phaser from 'phaser';
 import { GridMap } from '../map/GridMap';
+import { MapCamera, cellSize } from '../map/MapCamera';
+import type { CameraView } from '../map/MapCamera';
+import { startingCell } from '../map/World';
 import { housingArt } from '../map/HousingArt';
 import { CellSelection } from '../map/CellSelection';
 import type { Cell } from '../map/CellSelection';
@@ -20,10 +23,12 @@ import { PopulationPanel } from '../ui/PopulationPanel';
 import { Session } from '../persistence/Session';
 import { SaveSlots } from '../persistence/SaveSlots';
 import { SavePanel } from '../ui/SavePanel';
+import { bindMapInput } from './MapInput';
 
 export class MapScene extends Phaser.Scene {
-  private session = new Session();
+  private session = Session.start();
   private selectedCell: Cell | null = null;
+  private cameraView?: CameraView;
   private readonly saveSlots = new SaveSlots();
   constructor() {
     super('MapScene');
@@ -36,13 +41,19 @@ export class MapScene extends Phaser.Scene {
   }
 
   create(): void {
-    const title = this.add.text(0, 0, 'Peasant to King', {
-      fontFamily: 'Georgia, serif',
-      color: '#ecd5a2',
-    }).setOrigin(0.5);
     const session = this.session;
     const { map: constructions, world, connections, economy, population, simulation } = session;
     const map = new GridMap(this, world);
+    const view = new MapCamera(world, constructions.villageCenter ?? this.selectedCell ?? startingCell(world), this.cameraView);
+    const camera = this.cameras.main.setBounds(0, 0, world.columns * cellSize, world.rows * cellSize);
+    const centerButton = document.querySelector<HTMLButtonElement>('#center-camera')!;
+    const syncCamera = (): void => {
+      const bounds = view.bounds;
+      // Phaser zooms around the center of its viewport.
+      const shift = (bounds.size - view.viewport.size) / 2;
+      camera.setZoom(view.zoom).setScroll(bounds.x + shift, bounds.y + shift);
+      map.updateView(bounds, constructions, connections, population);
+    };
     const selection = new CellSelection();
     if (this.selectedCell) selection.select(this.selectedCell);
     const resourceBar = new ResourceBar(economy.currentTaxPolicy, policy => {
@@ -104,7 +115,8 @@ export class MapScene extends Phaser.Scene {
     document.addEventListener('resume', syncVisibility, visibilityOptions);
     syncVisibility();
 
-    const updateSimulation = (): void => {
+    const updateSimulation = (_time: number, delta: number): void => {
+      mapInput.update(delta);
       const previousPopulation = population.total;
       const previousHousing = simulation.housing.revision;
       if (simulation.advance(this.game.loop.rawDelta)) {
@@ -118,7 +130,6 @@ export class MapScene extends Phaser.Scene {
         simulationPanel.renderClock();
       }
     };
-    this.events.on(Phaser.Scenes.Events.UPDATE, updateSimulation);
     let mode: ConstructionMode = null;
     let hoveredCell: Cell | null = null;
     const updatePointerFeedback = (): void => {
@@ -201,43 +212,19 @@ export class MapScene extends Phaser.Scene {
     });
 
     const tabs = new CityTabs(renderSelected);
-    const saves = new SavePanel(this.saveSlots, session, () => selection.selected, (next, cell) => {
+    const saves = new SavePanel(this.saveSlots, session, () => selection.selected, () => view.view, (next, cell, savedCamera) => {
       this.session = next;
       this.selectedCell = cell;
+      this.cameraView = savedCamera;
       this.game.loop.resetDelta();
       this.scene.restart();
     });
     if (constructions.villageCenter) menu.disableVillageCenter();
+    centerButton.disabled = !constructions.villageCenter;
     renderSummary();
     renderSelected();
 
-    const layout = (): void => {
-      const { width, height } = this.scale;
-      const headerHeight = Math.min(80, height * 0.25);
-      const size = Math.max(0, Math.min(width - 32, height - headerHeight - 32));
-      title.setPosition(width / 2, headerHeight / 2);
-      title.setFontSize(Math.min(36, width / 10, headerHeight * 0.55));
-      map.layout((width - size) / 2, headerHeight + (height - headerHeight - size) / 2, size);
-      map.renderConstructions(constructions, connections, population);
-      map.renderSelection(selection.selected);
-      hoveredCell = null;
-      updatePointerFeedback();
-    };
-
-    layout();
-    this.scale.on(Phaser.Scale.Events.RESIZE, layout);
-    this.input.on(Phaser.Input.Events.POINTER_MOVE, (pointer: Phaser.Input.Pointer) => {
-      hoveredCell = map.getCellAt(pointer.x, pointer.y);
-      updatePointerFeedback();
-    });
-    this.input.on(Phaser.Input.Events.GAME_OUT, () => {
-      hoveredCell = null;
-      updatePointerFeedback();
-    });
-    this.input.on(Phaser.Input.Events.POINTER_DOWN, (pointer: Phaser.Input.Pointer) => {
-      if (!pointer.leftButtonDown()) return;
-      const cell = map.getCellAt(pointer.x, pointer.y);
-      if (!cell) return;
+    const clickCell = (cell: Cell): void => {
       selection.select(cell);
       if (mode === 'demolish') {
         const issue = simulation.requestDemolition(cell);
@@ -251,6 +238,7 @@ export class MapScene extends Phaser.Scene {
           map.renderConstructions(constructions, connections, population);
           if (mode === 'villageCenter') {
             menu.disableVillageCenter();
+            centerButton.disabled = false;
             mode = null;
           }
           menu.renderMode(mode);
@@ -260,7 +248,35 @@ export class MapScene extends Phaser.Scene {
       renderSelected();
       hoveredCell = cell;
       updatePointerFeedback();
-    });
+    };
+    const mapInput = bindMapInput(this.game.canvas, view, () => this.scale.gameSize, syncCamera, cell => {
+      if (cell?.column === hoveredCell?.column && cell?.row === hoveredCell?.row) return;
+      hoveredCell = cell;
+      updatePointerFeedback();
+    }, clickCell, sceneEvents.signal);
+    const layout = (): void => {
+      const { width, height } = this.scale.gameSize;
+      const headerHeight = Math.min(80, height * 0.25);
+      const size = Math.max(1, Math.floor(Math.min(width - 32, height - headerHeight - 32)));
+      const x = Math.floor((width - size) / 2);
+      const y = Math.floor(headerHeight + (height - headerHeight - size) / 2);
+      view.setViewport({ x, y, size });
+      camera.setViewport(x, y, size, size);
+      syncCamera();
+      mapInput.refreshHover();
+    };
+    centerButton.addEventListener('click', () => {
+      const center = constructions.villageCenter;
+      if (!center) return;
+      view.focus(center);
+      syncCamera();
+      mapInput.refreshHover();
+      this.game.canvas.focus({ preventScroll: true });
+    }, visibilityOptions);
+    layout();
+    map.renderSelection(selection.selected);
+    this.events.on(Phaser.Scenes.Events.UPDATE, updateSimulation);
+    this.scale.on(Phaser.Scale.Events.RESIZE, layout);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off(Phaser.Scale.Events.RESIZE, layout);
       this.events.off(Phaser.Scenes.Events.UPDATE, updateSimulation);
@@ -273,7 +289,10 @@ export class MapScene extends Phaser.Scene {
       panel.destroy();
       menu.destroy();
       saves.destroy();
-      if (this.session === session) this.selectedCell = selection.selected;
+      if (this.session === session) {
+        this.selectedCell = selection.selected;
+        this.cameraView = view.view;
+      }
     });
   }
 }

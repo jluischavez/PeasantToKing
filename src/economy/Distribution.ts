@@ -115,25 +115,21 @@ export class Distribution {
         this.marketSales.delete(market.id);
       }
     }
-    for (let row = 0; row < map.rows; row++) {
-      for (let column = 0; column < map.columns; column++) {
-        const cell = { column, row };
-        if (map.getConstruction(cell) !== 'market') continue;
-        const id = 'market:' + key(cell);
-        const network = connections.networkFor(cell);
-        if (network === null) this.marketSales.delete(id);
-        const workerCapacity = workforce.capacityFor('market');
-        const workers = network ? Math.min(workerCapacity, Math.max(0, workforce.workersAt(cell))) : 0;
-        if (!this.markets.has(id)) {
-          this.storage.inventories.create(id, {
-            kind: 'market', capacity: distributionRules.marketCapacity * U,
-            network, operational: workers > 0,
-          });
-        }
-        this.markets.set(id, { id, cell, workers, workerCapacity, connected: network !== null });
-        this.storage.inventories.setAccess(id, network, workers > 0);
-
+    for (const { cell, type } of map.occupiedCells()) {
+      if (type !== 'market') continue;
+      const id = 'market:' + key(cell);
+      const network = connections.networkFor(cell);
+      if (network === null) this.marketSales.delete(id);
+      const workerCapacity = workforce.capacityFor('market');
+      const workers = network ? Math.min(workerCapacity, Math.max(0, workforce.workersAt(cell))) : 0;
+      if (!this.markets.has(id)) {
+        this.storage.inventories.create(id, {
+          kind: 'market', capacity: distributionRules.marketCapacity * U,
+          network, operational: workers > 0,
+        });
       }
+      this.markets.set(id, { id, cell, workers, workerCapacity, connected: network !== null });
+      this.storage.inventories.setAccess(id, network, workers > 0);
     }
     this.finishBootstrapIfStocked();
   }

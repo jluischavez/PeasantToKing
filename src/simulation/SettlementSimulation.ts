@@ -259,12 +259,13 @@ export class SettlementSimulation {
         }
       }
       this.voices.advance(this.simulatedTimeMs, () => this.needs.observations(this.population.residencesSnapshot), () => {
-        const buildings = this.map.saveCells();
+        const buildings = this.map.occupiedCells();
         return {
           unemployment: this.population.unemploymentRate, tax: this.economy.currentTaxPolicy,
           waiting: this.population.waitingImmigrants,
-          hasMarket: buildings.includes('market'), hasWarehouse: buildings.includes('warehouse'),
-          hasRoad: buildings.includes('road'),
+          hasMarket: buildings.some(({ type }) => type === 'market'),
+          hasWarehouse: buildings.some(({ type }) => type === 'warehouse'),
+          hasRoad: buildings.some(({ type }) => type === 'road'),
         };
       });
       advanced = true;

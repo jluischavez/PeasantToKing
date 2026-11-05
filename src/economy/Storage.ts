@@ -45,27 +45,23 @@ export class Storage {
         this.warehouses.delete(warehouse.id);
       }
     }
-    for (let row = 0; row < map.rows; row++) {
-      for (let column = 0; column < map.columns; column++) {
-        const cell = { column, row };
-        const type = map.getConstruction(cell);
-        if (type === 'farm' || type === 'lumberjack') {
-          this.producers.set(key(cell), type === 'farm' ? 'food' : 'wood');
-        }
-        if (type !== 'warehouse') continue;
-        const id = key(cell);
-        const network = connections.networkFor(cell);
-        const workerCapacity = workforce.capacityFor('warehouse');
-        const workers = network ? Math.min(workerCapacity, Math.max(0, workforce.workersAt(cell))) : 0;
-        if (!this.warehouses.has(id)) {
-          this.inventories.create(id, {
-            kind: 'warehouse', capacity: storageRules.warehouseCapacity * unitsPerResource,
-            network, operational: workers > 0,
-          });
-        }
-        this.warehouses.set(id, { id, cell, workers, workerCapacity, connected: network !== null });
-        this.inventories.setAccess(id, network, workers > 0);
+    for (const { cell, type } of map.occupiedCells()) {
+      if (type === 'farm' || type === 'lumberjack') {
+        this.producers.set(key(cell), type === 'farm' ? 'food' : 'wood');
       }
+      if (type !== 'warehouse') continue;
+      const id = key(cell);
+      const network = connections.networkFor(cell);
+      const workerCapacity = workforce.capacityFor('warehouse');
+      const workers = network ? Math.min(workerCapacity, Math.max(0, workforce.workersAt(cell))) : 0;
+      if (!this.warehouses.has(id)) {
+        this.inventories.create(id, {
+          kind: 'warehouse', capacity: storageRules.warehouseCapacity * unitsPerResource,
+          network, operational: workers > 0,
+        });
+      }
+      this.warehouses.set(id, { id, cell, workers, workerCapacity, connected: network !== null });
+      this.inventories.setAccess(id, network, workers > 0);
     }
   }
 

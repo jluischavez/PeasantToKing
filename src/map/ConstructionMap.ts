@@ -20,6 +20,8 @@ export function isConstructionType(value: string | undefined): value is Construc
 
 export class ConstructionMap {
   private readonly cells: (ConstructionType | null)[];
+  private readonly occupied = new Set<number>();
+  private orderedCells: readonly Readonly<{ cell: Readonly<Cell>; type: ConstructionType }>[] | null = null;
   private center: Cell | null = null;
   readonly columns: number;
   readonly rows: number;
@@ -31,6 +33,15 @@ export class ConstructionMap {
   }
 
   saveCells(): readonly (ConstructionType | null)[] { return [...this.cells]; }
+
+  // Retain row-major order for allocation, workforce and save compatibility.
+  occupiedCells() {
+    this.orderedCells ??= [...this.occupied].sort((first, second) => first - second).map(index => ({
+      cell: { column: index % this.columns, row: Math.floor(index / this.columns) },
+      type: this.cells[index]!,
+    }));
+    return this.orderedCells;
+  }
 
   cellAtKey(key: string): Cell | undefined {
     if (typeof key !== 'string' || !/^\d+,\d+$/.test(key)) return undefined;
@@ -61,13 +72,19 @@ export class ConstructionMap {
   remove(cell: Cell): boolean {
     const type = this.getConstruction(cell);
     if (!type || type === 'villageCenter') return false;
-    this.cells[cell.row * this.columns + cell.column] = null;
+    const index = cell.row * this.columns + cell.column;
+    this.cells[index] = null;
+    this.occupied.delete(index);
+    this.orderedCells = null;
     return true;
   }
 
   place(cell: Cell, type: ConstructionType): boolean {
     if (!this.canPlace(cell, type)) return false;
-    this.cells[cell.row * this.columns + cell.column] = type;
+    const index = cell.row * this.columns + cell.column;
+    this.cells[index] = type;
+    this.occupied.add(index);
+    this.orderedCells = null;
     if (type === 'villageCenter') this.center = { column: cell.column, row: cell.row };
     return true;
   }

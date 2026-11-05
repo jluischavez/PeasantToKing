@@ -1,6 +1,7 @@
 import { Session } from './Session.ts';
 import { check, whole } from './validation.ts';
 import type { Cell } from '../map/CellSelection';
+import type { CameraView } from '../map/MapCamera';
 
 export const saveSlots = [1, 2, 3] as const;
 export type SaveSlot = typeof saveSlots[number];
@@ -41,10 +42,10 @@ export class SaveSlots {
     return raw !== null && (this.active?.slot !== slot || this.active.raw !== raw);
   }
 
-  save(slot: SaveSlot, expected: string | null, session: Session, selection: Cell | null): void {
+  save(slot: SaveSlot, expected: string | null, session: Session, selection: Cell | null, camera?: CameraView): void {
     const backend = this.backend();
     if (backend.getItem(saveKey(slot)) !== expected) throw new Error('La ranura cambió. Revisa su contenido e inténtalo de nuevo.');
-    const raw = JSON.stringify({ version, savedAt: Date.now(), state: session.saveState(selection) } satisfies Envelope);
+    const raw = JSON.stringify({ version, savedAt: Date.now(), state: session.saveState(selection, camera) } satisfies Envelope);
     if (raw.length > maxSaveLength) throw new Error('La partida supera el tamaño admitido.');
     backend.setItem(saveKey(slot), raw);
     this.active = { slot, raw };
@@ -70,15 +71,15 @@ export class SaveSlots {
     return game;
   }
 
-  autosave(session: Session, selection: Cell | null): SaveSlot | null {
+  autosave(session: Session, selection: Cell | null, camera?: CameraView): SaveSlot | null {
     if (this.active) {
       const { slot, raw } = this.active;
-      this.save(slot, raw, session, selection);
+      this.save(slot, raw, session, selection, camera);
       return slot;
     }
     const empty = saveSlots.find(slot => this.inspect(slot).raw === null);
     if (empty === undefined) return null;
-    this.save(empty, null, session, selection);
+    this.save(empty, null, session, selection, camera);
     return empty;
   }
 }

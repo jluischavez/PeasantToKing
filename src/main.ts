@@ -8,6 +8,7 @@ new Phaser.Game({
   width: 960,
   height: 540,
   backgroundColor: '#1c211d',
+  input: { keyboard: false, mouse: false, touch: false },
   scale: {
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH,

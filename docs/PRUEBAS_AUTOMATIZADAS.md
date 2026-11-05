@@ -18,6 +18,8 @@ Vitest usa Vite y el TypeScript del proyecto. Las pruebas se ejecutan en Node e 
 | Alpha 0.1 | Versión, favicon y rutas de recursos desde la raíz en desarrollo y producción |
 | Reservas de almacén | Envíos independientes de la recepción, gastos de construcción, vaciado, saldos y guardados anteriores |
 | Catálogo de Voces | 69 plantillas nuevas, condiciones observadas, filtros, rotación y compatibilidad de los enfriamientos |
+| Mapa y cámara | Dimensiones, selección con desplazamiento y zoom, límites, arrastre seguro, conexiones y construcciones lejanas |
+| Guardado del mundo | Vista de cámara, construcciones lejanas, migración desde 20 × 20 y continuidad del estado económico |
 
 ## Agregar un caso
 

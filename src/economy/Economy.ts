@@ -179,31 +179,26 @@ export class Economy {
     const total: Resources = { gold: 0, food: 0, wood: 0 };
     this.buildings.clear();
     this.maintenanceRate = 0;
-    for (let row = 0; row < map.rows; row++) {
-      for (let column = 0; column < map.columns; column++) {
-        const cell = { column, row };
-        const type = map.getConstruction(cell);
-        if (!type) continue;
-        this.maintenanceRate += maintenanceByType[type];
-        const maximum = productionByType[type];
-        if (maximum.gold + maximum.food + maximum.wood === 0) continue;
-        const capacity = workforce.capacityFor(type);
-        const workers = connections.isConnected(cell)
-          ? Math.min(capacity, Math.max(0, workforce.workersAt(cell))) : 0;
-        const laborRatio = capacity > 0 ? workers / capacity : 0;
-        const food = Math.round(maximum.food * unitsPerResource * laborRatio);
-        const wood = Math.round(maximum.wood * unitsPerResource * laborRatio);
-        const resource = food > 0 ? 'food' : 'wood';
-        const quantity = food + wood;
-        const storageBlocked = quantity > 0 && !this.storage.planProduction(cell, quantity, spaces);
-        const ratio = storageBlocked ? 0 : laborRatio;
-        this.buildings.set(key(cell), { workers, capacity, ratio, storageBlocked });
-        total.gold += Math.round(maximum.gold * unitsPerResource * ratio);
-        if (!storageBlocked && quantity > 0) {
-          total.food += food;
-          total.wood += wood;
-          this.batches.push({ cell, resource, units: quantity });
-        }
+    for (const { cell, type } of map.occupiedCells()) {
+      this.maintenanceRate += maintenanceByType[type];
+      const maximum = productionByType[type];
+      if (maximum.gold + maximum.food + maximum.wood === 0) continue;
+      const capacity = workforce.capacityFor(type);
+      const workers = connections.isConnected(cell)
+        ? Math.min(capacity, Math.max(0, workforce.workersAt(cell))) : 0;
+      const laborRatio = capacity > 0 ? workers / capacity : 0;
+      const food = Math.round(maximum.food * unitsPerResource * laborRatio);
+      const wood = Math.round(maximum.wood * unitsPerResource * laborRatio);
+      const resource = food > 0 ? 'food' : 'wood';
+      const quantity = food + wood;
+      const storageBlocked = quantity > 0 && !this.storage.planProduction(cell, quantity, spaces);
+      const ratio = storageBlocked ? 0 : laborRatio;
+      this.buildings.set(key(cell), { workers, capacity, ratio, storageBlocked });
+      total.gold += Math.round(maximum.gold * unitsPerResource * ratio);
+      if (!storageBlocked && quantity > 0) {
+        total.food += food;
+        total.wood += wood;
+        this.batches.push({ cell, resource, units: quantity });
       }
     }
     this.productionUnits = total;

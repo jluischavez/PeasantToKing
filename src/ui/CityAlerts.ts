@@ -18,12 +18,8 @@ export class CityAlerts {
     if (this.revision !== roads.revision) {
       this.revision = roads.revision;
       this.disconnected = 0;
-      for (let row = 0; row < map.rows; row++) {
-        for (let column = 0; column < map.columns; column++) {
-          const cell = { column, row };
-          const type = map.getConstruction(cell);
-          if (type && type !== 'road' && !roads.isConnected(cell)) this.disconnected++;
-        }
+      for (const { cell, type } of map.occupiedCells()) {
+        if (type !== 'road' && !roads.isConnected(cell)) this.disconnected++;
       }
     }
     const alerts = [];

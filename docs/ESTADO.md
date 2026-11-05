@@ -195,3 +195,9 @@
 - Los almacenes configuran la recepción y el envío a mercados por producto. El vaciado a otro almacén y el gasto de madera en construcción conservan sus reglas. Los guardados anteriores habilitan ambos envíos al cargar.
 - Voces de la aldea suma 69 plantillas y conserva las 13 anteriores. Los mensajes normales rotan por tema y vivienda. Los eventos residenciales comparten el intervalo general y conservan su propio enfriamiento.
 - Verificación. `npm test` y `npm run build` comprueban la Alpha. La prueba de compilación valida el HTML, el favicon, CSS y JavaScript con rutas desde la raíz.
+
+- Etapa 12A. Mundo de pasto de 100 × 100. La partida nueva coloca el Centro de Aldea en (50, 50) y la cámara empieza con una vista de 20 × 20.
+- WASD, flechas y arrastre desplazan el mapa. La rueda cambia el zoom entre 0,5 y 2,5 veces el inicial. **Centrar aldea** conserva el zoom. El clic para seleccionar, construir o pedir demolición se confirma al soltar el botón izquierdo sin arrastre.
+- El terreno prepara su cuadrícula una vez. El dibujo de construcciones se actualiza por región. La simulación recorre las casillas ocupadas en el mismo orden que antes y se mantiene independiente de la cámara.
+- El guardado conserva posición, zoom y mapa completo. Las partidas de 20 × 20 se amplían al cargarlas y mantienen coordenadas, edificios, inventarios, población y reloj.
+- Verificación. `npm test` aprobó 227 pruebas con cero fallidas. `npm run build` pasó con el aviso habitual de tamaño de Phaser. Chrome sin interfaz comprobó el centro inicial, arrastre sin gasto, construcción, zoom, flechas, HUD fijo y guardado de la cámara.

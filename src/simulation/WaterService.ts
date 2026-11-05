@@ -25,12 +25,9 @@ export class WaterService {
       this.revision = roads.revision;
       this.coverage.recalculate(map, roads, waterRules.roadRange, 'well');
       this.wells.clear();
-      for (let row = 0; row < map.rows; row++) {
-        for (let column = 0; column < map.columns; column++) {
-          const cell = { column, row };
-          if (map.getConstruction(cell) === 'well') {
-            this.wells.set(key(cell), { cell, connected: roads.isConnected(cell), workers: 0, served: 0 });
-          }
+      for (const { cell, type } of map.occupiedCells()) {
+        if (type === 'well') {
+          this.wells.set(key(cell), { cell, connected: roads.isConnected(cell), workers: 0, served: 0 });
         }
       }
     }
