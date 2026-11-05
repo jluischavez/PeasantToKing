@@ -136,6 +136,66 @@ test('rejecting warehouse food still permits markets to withdraw already stored 
   assert.deepEqual(economy.resources, before);
 });
 
+test('a warehouse receives reserved wood, sends food, and resumes wood shipments independently', () => {
+  const { economy, ledger, restock, sync } = setup();
+  assert.equal(economy.setWarehouseMarketDispatch(firstWarehouse, 'wood', false), true);
+  assert.equal(economy.setWarehouseMarketDispatch(firstMarket, 'wood', false), false);
+  sync();
+  assert.deepEqual(economy.storage.warehouseAt(firstWarehouse)!.accepts, { food: true, wood: true });
+  assert.deepEqual(economy.storage.warehouseAt(firstWarehouse)!.marketDispatch, { food: true, wood: false });
+  assert.deepEqual(economy.storage.warehouseAt(secondWarehouse)!.marketDispatch, { food: true, wood: true });
+  assert.ok(economy.storage.depositProduction(farm, 'food', 100 * U));
+  assert.ok(economy.storage.depositProduction(camp, 'wood', 60 * U));
+  const before = economy.resources;
+  assert.equal(ledger.transfer(warehouseId, marketId, 'wood', U), false);
+  restock();
+  assert.equal(economy.distribution.marketAt(firstMarket)!.food, 100);
+  assert.equal(economy.distribution.marketAt(firstMarket)!.wood, 0);
+  assert.equal(economy.storage.warehouseAt(firstWarehouse)!.wood, 60);
+  assert.deepEqual(economy.resources, before);
+
+  assert.ok(economy.payBuildingCost({ gold: 0, wood: 5 }, 'construction', 'road:1,2'));
+  assert.equal(economy.storage.warehouseAt(firstWarehouse)!.wood, 55);
+  const afterConstruction = economy.resources;
+  economy.setWarehouseAcceptance(firstWarehouse, 'wood', false);
+  economy.setWarehouseMarketDispatch(firstWarehouse, 'wood', true);
+  restock();
+  assert.equal(economy.distribution.marketAt(secondMarket)!.wood, 55);
+  assert.equal(economy.storage.warehouseAt(firstWarehouse)!.wood, 0);
+  assert.deepEqual(economy.resources, afterConstruction);
+});
+
+test('draining moves reserved goods to another accepting warehouse without sending them to markets', () => {
+  const { economy, restock } = setup();
+  assert.ok(economy.storage.depositProduction(camp, 'wood', 10 * U));
+  for (const warehouse of [firstWarehouse, secondWarehouse]) {
+    economy.setWarehouseMarketDispatch(warehouse, 'wood', false);
+  }
+  const before = economy.resources;
+  economy.setWarehouseDraining(firstWarehouse, true);
+  economy.setWarehouseDraining(secondWarehouse, true);
+  economy.storage.advanceDrain();
+  assert.equal(economy.storage.warehouseAt(firstWarehouse)!.wood, 10);
+  economy.setWarehouseDraining(secondWarehouse, false);
+  economy.storage.advanceDrain();
+  restock();
+  assert.equal(economy.storage.warehouseAt(firstWarehouse)!.wood, 0);
+  assert.equal(economy.storage.warehouseAt(secondWarehouse)!.wood, 10);
+  assert.equal(economy.distribution.marketAt(firstMarket)!.wood, 0);
+  assert.equal(economy.distribution.marketAt(secondMarket)!.wood, 0);
+  assert.deepEqual(economy.resources, before);
+});
+
+test('food kept in reserve is excluded from the estimate of pending market supply', () => {
+  const { economy, restock } = setup();
+  assert.ok(economy.storage.depositProduction(farm, 'food', 10 * U));
+  economy.setWarehouseMarketDispatch(firstWarehouse, 'food', false);
+  restock();
+  assert.equal(economy.distribution.marketAt(firstMarket)!.food, 0);
+  assert.equal(economy.storage.connectedWarehouseFood(true), 0);
+  assert.equal(economy.storage.warehouseAt(firstWarehouse)!.food, 10);
+});
+
 test('disabling sales preserves market stock, blocks replenishment and consumption, and generates no income', () => {
   const { economy, restock, consume, ledger } = setup();
   economy.storage.depositProduction(farm, 'food', 10 * U);

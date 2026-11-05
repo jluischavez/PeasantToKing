@@ -8,12 +8,16 @@ Vitest usa Vite y el TypeScript del proyecto. Las pruebas se ejecutan en Node e 
 | --- | --- |
 | Empleo y población | Límites de población activa y puestos, desempleo, conexión, capacidad residencial e inmigración |
 | Bienestar y migración | Atractivo sin solares, lista de espera, promedio ponderado, recuperación y tolerancia antes de emigrar |
+| Evolución residencial | Cambios de nivel, tiempo continuo, capacidades, excedentes, pausa y opiniones |
 | Agua y voces | Cobertura vial, capacidad de pozos, bienestar, ventana de necesidades, opiniones, filtros y demolición |
 | Producción | Proporción por trabajador, máximo, productores desconectados o sin personal |
 | Almacenes y transferencias | Capacidad, permisos, operación, inventarios separados y saldos exactos, incluso tras rechazar una transferencia |
 | Mercados | Empleo, permisos, cobertura vial, existencias e ingresos por comida entregada |
 | Simulación y auditoría | Pausa, reanudación, velocidades, saldos por evento, filtros, rechazos y límite del historial |
 | Integración | Granja → almacén → mercado → vivienda y recuperación con dos trabajadores, mercados inactivos y reserva agotada |
+| Alpha 0.1 | Versión, favicon, base de Vite en desarrollo y producción y condiciones del workflow de Pages |
+| Reservas de almacén | Envíos independientes de la recepción, gastos de construcción, vaciado, saldos y guardados anteriores |
+| Catálogo de Voces | 69 plantillas nuevas, condiciones observadas, filtros, rotación y compatibilidad de los enfriamientos |
 
 ## Agregar un caso
 

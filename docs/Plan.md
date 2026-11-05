@@ -91,6 +91,19 @@ Multijugador, login, servidor, cuentas en nube, ranking global, combate, ejérci
 - El agua se mide como habitantes abastecidos. El bienestar usa el suministro efectivo de comida, madera y agua, junto con el empleo y los impuestos. El resumen de necesidades promedia hasta una hora del juego y estima el número equivalente de habitantes afectados.
 - Voces de la aldea conserva las 50 opiniones más recientes, generadas a partir de plantillas y de observaciones de hogares habitados. Se puede filtrar por tono y seleccionar la vivienda de origen mientras siga existiendo.
 
+### Evolución y deterioro residencial de 10B
+
+- Choza, casa de madera, casa de piedra y residencia próspera alojan hasta 4, 6, 8 y 12 habitantes. Un solar nuevo parte del nivel 1. Las construcciones ya mejoradas conservan su nivel mientras están vacías.
+- Una vivienda ocupada mejora tras 60 segundos simulados continuos con felicidad de al menos 80, comida, madera y agua completamente cubiertas y desempleo municipal de hasta 25 %. El deterioro requiere otros 60 segundos continuos con felicidad inferior a 40 o una necesidad sin cubrir. La interrupción de una condición reinicia el contador correspondiente.
+- Cada cambio avanza o retrocede un nivel. Si la nueva capacidad es menor que la ocupación, el excedente abandona la ciudad y se registra en el historial de población. Las opiniones de mejora y deterioro se publican con el intervalo y la cadencia de Voces de la aldea.
+- Las cuatro ilustraciones originales se almacenan en src/assets/housing. HousingArt asigna una textura por nivel. Cambiar una ilustración por un PNG solo requiere actualizar su importación en ese archivo.
+
+### Etapa 11A. Alpha 0.1
+
+- El almacén configura por separado la recepción y el envío a mercados de comida y madera. La reserva conserva las reglas de acceso para construir y el modo vaciado transfiere a otros almacenes.
+- Voces de la aldea amplía su catálogo con 69 plantillas y rota entre temas y hogares. La cadencia se mide en tiempo simulado.
+- El lanzamiento se verifica en GitHub Pages desde `main`. Tras comprobar el despliegue, `develop` parte de ese commit. El [README](../README.md) describe el flujo de publicación y de Pull Requests.
+
 ### Funcionalidad futura reservada: evolución visual de la ciudad
 
 **Prioridad:** después de finalizar, probar y publicar el MVP funcional (etapas 06–11), **no antes**. Es una expansión planificada, no un requisito inmediato ni una orden de implementación automática. Dividir en tareas pequeñas independientes:
@@ -98,7 +111,7 @@ Multijugador, login, servidor, cuentas en nube, ranking global, combate, ejérci
 | ID futuro | Función | Regla propuesta |
 |---|---|---|
 | F01 | Prosperidad y servicios | Calcular por vivienda una puntuación basada en acceso por caminos, abastecimiento, mercado, seguridad y otros servicios; ajustar las reglas tras probar la economía. |
-| F02 | Evolución de viviendas | Casas de nivel 1 (humilde) a niveles superiores (madera mejorada, piedra, residencia próspera), con gráficos distintos y requisitos claros; evitar cambios instantáneos constantes por pequeñas fluctuaciones. |
+| F02 | Evolución visual ampliada de viviendas | 10B cubre los cuatro niveles residenciales. Los efectos visuales adicionales forman parte del pulido futuro. |
 | F03 | Mejoras de calles | Camino de tierra → grava → piedra → piedra pulida/real; mantener las uniones automáticas de rectas, curvas, T y cruces en todos los niveles. |
 | F04 | Evolución de edificios | Granja, leñador/aserradero, almacén y mercado tendrán apariencias más desarrolladas según nivel/mejoras económicas; siempre reconocibles. |
 | F05 | Centro de aldea y defensa | Centro de Aldea → ayuntamiento/casa señorial → castillo; añadir torres de vigilancia, guardias, murallas y portones por etapas posteriores. |

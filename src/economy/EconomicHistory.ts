@@ -1,3 +1,4 @@
+import { check, label, list, whole } from '../persistence/validation.ts';
 import type { ProductId } from './Products';
 
 export type AuditResource = ProductId | 'gold';
@@ -27,6 +28,33 @@ export class EconomicHistory {
     if (!Number.isSafeInteger(capacity) || capacity < 1) throw new RangeError('Invalid history capacity');
     this.capacity = capacity;
     this.time = time;
+  }
+
+  saveState() {
+    return { sequence: this.sequence, events: [...this.events] };
+  }
+
+  restoreState(state: ReturnType<EconomicHistory['saveState']>, time: number): void {
+    const { sequence, events } = state;
+    list(events, this.capacity);
+    check(whole(sequence) && events.length === Math.min(sequence, this.capacity) && (events.at(-1)?.id ?? 0) === sequence);
+    let previousId = sequence - events.length;
+    let previousTime = 0;
+    const balance = (value?: Balance) => value === undefined || (whole(value.before) && whole(value.after));
+    for (const event of events) {
+      check(whole(event.id, 1) && event.id === ++previousId && whole(event.timeMs, previousTime, time)
+        && ['food', 'wood', 'gold'].includes(event.resource) && whole(event.units, 1)
+        && (event.unitScale === undefined || whole(event.unitScale, 1))
+        && label(event.origin) && label(event.destination)
+        && (event.household === undefined || label(event.household))
+        && (event.soldProduct === undefined || ['food', 'wood'].includes(event.soldProduct))
+        && ['completed', 'unpaid'].includes(event.result) && balance(event.originBalance) && balance(event.destinationBalance)
+        && ['production', 'transfer', 'consumption', 'sale', 'construction', 'construction-material',
+          'demolition', 'wages', 'maintenance', 'tax'].includes(event.operation));
+      previousTime = event.timeMs;
+    }
+    this.sequence = sequence;
+    this.events.splice(0, this.events.length, ...events);
   }
 
   get latestId(): number { return this.sequence; }

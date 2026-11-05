@@ -1,3 +1,5 @@
+import type { ConstructionMap } from '../map/ConstructionMap';
+import { list, range, restoreEntries, whole } from '../persistence/validation.ts';
 import type { Cell } from '../map/CellSelection';
 import { gameTimeRules } from '../simulation/GameTime.ts';
 
@@ -11,6 +13,17 @@ const key = (cell: Cell) => cell.column + ',' + cell.row;
 
 export class HouseholdNeeds {
   private readonly samples = new Map<string, Samples>();
+
+  saveState() { return [...this.samples]; }
+
+  restoreState(state: ReturnType<HouseholdNeeds['saveState']>, map: ConstructionMap): void {
+    restoreEntries(this.samples, state, map.rows * map.columns, (id, sample) => {
+      const cell = map.cellAtKey(id);
+      list(sample.values, gameTimeRules.secondsPerHour);
+      return !!cell && map.getConstruction(cell) === 'house' && whole(sample.residents, 1, 12)
+        && sample.values.length > 0 && sample.values.every(value => needIds.every(need => range(value[need], 0, 1)));
+    });
+  }
 
   recordSecond(homes: readonly Household[], coverage: (home: Household) => NeedCoverage): void {
     const occupied = new Set<string>();

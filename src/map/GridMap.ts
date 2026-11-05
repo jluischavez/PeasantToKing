@@ -1,30 +1,35 @@
 import type Phaser from 'phaser';
+import type { World } from './World';
 import type { Cell } from './CellSelection';
 import type { ConstructionMap, ConstructionType } from './ConstructionMap';
 import { drawConstruction } from './drawConstruction';
 import type { RoadConnections } from './RoadConnections';
 import type { Population } from '../population/Population';
 import { getRoadMask } from './RoadAppearance';
+import { housingArt } from './HousingArt';
 
 export class GridMap {
-  readonly columns = 20;
-  readonly rows = 20;
+  readonly columns: number;
+  readonly rows: number;
   private readonly terrain: Phaser.GameObjects.Graphics;
   private readonly constructions: Phaser.GameObjects.Graphics;
   private readonly preview: Phaser.GameObjects.Graphics;
   private readonly highlight: Phaser.GameObjects.Graphics;
   private readonly selection: Phaser.GameObjects.Graphics;
   private readonly connectionIndicators: Phaser.GameObjects.Graphics;
+  private readonly housingImages = new Map<number, Phaser.GameObjects.Image>();
   private x = 0;
   private y = 0;
   private cellSize = 0;
 
-  constructor(scene: Phaser.Scene) {
+  constructor(private readonly scene: Phaser.Scene, world: World) {
+    this.columns = world.columns;
+    this.rows = world.rows;
     this.terrain = scene.add.graphics();
     this.constructions = scene.add.graphics();
     this.preview = scene.add.graphics().setDepth(1);
     this.highlight = scene.add.graphics();
-    this.selection = scene.add.graphics();
+    this.selection = scene.add.graphics().setDepth(0.4);
     this.connectionIndicators = scene.add.graphics().setDepth(0.5);
   }
 
@@ -87,15 +92,31 @@ export class GridMap {
   renderConstructions(map: ConstructionMap, connections: RoadConnections, population: Population): void {
     this.constructions.clear();
     this.connectionIndicators.clear();
+    for (const image of this.housingImages.values()) image.setVisible(false);
     if (this.cellSize <= 0) return;
     for (let row = 0; row < map.rows; row++) {
       for (let column = 0; column < map.columns; column++) {
-        const type = map.getConstruction({ column, row });
+        const cell = { column, row };
+        const type = map.getConstruction(cell);
         if (type) {
-          drawConstruction(this.constructions, type,
-            this.x + column * this.cellSize, this.y + row * this.cellSize, this.cellSize,
-            1, type === 'road' ? getRoadMask(map, { column, row }) : 0,
-            population.residentsAt({ column, row }) > 0);
+          const x = this.x + column * this.cellSize;
+          const y = this.y + row * this.cellSize;
+          const level = type === 'house' ? population.housingLevelAt(cell) : 1;
+          if (type === 'house' && (population.residentsAt(cell) > 0 || level > 1)) {
+            const key = row * map.columns + column;
+            const texture = housingArt[level].texture;
+            let image = this.housingImages.get(key);
+            if (!image) {
+              image = this.scene.add.image(x, y, texture).setOrigin(0).setDepth(0.25);
+              this.housingImages.set(key, image);
+            } else if (image.texture.key !== texture) {
+              image.setTexture(texture);
+            }
+            image.setPosition(x, y).setDisplaySize(this.cellSize, this.cellSize).setVisible(true);
+          } else {
+            drawConstruction(this.constructions, type, x, y, this.cellSize,
+              1, type === 'road' ? getRoadMask(map, cell) : 0);
+          }
           if (type !== 'road' && !connections.isConnected({ column, row })) {
             const markerX = this.x + (column + 0.86) * this.cellSize;
             const markerY = this.y + (row + 0.14) * this.cellSize;

@@ -195,6 +195,7 @@ test('production, restocking and consumption complete the food and wood chains w
   consume();
   assert.equal(economy.resources.gold, 0.12);
   assert.equal(economy.perSecond.gold, 0.12);
+  assert.deepEqual(economy.distribution.salesByProductPerSecond, { food: 0.1, wood: 0.02 });
   assert.equal(economy.distribution.woodShortageAt(home), 0);
   const sales = economy.history.read('gold').filter(event => event.operation === 'sale');
   assert.deepEqual(sales.map(event => [event.soldProduct, amount(event)]), [['food', 0.1], ['wood', 0.02]]);

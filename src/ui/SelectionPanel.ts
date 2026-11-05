@@ -1,4 +1,5 @@
 import { formatNumber } from '../formatNumber';
+import { setText } from './domText';
 import { distributionRules } from '../economy/Distribution';
 import type { MarketSnapshot, HousingSupply } from '../economy/Distribution';
 import { gameMinutesForSeconds } from '../simulation/GameTime';
@@ -7,15 +8,17 @@ import type { BuildingProductivity } from '../economy/Economy';
 import type { Cell } from '../map/CellSelection';
 import { populationRules } from '../population/Population';
 import { wellbeingState } from '../population/Wellbeing';
+import { housingLevels, housingRules } from '../population/HousingEvolution';
+import type { HousingLevel, HousingEvolution } from '../population/HousingEvolution';
 import { waterRules } from '../simulation/WaterService';
 import type { WellSnapshot } from '../simulation/WaterService';
 import { constructionNames } from '../map/ConstructionMap';
 import type { ConstructionType } from '../map/ConstructionMap';
 
 export class SelectionPanel {
-  private readonly coordinates = document.querySelector<HTMLElement>('#cell-coordinates')!;
-  private readonly terrain = document.querySelector<HTMLElement>('#cell-terrain')!;
-  private readonly status = document.querySelector<HTMLElement>('#cell-status')!;
+  private readonly details = document.getElementById('cell-details')!;
+  private readonly rows = new Map<string, HTMLElement>();
+  private layout = '';
   private readonly cancel = document.querySelector<HTMLButtonElement>('#cancel-selection')!;
   private readonly demolition = document.querySelector<HTMLElement>('#demolition-confirmation')!;
   private readonly demolitionTarget = document.querySelector<HTMLElement>('#demolition-target')!;
@@ -35,71 +38,98 @@ export class SelectionPanel {
 
   renderDemolition(target: string | null, issue: string | null = null): void {
     this.demolition.hidden = target === null;
-    this.demolitionTarget.textContent = target;
+    setText(this.demolitionTarget, target ?? '');
     this.demolitionIssue.hidden = issue === null;
-    this.demolitionIssue.textContent = issue;
+    setText(this.demolitionIssue, issue ?? '');
     this.confirmDemolition.disabled = issue !== null;
   }
 
   render(cell: Cell | null, construction: ConstructionType | null = null, connected = false, residents = 0,
     productivity?: BuildingProductivity, warehouse?: WarehouseSnapshot, market?: MarketSnapshot,
     supply?: HousingSupply, foodShortage = 0, woodSupply?: HousingSupply, woodShortage = 0,
-    wellbeing?: Readonly<{ happiness: number; concerns: readonly string[] }>, waterSupplied = 0, well?: WellSnapshot): void {
-    this.coordinates.textContent = cell ? `X: ${cell.column} · Y: ${cell.row}` : 'X: — · Y: —';
-    this.terrain.textContent = cell ? 'césped' : '—';
-    this.status.textContent = cell
-      ? (construction
-        ? `ocupada — ${constructionNames[construction]} · ${connected ? 'Conectado' : 'Sin conexión'}`
-        : 'disponible')
-      : 'Sin selección';
-    if (cell && construction === 'house') {
-      this.status.textContent = `ocupada — ${residents > 0 ? 'Choza' : 'Solar vacío'} · ${residents}/4 habitantes · ${connected ? 'Conectado' : 'Sin conexión'}`;
+    wellbeing?: Readonly<{ happiness: number; concerns: readonly string[] }>, waterSupplied = 0, well?: WellSnapshot,
+    housing?: { level: HousingLevel; progress: ReturnType<HousingEvolution['at']> }): void {
+    const fields: [string, string, string][] = [];
+    const add = (id: string, label: string, value: string) => fields.push([id, label, value]);
+    const fraction = (value: number, total: number) => formatNumber(value) + ' / ' + formatNumber(total);
+    add('coordinates', 'Coordenadas', cell ? `X ${cell.column} · Y ${cell.row}` : '—');
+    add('terrain', 'Terreno', cell ? 'Césped' : '—');
+    const homeLevel = housing ? housingLevels[housing.level] : undefined;
+    if (construction) add('construction', 'Construcción', constructionNames[construction]);
+    const status = housing && homeLevel
+      ? (residents > 0 || housing.level > 1 ? homeLevel.name : 'Solar vacío')
+      : construction ? 'Ocupada' : cell ? 'Casilla disponible' : 'Sin selección';
+    add('status', 'Estado', status);
+    if (construction) add('connection', 'Conexión', connected ? 'Conectado' : 'Sin conexión');
+    if (productivity) {
+      add('workers', 'Empleados', fraction(productivity.workers, productivity.capacity));
+      add('productivity', 'Productividad', formatNumber(productivity.ratio * 100) + ' %');
+      if (productivity.storageBlocked) add('blocked', 'Producción', 'Bloqueada por falta de almacenamiento operativo, compatible y con espacio');
     }
-    if (cell && productivity) {
-      const percent = formatNumber(productivity.ratio * 100);
-      this.status.textContent += ` · Empleados: ${productivity.workers}/${productivity.capacity} · Productividad: ${percent} %`;
+    if (warehouse || market) {
+      const inventory = warehouse ?? market!;
+      add('food-stock', 'Comida', formatNumber(inventory.food));
+      add('wood-stock', 'Madera', formatNumber(inventory.wood));
+      add('used', 'Capacidad usada', fraction(warehouse?.used ?? inventory.food + inventory.wood, inventory.capacity));
+      if (warehouse) add('free', 'Disponible', formatNumber(warehouse.free));
+      if (!productivity) add('workers', 'Empleados', fraction(inventory.workers, inventory.workerCapacity));
+      add('operation', 'Operación', inventory.operational ? 'Operativo' : 'Inactivo');
     }
-    if (productivity?.storageBlocked) {
-      this.status.textContent += ' · Producción bloqueada por falta de almacenamiento operativo que acepte el producto y tenga espacio.';
+    if (market) {
+      add('coverage', 'Cobertura', formatNumber(market.coveredHomes) + ' solares · hasta ' + formatNumber(market.range) + ' tramos');
+      add('restock', 'Reposición', 'Cada ' + formatNumber(gameMinutesForSeconds(distributionRules.restockIntervalSeconds)) + ' min del juego');
+      add('market-reason', 'Abastecimiento', market.reason);
     }
-    if (cell && warehouse) {
-      this.status.textContent += ` · Comida: ${formatNumber(warehouse.food)} · Madera: ${formatNumber(warehouse.wood)} · Capacidad usada: ${formatNumber(warehouse.used)}/${warehouse.capacity} · Disponible: ${formatNumber(warehouse.free)} · Empleados: ${warehouse.workers}/${warehouse.workerCapacity} · ${warehouse.operational ? 'Operativo' : 'Inactivo'}`;
-    }
-    if (cell && market) {
-      const restockMinutes = formatNumber(gameMinutesForSeconds(distributionRules.restockIntervalSeconds));
-      this.status.textContent += ' · Reposición cada ' + restockMinutes + ' min del juego';
-      this.status.textContent += ` · Comida: ${formatNumber(market.food)} · Madera: ${formatNumber(market.wood)} · Capacidad usada: ${formatNumber(market.food + market.wood)}/${market.capacity} · Empleados: ${market.workers}/${market.workerCapacity} · Cobertura: ${market.coveredHomes} solares, hasta ${market.range} tramos de camino · ${market.operational ? 'Operativo' : 'Inactivo'}`;
-    }
-    if (cell && construction === 'house' && supply) {
-      this.status.textContent += supply.status === 'reserve' ? ' · Abastecimiento: reserva inicial'
-        : supply.status === 'market' ? ` · Mercado con existencias a ${supply.distance} tramos`
-        : ' · Sin comida disponible en esta vivienda';
-    }
-    if (woodSupply && residents > 0) {
-      this.status.textContent += woodSupply.status === 'market'
-        ? ' · Madera disponible en mercado a ' + woodSupply.distance + ' tramos'
-        : ' · Sin acceso a madera disponible';
-      if (woodShortage > 0) this.status.textContent += ' · Madera sin entregar en el último ciclo: ' + formatNumber(woodShortage);
-    }
-    if (foodShortage > 0) {
-      this.status.textContent += ' · Comida sin entregar en el último ciclo: ' + formatNumber(foodShortage);
+    if (housing && homeLevel) {
+      add('housing-level', 'Nivel de vivienda', formatNumber(housing.level));
+      add('residents', 'Habitantes', fraction(residents, homeLevel.capacity));
+      if (supply) add('food-supply', 'Comida', supply.status === 'reserve' ? 'Reserva inicial'
+        : supply.status === 'market' ? 'Mercado a ' + formatNumber(supply.distance ?? 0) + ' tramos' : 'Sin abastecimiento');
+      if (residents > 0) {
+        add('wood-supply', 'Madera', woodSupply?.status === 'market'
+          ? 'Mercado a ' + formatNumber(woodSupply.distance ?? 0) + ' tramos' : 'Sin abastecimiento');
+        add('water-supply', 'Agua', fraction(waterSupplied, residents) + ' hab. abastecidos');
+        const happiness = wellbeing?.happiness ?? populationRules.migration.neutralHappiness;
+        add('happiness', 'Felicidad', fraction(happiness, 100) + ' · ' + wellbeingState(happiness));
+        add('concerns', 'Bienestar', wellbeing?.concerns.join(' · ') ||
+          (wellbeing ? 'Suministros cubiertos y empleo estable' : 'Bienestar inicial'));
+        add('food-shortage', 'Comida sin entregar', formatNumber(foodShortage));
+        add('wood-shortage', 'Madera sin entregar', formatNumber(woodShortage));
+      }
+      const { improvement, deterioration } = housing.progress;
+      const progress = improvement || deterioration;
+      add('progress', 'Evolución', progress > 0
+        ? (improvement > 0 ? 'Mejora' : 'Deterioro') + ' · ' + formatNumber(100 * progress / housingRules.seconds) + ' %'
+        : housing.level === 4 ? 'Nivel máximo · Sin deterioro' : 'Sin progreso');
+      add('remaining', 'Tiempo restante', progress > 0 ? formatNumber(housingRules.seconds - progress) + ' s simulados' : '—');
     }
     if (well) {
-      this.status.textContent += ' · Aguadores: ' + well.workers + '/1 · Habitantes abastecidos: ' + well.served
-        + '/' + waterRules.capacity + ' · Cobertura: hasta ' + waterRules.roadRange + ' tramos de camino';
+      add('workers', 'Aguadores', fraction(well.workers, 1));
+      add('well-served', 'Habitantes abastecidos', fraction(well.served, waterRules.capacity));
+      add('coverage', 'Cobertura', 'Hasta ' + formatNumber(waterRules.roadRange) + ' tramos');
     }
-    if (residents > 0) {
-      this.status.textContent += ' · Agua: ' + waterSupplied + '/' + residents + ' habitantes abastecidos';
-      const happiness = wellbeing?.happiness ?? populationRules.migration.neutralHappiness;
-      this.status.textContent += ' · Felicidad: ' + formatNumber(happiness)
-        + '/100 · ' + wellbeingState(happiness);
-      const concerns = wellbeing?.concerns ?? [];
-      this.status.textContent += concerns.length > 0 ? ' · ' + concerns.join(' · ')
-        : wellbeing ? ' · Suministros cubiertos y empleo estable' : ' · Bienestar inicial';
-    }
-    if (cell && market) this.status.textContent += ` · ${market.reason}`;
+    this.renderRows(fields);
     this.cancel.disabled = cell === null;
   }
+
+  private renderRows(fields: readonly [string, string, string][]): void {
+    const layout = fields.map(([id, label]) => id + ':' + label).join('|');
+    if (layout !== this.layout) {
+      this.layout = layout;
+      this.rows.clear();
+      const nodes = fields.flatMap(([id, label]) => {
+        const term = document.createElement('dt');
+        term.textContent = label;
+        const value = document.createElement('dd');
+        value.id = 'cell-' + id;
+        this.rows.set(id, value);
+        return [term, value];
+      });
+      this.details.replaceChildren(...nodes);
+    }
+    for (const [id, , value] of fields) setText(this.rows.get(id)!, value);
+  }
+
 
   destroy(): void {
     this.events.abort();

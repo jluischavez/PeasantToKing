@@ -1,5 +1,6 @@
 import { EconomicHistory } from './EconomicHistory.ts';
 import { Treasury } from './Treasury.ts';
+import { check, range, whole } from '../persistence/validation.ts';
 import { taxPolicies, taxRules } from './TaxPolicy.ts';
 import type { TaxPolicy } from './TaxPolicy';
 import { centsPerGold, maintenanceByType, wagePerWorker } from './OperatingCosts.ts';
@@ -10,6 +11,7 @@ import type { LaborContext } from '../population/Population';
 import { productNames } from './Products.ts';
 import type { ProductId } from './Products';
 import { Distribution } from './Distribution.ts';
+import type { Residence } from './Distribution';
 import { Storage } from './Storage.ts';
 import { unitsPerResource } from './Inventories.ts';
 import type { StoredResource } from './Inventories';
@@ -74,6 +76,27 @@ export class Economy {
       wood: Math.round(initial.wood * unitsPerResource),
     }, this.history);
     this.distribution = new Distribution(this.storage);
+  }
+
+  saveState() {
+    return { completedMs: this.completedMs, elapsedMs: this.elapsedMs, taxPolicy: this.taxPolicy,
+      treasury: this.treasury.saveState(), inventories: this.storage.inventories.saveState(),
+      distribution: this.distribution.saveState(), history: this.history.saveState() };
+  }
+
+  restoreState(state: ReturnType<Economy['saveState']>, map: ConstructionMap): void {
+    const { completedMs, elapsedMs, taxPolicy, treasury, inventories, distribution, history } = state;
+    check(whole(completedMs) && completedMs % 1000 === 0 && range(elapsedMs, 0, 1000) && elapsedMs < 1000
+      && Object.prototype.hasOwnProperty.call(taxPolicies, taxPolicy));
+    this.completedMs = completedMs;
+    this.elapsedMs = elapsedMs;
+    this.taxPolicy = taxPolicy;
+    this.treasury.restoreState(treasury);
+    this.history.restoreState(history, completedMs);
+    this.storage.inventories.restoreState(inventories);
+    const ids = inventories.map(inventory => inventory.id);
+    this.storage.restoreWarehouseOrder(ids);
+    this.distribution.restoreState(distribution, map, ids);
   }
 
   get simulatedTimeMs(): number { return this.completedMs; }
@@ -186,7 +209,7 @@ export class Economy {
     this.productionUnits = total;
   }
 
-  consumeHomes(population: Pick<Population, 'residencesSnapshot'>, foodPerResident: number): void {
+  consumeHomes(population: Readonly<{ residencesSnapshot: readonly Residence[] }>, foodPerResident: number): void {
     // Provisional municipal revenue: one gold per food or wood unit consumed from a market.
     // No revenue from replenishment, reserve consumption or unsatisfied demand.
     this.distribution.consumeHomes(population.residencesSnapshot, foodPerResident,
@@ -194,7 +217,7 @@ export class Economy {
     this.refresh();
   }
 
-  immigrationSupply(population: Pick<Population, 'residencesSnapshot'>, maxResidents: number, seconds: number,
+  immigrationSupply(population: Readonly<{ residencesSnapshot: readonly Residence[] }>, maxResidents: number, seconds: number,
     foodPerResident: number, residentialCapacity: number): ReadonlyMap<string, number> {
     const homes = population.residencesSnapshot;
     const normal = this.distribution.immigrationPlan(homes, maxResidents,
@@ -207,9 +230,9 @@ export class Economy {
     const logisticsFood = this.storage.connectedWarehouseFood(true) + this.distribution.availableFood;
     if (total >= economyRules.recovery.populationLimit || logisticsFood < seconds * foodPerResident) return normal;
     const candidate = [...homes].sort((a, b) => a.residents - b.residents)
-      .find(home => home.residents < residentialCapacity && this.distribution.hasAuthorizedCoverage(home.cell));
+      .find(home => home.residents < (home.capacity ?? residentialCapacity) && this.distribution.hasAuthorizedCoverage(home.cell));
     return candidate ? new Map([[key(candidate.cell),
-      Math.min(maxResidents, economyRules.recovery.arrivalsPerEvaluation, residentialCapacity - candidate.residents)]]) : normal;
+      Math.min(maxResidents, economyRules.recovery.arrivalsPerEvaluation, (candidate.capacity ?? residentialCapacity) - candidate.residents)]]) : normal;
   }
 
   laborContext(population: Pick<Population, 'total' | 'activePopulation' | 'residencesSnapshot'>): LaborContext {
@@ -263,6 +286,12 @@ export class Economy {
 
   setMarketSale(cell: Cell, product: ProductId, enabled: boolean): boolean {
     const changed = this.distribution.setSale(cell, product, enabled);
+    if (changed) this.refresh();
+    return changed;
+  }
+
+  setWarehouseMarketDispatch(cell: Cell, product: ProductId, enabled: boolean): boolean {
+    const changed = this.storage.setMarketDispatch(cell, product, enabled);
     if (changed) this.refresh();
     return changed;
   }

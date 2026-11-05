@@ -114,17 +114,6 @@ export function drawConstruction(
   size: number,
   alpha = 1,
   roadMask = 0,
-  inhabited = false,
 ): void {
-  if (type === 'house' && inhabited) {
-    graphics.fillStyle(0xb89a6b, alpha);
-    graphics.fillRect(x + size * 0.22, y + size * 0.43, size * 0.56, size * 0.43);
-    graphics.fillStyle(0xc5a24d, alpha);
-    graphics.fillTriangle(x + size * 0.12, y + size * 0.47,
-      x + size * 0.5, y + size * 0.17, x + size * 0.88, y + size * 0.47);
-    graphics.fillStyle(0x503a29, alpha);
-    graphics.fillRect(x + size * 0.43, y + size * 0.62, size * 0.16, size * 0.24);
-    return;
-  }
   constructionDrawers[type](graphics, x, y, size, alpha, roadMask);
 }

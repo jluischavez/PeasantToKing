@@ -1,3 +1,4 @@
+import { check, list, whole } from '../persistence/validation.ts';
 import type { EconomicHistory } from './EconomicHistory';
 import { isProductId, marketProductIds, productFlags, productIds } from './Products.ts';
 import type { ProductId, ProductFlags } from './Products';
@@ -12,7 +13,9 @@ export type InventoryAccess = {
   network: string | null;
   operational: boolean;
 };
-type Inventory = InventoryAccess & { goods: Goods; products: ProductFlags; auditId: string; draining: boolean };
+type Inventory = InventoryAccess & {
+  goods: Goods; products: ProductFlags; marketDispatch: ProductFlags; auditId: string; draining: boolean;
+};
 
 export class Inventories {
   private readonly entries = new Map<string, Inventory>();
@@ -27,7 +30,7 @@ export class Inventories {
     if (this.entries.has(id)) throw new Error('Inventory already exists: ' + id);
     if (![access.capacity, goods.food, goods.wood].every(value => Number.isSafeInteger(value) && value >= 0)
       || goods.food + goods.wood > access.capacity) throw new Error('Invalid inventory');
-    this.entries.set(id, { ...access, auditId, draining: false, goods: { ...goods },
+    this.entries.set(id, { ...access, auditId, draining: false, goods: { ...goods }, marketDispatch: productFlags(),
       products: productFlags(access.kind === 'market' ? marketProductIds : productIds) });
     if (access.kind === 'production' && this.history) {
       for (const resource of productIds) {
@@ -39,12 +42,46 @@ export class Inventories {
     }
   }
 
-  snapshot(id: string): (InventoryAccess & { goods: Readonly<Goods>; products: Readonly<ProductFlags>; used: number; free: number; draining: boolean }) | undefined {
+  saveState() {
+    return [...this.entries].map(([id, entry]) => {
+      const { goods, products, marketDispatch, draining } = entry;
+      return { id, goods: { ...goods }, products: { ...products }, draining,
+        ...(entry.kind === 'warehouse' && { marketDispatch: { ...marketDispatch } }) };
+    });
+  }
+
+  restoreState(state: ReturnType<Inventories['saveState']>): void {
+    list(state, this.entries.size);
+    check(state.length === this.entries.size);
+    const ordered = new Map<string, Inventory>();
+    for (const { id, goods, products, draining, marketDispatch } of state) {
+      const entry = this.entries.get(id);
+      check(entry && !ordered.has(id) && whole(goods.food) && whole(goods.wood)
+        && goods.food + goods.wood <= entry.capacity
+        && typeof products.food === 'boolean' && typeof products.wood === 'boolean'
+        && typeof draining === 'boolean' && (!draining || entry.kind === 'warehouse')
+        && (marketDispatch === undefined || (entry.kind === 'warehouse'
+          && typeof marketDispatch?.food === 'boolean' && typeof marketDispatch.wood === 'boolean'))
+        && (entry.kind !== 'reserve' || (goods.wood === 0 && goods.food <= entry.goods.food))
+        && (entry.kind !== 'construction-reserve' || (goods.food === 0 && goods.wood <= entry.goods.wood)));
+      ordered.set(id, { ...entry, goods: { food: goods.food, wood: goods.wood },
+        products: { food: products.food, wood: products.wood }, draining,
+        marketDispatch: marketDispatch ? { food: marketDispatch.food, wood: marketDispatch.wood } : productFlags() });
+    }
+    this.entries.clear();
+    for (const [id, entry] of ordered) this.entries.set(id, entry);
+  }
+
+  snapshot(id: string): (InventoryAccess & {
+    goods: Readonly<Goods>; products: Readonly<ProductFlags>; marketDispatch: Readonly<ProductFlags>;
+    used: number; free: number; draining: boolean;
+  }) | undefined {
     const entry = this.entries.get(id);
     if (!entry) return undefined;
     const used = entry.goods.food + entry.goods.wood;
     const { auditId: _auditId, ...inventory } = entry;
-    return { ...inventory, goods: { ...entry.goods }, products: { ...entry.products }, used, free: entry.capacity - used };
+    return { ...inventory, goods: { ...entry.goods }, products: { ...entry.products },
+      marketDispatch: { ...entry.marketDispatch }, used, free: entry.capacity - used };
   }
 
   setAccess(id: string, network: string | null, operational: boolean): void {
@@ -62,6 +99,13 @@ export class Inventories {
     const entry = this.entries.get(id);
     if (entry?.kind !== 'warehouse') return false;
     entry.draining = draining;
+    return true;
+  }
+
+  setMarketDispatch(id: string, product: ProductId, enabled: boolean): boolean {
+    const entry = this.entries.get(id);
+    if (entry?.kind !== 'warehouse' || !isProductId(product) || typeof enabled !== 'boolean') return false;
+    entry.marketDispatch[product] = enabled;
     return true;
   }
 
@@ -95,6 +139,7 @@ export class Inventories {
       || (source.kind === 'warehouse' && (destination.kind === 'warehouse' || destination.kind === 'market'))
       || (source.kind === 'market' && destination.kind === 'consumer' && marketProductIds.includes(resource));
     if (!allowed || (destination.kind === 'market' && !marketProductIds.includes(resource))) return false;
+    if (source.kind === 'warehouse' && destination.kind === 'market' && !source.marketDispatch[resource]) return false;
     if ((destination.kind === 'warehouse' || destination.kind === 'market')
       && !this.acceptsIncoming(destinationId, resource)) return false;
     if (source.kind === 'market' && !this.isProductEnabled(sourceId, resource)) return false;

@@ -3,24 +3,26 @@ import type { Cell } from '../map/CellSelection';
 import type { VillageVoices, VoiceTone } from '../population/VillageVoices';
 import { formatGameTime, gameTimeAt } from '../simulation/GameTime';
 
+import { Feed } from './Feed';
+
 const tones = { positive: 'Positiva', negative: 'Negativa', neutral: 'Neutra' } as const;
 
 export class VillageVoicesPanel {
-  private readonly panel = document.querySelector<HTMLDetailsElement>('#voices-panel')!;
+  private readonly panel = document.querySelector<HTMLElement>('#voices-panel')!;
   private readonly filter = document.querySelector<HTMLSelectElement>('#voice-filter')!;
   private readonly empty = document.querySelector<HTMLElement>('#voices-empty')!;
   private readonly list = document.querySelector<HTMLElement>('#voices-list')!;
+  private readonly feed = new Feed<ReturnType<VillageVoices['read']>[number]>(this.panel, this.list);
   private readonly events = new AbortController();
   private lastView = '';
 
   constructor(private readonly voices: VillageVoices, private readonly selectHome: (cell: Cell) => void) {
     const options = { signal: this.events.signal };
-    this.panel.addEventListener('toggle', () => this.render(), options);
     this.filter.addEventListener('change', () => this.render(), options);
   }
 
   render(): void {
-    if (!this.panel.open) return;
+    if (this.panel.hidden) return;
     const tone = this.filter.value as VoiceTone | '';
     const view = this.voices.version + ':' + tone;
     if (view === this.lastView) return;
@@ -28,7 +30,7 @@ export class VillageVoicesPanel {
     const messages = this.voices.read(tone || undefined);
     this.empty.hidden = messages.length > 0;
     this.empty.textContent = tone ? 'No hay opiniones con este filtro.' : 'Todavía no hay opiniones.';
-    this.list.replaceChildren(...[...messages].reverse().map(message => {
+    this.feed.render([...messages].reverse(), message => message.timeMs, message => {
       const item = document.createElement('li');
       const author = document.createElement('strong');
       const coords = formatNumber(message.home.column) + ',' + formatNumber(message.home.row);
@@ -50,7 +52,7 @@ export class VillageVoicesPanel {
         item.append(removed);
       }
       return item;
-    }));
+    });
   }
 
   destroy(): void { this.events.abort(); }

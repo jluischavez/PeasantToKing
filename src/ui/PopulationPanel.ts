@@ -4,12 +4,14 @@ import type { Population } from '../population/Population';
 import type { CityWellbeing } from '../population/Wellbeing';
 import { needIds } from '../population/HouseholdNeeds';
 import type { HouseholdNeeds } from '../population/HouseholdNeeds';
+import { perGameHour } from '../simulation/GameTime';
+import { setText } from './domText';
 
 const needNames = { food: 'comida', wood: 'madera', water: 'agua' } as const;
-import { perGameHour } from '../simulation/GameTime';
 
 export class PopulationPanel {
   private readonly total = document.querySelector<HTMLElement>('#population-total')!;
+  private readonly totalInNeeds = document.getElementById('needs-population-total')!;
   private readonly active = document.querySelector<HTMLElement>('#population-active')!;
   private readonly unemploymentRate = document.querySelector<HTMLElement>('#unemployment-rate')!;
   private readonly attractiveness = document.querySelector<HTMLElement>('#migration-attractiveness')!;
@@ -30,6 +32,8 @@ export class PopulationPanel {
 
   private readonly needs = Object.fromEntries(needIds.map(need =>
     [need, document.querySelector<HTMLElement>('#need-' + need)!]));
+  private readonly coverage = Object.fromEntries(needIds.map(need =>
+    [need, document.querySelector<HTMLProgressElement>('#coverage-' + need)!]));
   private readonly priorityNeed = document.querySelector<HTMLElement>('#need-priority')!;
   private readonly shortage = document.querySelector<HTMLElement>('#food-shortage')!;
 
@@ -43,32 +47,39 @@ export class PopulationPanel {
   render(population: Population, attraction: number, city: CityWellbeing, reason: string, shortage: number,
     needs: ReturnType<HouseholdNeeds['summarize']>): void {
     for (const need of needIds) {
-      this.needs[need].textContent = needs.percentages ? formatNumber(needs.percentages[need]) + ' %' : '—';
+      const percent = needs.percentages?.[need];
+      setText(this.needs[need], percent === undefined ? '—' : formatNumber(percent) + ' %');
+      const meter = this.coverage[need];
+      if (percent === undefined) {
+        if (meter.hasAttribute('value')) meter.removeAttribute('value');
+      } else if (!meter.hasAttribute('value') || meter.value !== percent) meter.value = percent;
     }
-    this.priorityNeed.textContent = needs.mainNeed
+    setText(this.priorityNeed, needs.mainNeed
       ? 'Falta principalmente ' + needNames[needs.mainNeed] + ' · ' + formatNumber(needs.affected) + ' hab. afectados (est.)'
-      : needs.percentages ? 'Necesidades cubiertas' : 'Sin datos de suministro';
-    this.reason.textContent = reason;
-    this.shortage.textContent = formatNumber(shortage);
-    this.total.textContent = formatNumber(population.total);
-    this.active.textContent = formatNumber(population.activePopulation);
-    this.unemploymentRate.textContent = formatNumber(population.unemploymentRate * 100);
-    this.attractiveness.textContent = formatNumber(attraction);
-    this.housing.textContent = formatNumber(population.availableHousing);
-    this.waiting.textContent = formatNumber(population.waitingImmigrants);
+      : needs.percentages ? 'Necesidades cubiertas' : 'Sin datos de suministro');
+    setText(this.reason, reason);
+    setText(this.shortage, formatNumber(shortage));
+    const total = formatNumber(population.total);
+    setText(this.total, total);
+    setText(this.totalInNeeds, total);
+    setText(this.active, formatNumber(population.activePopulation));
+    setText(this.unemploymentRate, formatNumber(population.unemploymentRate * 100));
+    setText(this.attractiveness, formatNumber(attraction));
+    setText(this.housing, formatNumber(population.availableHousing));
+    setText(this.waiting, formatNumber(population.waitingImmigrants));
     this.waiting.title = 'Límite de la lista de espera: ' + population.waitingCapacity;
-    this.happiness.textContent = formatNumber(city.happiness);
-    this.wellbeing.textContent = city.state;
-    this.wellbeingCounts.textContent = 'Viviendas satisfechas: ' + city.satisfied
-      + ' · Inconformes: ' + city.dissatisfied + ' · En crisis: ' + city.crisis;
+    setText(this.happiness, formatNumber(city.happiness));
+    setText(this.wellbeing, city.state + ' · ' + formatNumber(city.happiness) + '/100');
+    setText(this.wellbeingCounts, 'Viviendas satisfechas: ' + city.satisfied
+      + ' · Inconformes: ' + city.dissatisfied + ' · En crisis: ' + city.crisis);
     this.concerns.hidden = city.concerns.length === 0;
-    this.concerns.textContent = 'Principales causas de descontento: ' + city.concerns.join(' · ');
-    this.capacity.textContent = formatNumber(population.residentialCapacity);
-    this.connected.textContent = formatNumber(population.connectedCapacity);
-    this.jobs.textContent = formatNumber(population.jobCapacity);
-    this.employed.textContent = formatNumber(population.employed);
-    this.unemployed.textContent = formatNumber(population.unemployed);
-    this.available.textContent = formatNumber(population.availableJobs);
-    this.consumption.textContent = formatNumber(perGameHour(population.foodConsumptionPerSecond));
+    setText(this.concerns, 'Principales causas de descontento: ' + city.concerns.join(' · '));
+    setText(this.capacity, formatNumber(population.residentialCapacity));
+    setText(this.connected, formatNumber(population.connectedCapacity));
+    setText(this.jobs, formatNumber(population.jobCapacity));
+    setText(this.employed, formatNumber(population.employed));
+    setText(this.unemployed, formatNumber(population.unemployed));
+    setText(this.available, formatNumber(population.availableJobs));
+    setText(this.consumption, formatNumber(perGameHour(population.foodConsumptionPerSecond)));
   }
 }

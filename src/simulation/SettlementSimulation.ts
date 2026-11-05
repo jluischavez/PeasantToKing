@@ -1,8 +1,10 @@
+import { check, range, whole } from '../persistence/validation.ts';
 import { formatNumber } from '../formatNumber.ts';
 import { populationRules } from '../population/Population.ts';
 import { gameTimeAt, gameTimeRules } from './GameTime.ts';
 import { distributionRules } from '../economy/Distribution.ts';
 import { Wellbeing } from '../population/Wellbeing.ts';
+import { HousingEvolution } from '../population/HousingEvolution.ts';
 import { HouseholdNeeds } from '../population/HouseholdNeeds.ts';
 import { VillageVoices } from '../population/VillageVoices.ts';
 import { WaterService } from './WaterService.ts';
@@ -23,6 +25,7 @@ function buildingId(cell: Cell, type: ConstructionType): string {
 
 export class SettlementSimulation {
   readonly wellbeing = new Wellbeing();
+  readonly housing = new HousingEvolution();
   readonly water = new WaterService();
   readonly needs = new HouseholdNeeds();
   readonly voices = new VillageVoices();
@@ -46,6 +49,28 @@ export class SettlementSimulation {
     this.economy = economy;
     this.population = population;
     this.immigrationIntervalSeconds = immigrationIntervalSeconds;
+  }
+
+  saveState() {
+    return { elapsedMs: this.elapsedMs, paused: this.paused, speed: this.speed, immigrationSeconds: this.immigrationSeconds,
+      wellbeing: this.wellbeing.saveState(), housing: this.housing.saveState(), needs: this.needs.saveState(), voices: this.voices.saveState() };
+  }
+
+  restoreState(state: ReturnType<SettlementSimulation['saveState']>): void {
+    const { elapsedMs, paused, speed, immigrationSeconds, wellbeing, housing, needs, voices } = state;
+    check(range(elapsedMs, 0, 1000) && elapsedMs < 1000 && typeof paused === 'boolean' && whole(speed, 1, 3)
+      && whole(immigrationSeconds, 0, this.immigrationIntervalSeconds - 1));
+    this.elapsedMs = elapsedMs;
+    this.isPaused = paused;
+    this.multiplier = speed;
+    this.immigrationSeconds = immigrationSeconds;
+    this.wellbeing.restoreState(wellbeing, this.map, this.simulatedTimeMs);
+    this.housing.restoreState(housing, this.map);
+    this.needs.restoreState(needs, this.map);
+    this.voices.restoreState(voices, this.map, this.simulatedTimeMs);
+    // The saved roster is the roster from the last tick. A new assignment is due on the next tick.
+    this.economy.recalculate(this.map, this.connections, this.population);
+    this.water.refresh(this.map, this.connections, this.population);
   }
 
   get paused(): boolean { return this.isPaused; }
@@ -133,6 +158,7 @@ export class SettlementSimulation {
     }
     if (target.type === 'house') {
       this.wellbeing.forget(target.cell);
+      this.housing.forget(target.cell);
       this.needs.forget(target.cell);
       this.voices.retireHome(target.cell);
     }
@@ -168,9 +194,30 @@ export class SettlementSimulation {
     }));
     const candidate = this.wellbeing.advanceSecond(homes, home => this.needs.currentAt(home.cell)!,
       this.population.unemploymentRate, this.economy.currentTaxPolicy, this.simulatedTimeMs);
-    if (candidate && this.population.removeResident(candidate)) {
+    let populationChanged = false;
+    const unemployment = this.population.unemploymentRate;
+    for (const home of homes) {
+      if (home.residents === 0) {
+        this.housing.forget(home.cell);
+        continue;
+      }
+      const level = this.housing.advanceSecond(home.cell, home.level, this.wellbeing.at(home.cell)!.happiness,
+        this.needs.currentAt(home.cell)!, unemployment);
+      if (level === undefined) continue;
+      const displaced = this.population.setHousingLevel(home.cell, level);
+      this.voices.reportHousingChange(home.cell, level > home.level);
+      if (displaced > 0) {
+        this.wellbeing.recordDeparture(this.simulatedTimeMs, home.cell, home.residents - displaced, displaced, 'deterioration');
+        this.needs.forget(home.cell);
+        populationChanged = true;
+      }
+    }
+    if (!populationChanged && candidate && this.population.removeResident(candidate)) {
       this.wellbeing.recordDeparture(this.simulatedTimeMs, candidate, this.population.residentsAt(candidate));
       this.needs.forget(candidate);
+      populationChanged = true;
+    }
+    if (populationChanged) {
       this.economy.recalculate(this.map, this.connections, this.population);
       this.water.refresh(this.map, this.connections, this.population);
     }
@@ -211,9 +258,14 @@ export class SettlementSimulation {
           this.water.refresh(this.map, this.connections, this.population);
         }
       }
-      this.voices.advance(this.simulatedTimeMs, () => this.needs.observations(this.population.residencesSnapshot), {
-        unemployment: this.population.unemploymentRate, tax: this.economy.currentTaxPolicy,
-        waiting: this.population.waitingImmigrants,
+      this.voices.advance(this.simulatedTimeMs, () => this.needs.observations(this.population.residencesSnapshot), () => {
+        const buildings = this.map.saveCells();
+        return {
+          unemployment: this.population.unemploymentRate, tax: this.economy.currentTaxPolicy,
+          waiting: this.population.waitingImmigrants,
+          hasMarket: buildings.includes('market'), hasWarehouse: buildings.includes('warehouse'),
+          hasRoad: buildings.includes('road'),
+        };
       });
       advanced = true;
     }

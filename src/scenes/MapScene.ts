@@ -3,30 +3,36 @@ import { VillageVoicesPanel } from '../ui/VillageVoicesPanel';
 import { ProductConfigurationPanel } from '../ui/ProductConfigurationPanel';
 import Phaser from 'phaser';
 import { GridMap } from '../map/GridMap';
+import { housingArt } from '../map/HousingArt';
 import { CellSelection } from '../map/CellSelection';
 import type { Cell } from '../map/CellSelection';
-import { ConstructionMap, constructionNames } from '../map/ConstructionMap';
+import { constructionNames } from '../map/ConstructionMap';
 import { constructionCosts, demolitionCost } from '../map/ConstructionCosts';
 import { SelectionPanel } from '../ui/SelectionPanel';
 import { ConstructionMenu, formatCost } from '../ui/ConstructionMenu';
 import type { ConstructionMode } from '../ui/ConstructionMenu';
-import { RoadConnections } from '../map/RoadConnections';
 import { getRoadMask } from '../map/RoadAppearance';
-import { Economy } from '../economy/Economy';
 import { ResourceBar } from '../ui/ResourceBar';
-import { Population, populationRules } from '../population/Population';
+import { CityAlerts } from '../ui/CityAlerts';
+import { CityTabs } from '../ui/CityTabs';
+import { populationRules } from '../population/Population';
 import { PopulationPanel } from '../ui/PopulationPanel';
-import { SettlementSimulation } from '../simulation/SettlementSimulation';
+import { Session } from '../persistence/Session';
+import { SaveSlots } from '../persistence/SaveSlots';
+import { SavePanel } from '../ui/SavePanel';
 
 export class MapScene extends Phaser.Scene {
-  // Settlement state survives scene/UI reconstruction; a new scene starts a new game.
-  private readonly economy = new Economy();
-  private readonly population = new Population();
-  private readonly connections = new RoadConnections();
-  private constructions: ConstructionMap | null = null;
-  private simulation: SettlementSimulation | null = null;
+  private session = new Session();
+  private selectedCell: Cell | null = null;
+  private readonly saveSlots = new SaveSlots();
   constructor() {
     super('MapScene');
+  }
+
+  preload(): void {
+    for (const { texture, url } of Object.values(housingArt)) {
+      if (!this.textures.exists(texture)) this.load.image(texture, url);
+    }
   }
 
   create(): void {
@@ -34,22 +40,21 @@ export class MapScene extends Phaser.Scene {
       fontFamily: 'Georgia, serif',
       color: '#ecd5a2',
     }).setOrigin(0.5);
-    const map = new GridMap(this);
+    const session = this.session;
+    const { map: constructions, world, connections, economy, population, simulation } = session;
+    const map = new GridMap(this, world);
     const selection = new CellSelection();
-    const constructions = this.constructions ??= new ConstructionMap(map.columns, map.rows);
-    const { connections, economy, population } = this;
-    const simulation = this.simulation ??= new SettlementSimulation(
-      economy, population, populationRules.immigrationIntervalSeconds, constructions, connections);
-    simulation.recalculate();
+    if (this.selectedCell) selection.select(this.selectedCell);
     const resourceBar = new ResourceBar(economy.currentTaxPolicy, policy => {
       economy.setTaxPolicy(policy);
       renderSummary();
     });
     const populationPanel = new PopulationPanel();
+    const alerts = new CityAlerts();
     const renderSummary = (): void => {
-      resourceBar.render(economy.resources, economy.perSecond, {
+      const net = resourceBar.render(economy.resources, economy.perSecond, {
         reserve: economy.storage.initialFoodReserve, availableFood: population.connectedCapacity > 0 ? economy.availableFood : 0,
-        blocked: economy.blockedProducers, bootstrap: economy.distribution.bootstrapActive,
+        sales: economy.distribution.salesByProductPerSecond, bootstrap: economy.distribution.bootstrapActive,
         constructionReserve: economy.storage.constructionWoodReserve, constructionWood: economy.availableConstructionWood,
         costs: economy.operatingCostsPerHour(population.employed), taxes: economy.taxIncomePerHour(population.total),
       });
@@ -62,8 +67,9 @@ export class MapScene extends Phaser.Scene {
         && !simulation.wellbeing.admissionsOpen(simulation.simulatedTimeMs, city.happiness)
         ? 'Admisiones en pausa hasta que se recupere el bienestar.'
         : economy.migrationReason(population, supply, attraction);
-      populationPanel.render(population, attraction, city, reason, economy.distribution.cumulativeFoodShortage,
-        simulation.needs.summarize(population.residencesSnapshot));
+      const needs = simulation.needs.summarize(population.residencesSnapshot);
+      populationPanel.render(population, attraction, city, reason, economy.distribution.cumulativeFoodShortage, needs);
+      alerts.render(constructions, connections, needs, economy.storage.fullWarehouseCount, economy.blockedProducers, net);
       menu.renderCosts(cost => simulation.costIssue(cost));
     };
     const renderSelected = (): void => {
@@ -78,7 +84,8 @@ export class MapScene extends Phaser.Scene {
         home ? economy.distribution.supplyAt(home) : undefined, home ? economy.distribution.foodShortageAt(home) : 0,
         home ? economy.distribution.supplyAt(home, 'wood') : undefined, home ? economy.distribution.woodShortageAt(home) : 0,
         home ? simulation.wellbeing.at(home) : undefined, home ? simulation.water.suppliedAt(home) : 0,
-        cell && type === 'well' ? simulation.water.wellAt(cell) : undefined);
+        cell && type === 'well' ? simulation.water.wellAt(cell) : undefined,
+        home ? { level: population.housingLevelAt(home), progress: simulation.housing.at(home) } : undefined);
       const demolition = simulation.demolitionTarget;
       const departing = demolition?.type === 'house' ? population.residentsAt(demolition.cell) : 0;
       const departure = departing === 1 ? ' · 1 habitante abandonará la ciudad.'
@@ -86,7 +93,7 @@ export class MapScene extends Phaser.Scene {
       panel.renderDemolition(demolition ? constructionNames[demolition.type] + ' · ' + formatCost(demolitionCost) + departure : null,
         demolition ? simulation.demolitionIssue(demolition.cell) : null);
       simulationPanel.render(cell && type ? type + ':' + cell.column + ',' + cell.row : null);
-      configuration.render(cell, warehouse, market);
+      configuration.render(cell, warehouse, market, simulation.paused);
       voicesPanel.render();
     };
     const sceneEvents = new AbortController();
@@ -99,11 +106,12 @@ export class MapScene extends Phaser.Scene {
 
     const updateSimulation = (): void => {
       const previousPopulation = population.total;
+      const previousHousing = simulation.housing.revision;
       if (simulation.advance(this.game.loop.rawDelta)) {
         renderSummary();
         renderSelected();
         updatePointerFeedback();
-        if (population.total !== previousPopulation) {
+        if (population.total !== previousPopulation || simulation.housing.revision !== previousHousing) {
           map.renderConstructions(constructions, connections, population);
         }
       } else {
@@ -148,10 +156,8 @@ export class MapScene extends Phaser.Scene {
       renderSelected();
       menu.renderMode(mode);
     });
-    const settings = document.querySelector<HTMLFieldSetElement>('#product-configuration')!;
     const constructionControls = document.querySelector<HTMLElement>('#construction-menu')!;
     const updatePauseControls = (): void => {
-      settings.disabled = simulation.paused;
       constructionControls.inert = simulation.paused;
     };
     updatePauseControls();
@@ -168,9 +174,10 @@ export class MapScene extends Phaser.Scene {
       map.renderSelection(selection.selected);
       renderSelected();
     });
-    const configuration = new ProductConfigurationPanel((cell, kind, product, enabled) => {
-      if (simulation.paused || constructions.getConstruction(cell) !== kind) return;
-      if (kind === 'warehouse') economy.setWarehouseAcceptance(cell, product, enabled);
+    const configuration = new ProductConfigurationPanel((cell, setting, product, enabled) => {
+      if (constructions.getConstruction(cell) !== (setting === 'sells' ? 'market' : 'warehouse')) return;
+      if (setting === 'accepts') economy.setWarehouseAcceptance(cell, product, enabled);
+      else if (setting === 'marketDispatch') economy.setWarehouseMarketDispatch(cell, product, enabled);
       else economy.setMarketSale(cell, product, enabled);
       renderSummary();
       renderSelected();
@@ -193,8 +200,16 @@ export class MapScene extends Phaser.Scene {
       updatePointerFeedback();
     });
 
+    const tabs = new CityTabs(renderSelected);
+    const saves = new SavePanel(this.saveSlots, session, () => selection.selected, (next, cell) => {
+      this.session = next;
+      this.selectedCell = cell;
+      this.game.loop.resetDelta();
+      this.scene.restart();
+    });
     if (constructions.villageCenter) menu.disableVillageCenter();
     renderSummary();
+    renderSelected();
 
     const layout = (): void => {
       const { width, height } = this.scale;
@@ -251,11 +266,14 @@ export class MapScene extends Phaser.Scene {
       this.events.off(Phaser.Scenes.Events.UPDATE, updateSimulation);
       sceneEvents.abort();
       resourceBar.destroy();
+      tabs.destroy();
       simulationPanel.destroy();
       voicesPanel.destroy();
       configuration.destroy();
       panel.destroy();
       menu.destroy();
+      saves.destroy();
+      if (this.session === session) this.selectedCell = selection.selected;
     });
   }
 }

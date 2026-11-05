@@ -1,5 +1,8 @@
 import { formatNumber } from '../formatNumber';
-import type { AuditResource, EconomicHistory } from '../economy/EconomicHistory';
+import type { EmigrationEvent } from '../population/Wellbeing';
+import { Feed } from './Feed';
+import { setText } from './domText';
+import type { AuditResource, EconomicEvent, EconomicHistory } from '../economy/EconomicHistory';
 import { resourceNames } from '../economy/Economy';
 import { unitsPerResource } from '../economy/Inventories';
 import { constructionNames, isConstructionType } from '../map/ConstructionMap';
@@ -29,14 +32,17 @@ export class SimulationPanel {
   private readonly pause = document.querySelector<HTMLButtonElement>('#simulation-pause')!;
   private readonly speed = document.querySelector<HTMLSelectElement>('#simulation-speed')!;
   private readonly time = document.querySelector<HTMLElement>('#simulation-time')!;
-  private readonly audit = document.querySelector<HTMLDetailsElement>('#audit-panel')!;
+  private readonly date = document.getElementById('simulation-date')!;
+  private readonly phase = document.getElementById('simulation-phase')!;
+  private readonly audit = document.getElementById('audit-panel')!;
   private readonly resource = document.querySelector<HTMLSelectElement>('#audit-resource')!;
   private readonly selectedOnly = document.querySelector<HTMLInputElement>('#audit-selected-only')!;
   private readonly list = document.querySelector<HTMLOListElement>('#audit-list')!;
+  private readonly feed = new Feed<EconomicEvent>(this.audit, this.list);
   private readonly empty = document.querySelector<HTMLElement>('#audit-empty')!;
   private readonly populationList = document.querySelector<HTMLOListElement>('#population-events-list')!;
   private readonly populationEmpty = document.querySelector<HTMLElement>('#population-events-empty')!;
-  private lastDepartureTime: number | undefined;
+  private lastDeparture: EmigrationEvent | null = null;
   private readonly events = new AbortController();
   private readonly simulation: SettlementSimulation;
   private readonly history: EconomicHistory;
@@ -52,12 +58,13 @@ export class SimulationPanel {
       onPauseChanged();
       this.render();
     }, options);
+    this.populationList.replaceChildren();
+    this.populationEmpty.hidden = false;
     this.speed.addEventListener('change', () => {
       const value = Number(this.speed.value);
       if (value === 1 || value === 2 || value === 3) simulation.setSpeed(value);
       this.render();
     }, options);
-    this.audit.addEventListener('toggle', () => this.render(), options);
     this.resource.addEventListener('change', () => this.render(), options);
     this.selectedOnly.addEventListener('change', () => this.render(), options);
     this.render();
@@ -65,28 +72,27 @@ export class SimulationPanel {
 
   renderClock(): void {
     const time = this.simulation.gameTime;
-    const label = formatGameTime(time) + (time.daylight ? ' · Día' : ' · Noche');
-    if (this.time.textContent !== label) this.time.textContent = label;
+    setText(this.date, 'Año ' + formatNumber(time.year) + ' · Día ' + formatNumber(time.day));
+    setText(this.time, [time.hour, time.minute].map(value => String(value).padStart(2, '0')).join(':'));
+    setText(this.phase, time.daylight ? 'Día' : 'Noche');
   }
 
   render(building = this.building): void {
     this.building = building;
-    this.pause.textContent = this.simulation.paused ? 'Reanudar' : 'Pausar';
-    this.speed.value = String(this.simulation.speed);
+    setText(this.pause, this.simulation.paused ? 'Reanudar' : 'Pausar');
+    const speed = String(this.simulation.speed);
+    if (this.speed.value !== speed) this.speed.value = speed;
     this.renderClock();
-    if (!this.audit.open) return;
-    this.renderEmigrationEvents();
+    if (this.audit.hidden) return;
+    const departures = this.simulation.wellbeing.emigrationEvents;
 
     const target = this.selectedOnly.checked ? building : undefined;
     const resource = this.resource.value as AuditResource | '';
     const view = JSON.stringify([this.history.latestId, resource, target, this.selectedOnly.checked]);
-    if (view === this.lastView) return;
+    if (view === this.lastView && (departures.at(-1) ?? null) === this.lastDeparture) return;
     this.lastView = view;
     const events = target === null ? [] : this.history.read(resource || undefined, target);
-    this.empty.hidden = events.length > 0;
-    this.empty.textContent = target === null ? 'Selecciona un edificio en el mapa.'
-      : 'Todavía no hay movimientos para este filtro.';
-    this.list.replaceChildren(...[...events].reverse().map(event => {
+    this.feed.render([...events].reverse(), event => event.id, event => {
       const row = document.createElement('li');
       const title = document.createElement('strong');
       const amount = (units: number) => formatNumber(units / (event.unitScale ?? unitsPerResource));
@@ -109,19 +115,23 @@ export class SimulationPanel {
       balances.textContent = parts.join(' · ');
       row.append(title, route, balances);
       return row;
-    }));
+    }, () => {
+      this.renderEmigrationEvents(departures);
+      this.empty.hidden = events.length > 0;
+      setText(this.empty, target === null ? 'Selecciona un edificio en el mapa.' : 'Todavía no hay movimientos para este filtro.');
+    });
   }
 
-  private renderEmigrationEvents(): void {
-    const departures = this.simulation.wellbeing.emigrationEvents;
-    const latest = departures[departures.length - 1]?.timeMs;
-    if (latest === this.lastDepartureTime) return;
-    this.lastDepartureTime = latest;
+  private renderEmigrationEvents(departures: readonly EmigrationEvent[]): void {
+    const latest = departures.at(-1);
+    this.lastDeparture = latest ?? null;
     this.populationEmpty.hidden = departures.length > 0;
     this.populationList.replaceChildren(...[...departures].reverse().map(event => {
       const row = document.createElement('li');
-      row.textContent = formatGameTime(gameTimeAt(event.timeMs)) + ' · Emigración por descontento sostenido · '
-        + formatNumber(event.residents) + ' habitante · Vivienda (' + event.cell.column + ',' + event.cell.row + ')';
+      const reason = event.reason === 'deterioration' ? 'Emigración por deterioro de vivienda' : 'Emigración por descontento sostenido';
+      row.textContent = formatGameTime(gameTimeAt(event.timeMs)) + ' · ' + reason + ' · '
+        + formatNumber(event.residents) + (event.residents === 1 ? ' habitante' : ' habitantes')
+        + ' · Vivienda (' + event.cell.column + ',' + event.cell.row + ')';
       return row;
     }));
   }

@@ -4,53 +4,40 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#1c211d" />
-    <title>Peasant to King</title>
+    <title>Peasant to King | %VITE_GAME_VERSION%</title>
+    <link rel="icon" type="image/svg+xml" href="/src/assets/favicon.svg" />
   </head>
   <body>
-    <header id="resource-bar" aria-label="Recursos y tasas por hora del juego">
-      <p>Oro: <strong id="resource-gold">150</strong> <span id="production-gold">(+0/h)</span></p>
-      <p>Comida: <strong id="resource-food">0</strong> <span id="production-food">(+0/h)</span></p>
-      <p>Madera: <strong id="resource-wood">50</strong> <span id="production-wood">(+0/h)</span> · Para construir: <span id="construction-wood">50</span> (reserva: <span id="construction-reserve">50</span>)</p>
-      <p>Reserva inicial: <span id="initial-food-reserve">20</span> comida (<span id="reserve-status">reserva de arranque</span>) · Comida disponible para viviendas: <span id="available-food">20</span></p>
-      <p id="storage-status" role="status">Almacenamiento sin bloqueos.</p>
-      <p aria-label="Tesorería por hora del juego">
-        Impuestos: <span id="tax-rate">0</span> oro/h · Salarios: <span id="wages-rate">0</span> oro/h · Mantenimiento: <span id="maintenance-rate">0</span> oro/h
-        · Neto estimado: <strong id="net-rate">0</strong> oro/h
-      </p>
-      <section id="population-bar" aria-label="Población y empleo">
-        <p>Población: <strong id="population-total">0</strong></p>
-        <p id="needs-summary" aria-label="Necesidades de los aldeanos">
-          <strong>Necesidades de los aldeanos</strong> · Comida: <span id="need-food">—</span>
-          · Madera: <span id="need-wood">—</span> · Agua: <span id="need-water">—</span>
-          · <span id="need-priority">Sin datos de suministro</span>
-        </p>
-        <p>Población activa: <strong id="population-active">0</strong></p>
-        <p>Capacidad residencial: <strong id="residential-capacity">0</strong> (conectada: <span id="connected-capacity">0</span>)</p>
-        <p>Puestos: <strong id="job-capacity">0</strong> · Vacantes: <span id="jobs-available">0</span></p>
-        <p>Empleados: <strong id="workers-employed">0</strong> · Desempleados: <span id="workers-unemployed">0</span> (<span id="unemployment-rate">0</span> %)</p>
-        <p>Atractivo migratorio: <strong id="migration-attractiveness">0</strong>/100</p>
-        <p>Capacidad libre: <strong id="housing-free">0</strong> · En espera: <strong id="migration-waiting">0</strong></p>
-        <p>Felicidad: <strong id="city-happiness">70</strong>/100 · <span id="city-wellbeing">Neutral · sin habitantes</span></p>
-        <p id="housing-wellbeing-counts">Viviendas satisfechas: 0 · Inconformes: 0 · En crisis: 0</p>
-        <p id="wellbeing-concerns" hidden></p>
-        <p id="migration-reason">Esperando condiciones para inmigración.</p>
-        <p>Demanda: <span id="food-consumption">0,0</span> comida/h · Déficit acumulado: <span id="food-shortage">0</span> comida</p>
-      </section>
+    <header id="resource-bar" aria-label="Indicadores de la aldea">
+      <div class="hud-card"><span>Oro</span><strong id="resource-gold">150</strong><small id="production-gold"></small></div>
+      <div class="hud-card"><span>Comida</span><strong id="resource-food">20</strong><small id="production-food"></small></div>
+      <div class="hud-card"><span>Madera</span><strong id="resource-wood">50</strong><small id="production-wood"></small></div>
+      <div class="hud-card"><span>Población</span><strong id="population-total">0</strong><small>Habitantes</small></div>
+      <div class="hud-card"><span>Felicidad</span><strong id="city-happiness">70</strong><small>Sobre 100</small></div>
+      <div class="hud-card"><span>Balance neto</span><strong id="net-rate">0</strong><small>Oro/h · Estimado</small></div>
+      <div class="hud-card clock-card"><span id="simulation-date">Año 1 · Día 1</span><strong id="simulation-time">00:00</strong><small id="simulation-phase">Noche</small></div>
+      <details id="city-alerts">
+        <summary class="hud-card"><span>Alertas</span><strong id="alert-count">0</strong><small>Ver detalles</small></summary>
+        <div class="alert-content">
+          <p id="alerts-empty">Sin alertas activas.</p>
+          <ul id="alert-list"></ul>
+        </div>
+      </details>
     </header>
     <div id="workspace">
       <main id="game" aria-label="Peasant to King — Mapa inicial de 20 por 20 casillas"></main>
       <aside id="workspace-panels" aria-label="Paneles de la partida">
         <section id="selection-panel" aria-labelledby="selection-title">
           <header class="inspector-heading">
-            <h2 id="selection-title">Detalles de la casilla</h2>
-            <button id="cancel-selection" type="button" disabled>Cancelar selección</button>
+            <h2 id="selection-title">Inspector</h2>
+            <button id="cancel-selection" type="button" disabled>Limpiar</button>
           </header>
           <div id="selection-content" tabindex="0" role="region" aria-label="Información y configuración de la casilla">
-            <div aria-live="polite" aria-atomic="true">
-              <p>Coordenadas (0–19): <span id="cell-coordinates">X: — · Y: —</span></p>
-              <p>Tipo de terreno: <span id="cell-terrain">—</span></p>
-              <p>Estado: <span id="cell-status">Sin selección</span></p>
-            </div>
+            <dl id="cell-details" class="data-rows">
+              <dt>Coordenadas</dt><dd id="cell-coordinates">—</dd>
+              <dt>Terreno</dt><dd id="cell-terrain">—</dd>
+              <dt>Estado</dt><dd id="cell-status">Sin selección</dd>
+            </dl>
             <section id="demolition-confirmation" aria-label="Confirmar demolición" hidden>
               <p id="demolition-target"></p>
               <button id="confirm-demolition" type="button">Confirmar demolición</button>
@@ -67,10 +54,67 @@
             </fieldset>
           </div>
         </section>
-        <details id="audit-panel" open>
-          <summary>Historial y Voces de la aldea</summary>
-          <details id="voices-panel" class="population-events">
-            <summary>Voces de la aldea</summary>
+        <section id="city-panels" aria-label="Información de la ciudad">
+          <div id="city-tabs" role="tablist" aria-label="Información de la ciudad">
+            <button type="button" role="tab" id="tab-finances" aria-controls="finances-panel" aria-selected="true">Finanzas</button>
+            <button type="button" role="tab" id="tab-needs" aria-controls="needs-panel" aria-selected="false" tabindex="-1">Necesidades</button>
+            <button type="button" role="tab" id="tab-voices" aria-controls="voices-panel" aria-selected="false" tabindex="-1">Voces de la aldea</button>
+            <button type="button" role="tab" id="tab-history" aria-controls="audit-panel" aria-selected="false" tabindex="-1">Historial</button>
+          </div>
+          <section id="finances-panel" class="city-pane" role="tabpanel" aria-labelledby="tab-finances" tabindex="0">
+            <h3>Tesorería</h3>
+            <dl class="data-rows"><dt>Oro actual</dt><dd id="finance-gold">150</dd></dl>
+            <label class="finance-policy">Política tributaria <select id="tax-policy"></select></label>
+            <h3>Ingresos · oro/h</h3>
+            <dl class="data-rows">
+              <dt>Ventas de comida</dt><dd id="food-sales-rate">0</dd>
+              <dt>Ventas de madera</dt><dd id="wood-sales-rate">0</dd>
+              <dt>Impuestos</dt><dd id="tax-rate">0</dd>
+              <dt class="total-row">Total de ingresos</dt><dd id="total-income" class="total-row">0</dd>
+            </dl>
+            <h3>Gastos · oro/h</h3>
+            <dl class="data-rows">
+              <dt>Salarios</dt><dd id="wages-rate">0</dd>
+              <dt>Mantenimiento</dt><dd id="maintenance-rate">0</dd>
+              <dt class="total-row">Total de gastos</dt><dd id="total-expenses" class="total-row">0</dd>
+            </dl>
+            <h3>Balance estimado · oro/h</h3>
+            <dl class="data-rows"><dt id="finance-balance-state">Neutral</dt><dd id="finance-net">0</dd></dl>
+          </section>
+          <section id="needs-panel" class="city-pane" role="tabpanel" aria-labelledby="tab-needs" tabindex="0" hidden>
+            <h3>Habitantes y empleo</h3>
+            <dl class="data-rows">
+              <dt>Población total</dt><dd id="needs-population-total">0</dd>
+              <dt>Capacidad residencial</dt><dd><span id="residential-capacity">0</span> · <span id="connected-capacity">0</span> conectada</dd>
+              <dt>Plazas libres</dt><dd id="housing-free">0</dd>
+              <dt>En espera</dt><dd id="migration-waiting">0</dd>
+              <dt>Población activa</dt><dd id="population-active">0</dd>
+              <dt>Puestos</dt><dd><span id="job-capacity">0</span> · <span id="jobs-available">0</span> vacantes</dd>
+              <dt>Empleados</dt><dd id="workers-employed">0</dd>
+              <dt>Desempleados</dt><dd><span id="workers-unemployed">0</span> · <span id="unemployment-rate">0</span> %</dd>
+            </dl>
+            <h3>Bienestar</h3>
+            <dl class="data-rows">
+              <dt>Atractivo migratorio</dt><dd><span id="migration-attractiveness">0</span>/100</dd>
+              <dt>Estado de ánimo</dt><dd id="city-wellbeing">Neutral</dd>
+            </dl>
+            <p id="housing-wellbeing-counts" class="panel-note"></p>
+            <p id="wellbeing-concerns" class="panel-note" hidden></p>
+            <p id="migration-reason" class="panel-note"></p>
+            <h3>Abastecimiento</h3>
+            <dl class="data-rows">
+              <dt>Comida</dt><dd><progress id="coverage-food" max="100" aria-label="Cobertura de comida"></progress> <span id="need-food">—</span></dd>
+              <dt>Madera</dt><dd><progress id="coverage-wood" max="100" aria-label="Cobertura de madera"></progress> <span id="need-wood">—</span></dd>
+              <dt>Agua</dt><dd><progress id="coverage-water" max="100" aria-label="Cobertura de agua"></progress> <span id="need-water">—</span></dd>
+              <dt>Demanda de comida</dt><dd><span id="food-consumption">0</span>/h</dd>
+              <dt>Déficit acumulado</dt><dd id="food-shortage">0</dd>
+              <dt>Reserva inicial</dt><dd><span id="initial-food-reserve">20</span> · <span id="reserve-status"></span></dd>
+              <dt>Comida para viviendas</dt><dd id="available-food">0</dd>
+              <dt>Madera para construir</dt><dd><span id="construction-wood">50</span> · reserva <span id="construction-reserve">50</span></dd>
+            </dl>
+            <p id="need-priority" class="panel-note">Sin datos de suministro</p>
+          </section>
+          <section id="voices-panel" class="city-pane" role="tabpanel" aria-labelledby="tab-voices" tabindex="0" hidden>
             <label>Opiniones
               <select id="voice-filter">
                 <option value="">Todas</option>
@@ -81,7 +125,8 @@
             </label>
             <p id="voices-empty">Todavía no hay opiniones.</p>
             <ul id="voices-list" aria-label="Opiniones recientes" tabindex="0"></ul>
-          </details>
+          </section>
+          <section id="audit-panel" class="city-pane" role="tabpanel" aria-labelledby="tab-history" tabindex="0" hidden>
           <details id="population-events" class="population-events">
             <summary>Eventos de población</summary>
             <p id="population-events-empty">Todavía no hay emigraciones.</p>
@@ -102,29 +147,47 @@
             <p id="audit-empty">Todavía no hay movimientos.</p>
             <ol id="audit-list" aria-label="Movimientos y gastos impagados"></ol>
           </section>
-        </details>
+          </section>
+        </section>
       </aside>
     </div>
     <footer id="controls">
       <nav id="simulation-controls" aria-label="Control de simulación">
+        <button id="open-save-dialog" type="button" aria-haspopup="dialog">Partida <small id="save-active-slot">Sin ranura</small></button>
+        <small class="game-version">%VITE_GAME_VERSION%</small>
         <button id="simulation-pause" type="button">Pausar</button>
         <label>Velocidad
           <select id="simulation-speed">
-            <option value="1">×1</option>
-            <option value="2">×2</option>
-            <option value="3">×3</option>
+            <option value="1">×1</option><option value="2">×2</option><option value="3">×3</option>
           </select>
         </label>
-        <label>Impuestos <select id="tax-policy"></select></label>
-        <span id="simulation-time">Año 1 · Día 1 · 00:00 · Noche</span>
       </nav>
       <nav id="construction-menu" aria-label="Construcción">
-        <p id="construction-status" aria-live="polite">Selecciona un tipo de construcción.</p>
-        <div class="construction-buttons">
-          <button type="button" data-construction="cancel" disabled>Cancelar modo</button>
+        <div class="construction-toolbar">
+          <div id="construction-categories" aria-label="Categorías de construcción"></div>
+          <div class="construction-actions">
+            <button type="button" data-construction="cancel" disabled>Cancelar modo</button>
+          </div>
         </div>
+        <div class="construction-buttons"></div>
+        <p id="construction-status" aria-live="polite">Selecciona un tipo de construcción.</p>
       </nav>
     </footer>
+    <p id="save-status" role="status"></p>
+    <dialog id="save-dialog" aria-labelledby="save-title">
+      <header>
+        <h2 id="save-title">Partidas guardadas</h2>
+        <form method="dialog"><button type="submit">Cerrar</button></form>
+      </header>
+      <label for="save-slot">Ranura</label>
+      <select id="save-slot"></select>
+      <div class="save-actions">
+        <button id="save-game" type="button">Guardar partida</button>
+        <button id="load-game" type="button">Cargar partida</button>
+        <button id="new-game" type="button">Nueva partida</button>
+      </div>
+      <p id="save-message" role="status"></p>
+    </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

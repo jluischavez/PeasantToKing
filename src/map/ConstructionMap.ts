@@ -30,7 +30,16 @@ export class ConstructionMap {
     this.cells = Array(columns * rows).fill(null);
   }
 
-  private contains(cell: Cell): boolean {
+  saveCells(): readonly (ConstructionType | null)[] { return [...this.cells]; }
+
+  cellAtKey(key: string): Cell | undefined {
+    if (typeof key !== 'string' || !/^\d+,\d+$/.test(key)) return undefined;
+    const [column, row] = key.split(',').map(Number);
+    const cell = { column: column!, row: row! };
+    return key === cell.column + ',' + cell.row && this.contains(cell) ? cell : undefined;
+  }
+
+  contains(cell: Cell): boolean {
     return Number.isInteger(cell.column) && Number.isInteger(cell.row)
       && cell.column >= 0 && cell.column < this.columns
       && cell.row >= 0 && cell.row < this.rows;

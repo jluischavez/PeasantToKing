@@ -1,3 +1,4 @@
+import { check, whole } from '../persistence/validation.ts';
 import type { EconomicHistory } from './EconomicHistory';
 import type { ProductId } from './Products';
 import { unitsPerResource } from './Inventories.ts';
@@ -20,6 +21,22 @@ export class Treasury {
 
   constructor(initialGold: number, private readonly history: EconomicHistory) {
     this.units = Math.round(initialGold * unitsPerGold);
+  }
+
+  saveState() {
+    return { units: this.units, accruedTaxes: this.accruedTaxes, accruedWages: this.accruedWages,
+      accruedMaintenance: this.accruedMaintenance, unpaidWages: this.unpaidWages, unpaidMaintenance: this.unpaidMaintenance };
+  }
+
+  restoreState(state: ReturnType<Treasury['saveState']>): void {
+    const { units, accruedTaxes, accruedWages, accruedMaintenance, unpaidWages, unpaidMaintenance } = state;
+    check([units, accruedTaxes, accruedWages, accruedMaintenance, unpaidWages, unpaidMaintenance].every(value => whole(value)));
+    this.units = units;
+    this.accruedTaxes = accruedTaxes;
+    this.accruedWages = accruedWages;
+    this.accruedMaintenance = accruedMaintenance;
+    this.unpaidWages = unpaidWages;
+    this.unpaidMaintenance = unpaidMaintenance;
   }
 
   get gold(): number { return this.units / unitsPerGold; }

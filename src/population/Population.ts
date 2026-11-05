@@ -1,10 +1,13 @@
+import { check, list, restoreEntries, whole } from '../persistence/validation.ts';
 import { gameTimeRules } from '../simulation/GameTime.ts';
+import { housingLevels } from './HousingEvolution.ts';
+import type { HousingLevel } from './HousingEvolution';
 import type { Cell } from '../map/CellSelection';
 import type { ConstructionMap, ConstructionType } from '../map/ConstructionMap';
 import type { RoadConnections } from '../map/RoadConnections';
 
 export const populationRules = {
-  residentsPerPlot: 4,
+  residentsPerPlot: housingLevels[1].capacity,
   familySize: 2,
   immigrationIntervalSeconds: 5,
   foodPerResidentPerSecond: 0.1,
@@ -46,7 +49,7 @@ const jobsByType: Record<ConstructionType, number> = {
   farm: 4, lumberjack: 3, market: 3, warehouse: 2, well: 1,
 };
 
-type Residence = { cell: Cell; residents: number; connected: boolean };
+type Residence = { cell: Cell; residents: number; connected: boolean; level: HousingLevel };
 type Workplace = { cell: Cell; type: ConstructionType; capacity: number; workers: number };
 const key = (cell: Cell): string => `${cell.column},${cell.row}`;
 
@@ -58,9 +61,43 @@ export class Population {
   private unattractiveSeconds = 0;
   private laborContext: LaborContext = {};
 
-  get residencesSnapshot(): readonly { cell: Cell; residents: number }[] {
+  saveState() {
+    return { residences: [...this.residences.values()].map(({ cell, residents, level }) => ({ cell: { ...cell }, residents, level })),
+      workers: [...this.workplaces].map(([id, workplace]) => [id, workplace.workers] as const),
+      migrationCredit: this.migrationCredit, waiting: this.waiting, unattractiveSeconds: this.unattractiveSeconds };
+  }
+
+  restoreState(state: ReturnType<Population['saveState']>): void {
+    const { residences, workers, migrationCredit, waiting, unattractiveSeconds } = state;
+    list(residences, this.residences.size);
+    check(residences.length === this.residences.size && whole(unattractiveSeconds) && whole(migrationCredit, 0, 99));
+    const seen = new Set<string>();
+    for (const { cell, residents, level } of residences) {
+      const id = key(cell);
+      const home = this.residences.get(id);
+      check(home && !seen.has(id) && whole(cell.column) && whole(cell.row)
+        && whole(level, 1, 4) && whole(residents, 0, housingLevels[level].capacity));
+      seen.add(id);
+      home.residents = residents;
+      home.level = level;
+    }
+    check(whole(waiting, 0, this.waitingCapacity));
+    this.waiting = waiting;
+    this.migrationCredit = migrationCredit;
+    this.unattractiveSeconds = unattractiveSeconds;
+    const assignments = new Map<string, number>();
+    restoreEntries(assignments, workers, this.workplaces.size, (id, count) => {
+      const workplace = this.workplaces.get(id);
+      return workplace !== undefined && whole(count, 0, workplace.capacity);
+    });
+    check(assignments.size === this.workplaces.size);
+    for (const [id, count] of assignments) this.workplaces.get(id)!.workers = count;
+    check(this.employed <= this.activePopulation);
+  }
+
+  get residencesSnapshot(): readonly { cell: Cell; residents: number; capacity: number; level: HousingLevel }[] {
     return [...this.residences.values()].map(home => ({
-      cell: { ...home.cell }, residents: home.residents,
+      cell: { ...home.cell }, residents: home.residents, capacity: housingLevels[home.level].capacity, level: home.level,
     }));
   }
 
@@ -87,16 +124,16 @@ export class Population {
   get availableHousing(): number {
     return [...this.residences.values()]
       .filter(plot => plot.connected)
-      .reduce((sum, plot) => sum + populationRules.residentsPerPlot - plot.residents, 0);
+      .reduce((sum, plot) => sum + housingLevels[plot.level].capacity - plot.residents, 0);
   }
 
   get residentialCapacity(): number {
-    return this.residences.size * populationRules.residentsPerPlot;
+    return [...this.residences.values()].reduce((sum, plot) => sum + housingLevels[plot.level].capacity, 0);
   }
 
   get connectedCapacity(): number {
-    return [...this.residences.values()].filter(plot => plot.connected).length
-      * populationRules.residentsPerPlot;
+    return [...this.residences.values()].filter(plot => plot.connected)
+      .reduce((sum, plot) => sum + housingLevels[plot.level].capacity, 0);
   }
 
   get jobCapacity(): number {
@@ -123,6 +160,21 @@ export class Population {
     return this.residences.get(key(cell))?.residents ?? 0;
   }
 
+  housingLevelAt(cell: Cell): HousingLevel { return this.residences.get(key(cell))?.level ?? 1; }
+
+  setHousingLevel(cell: Cell, level: HousingLevel): number {
+    const home = this.residences.get(key(cell));
+    if (!home) return 0;
+    home.level = level;
+    const displaced = Math.max(0, home.residents - housingLevels[level].capacity);
+    if (displaced > 0) {
+      home.residents -= displaced;
+      this.waiting = Math.min(this.waiting, this.waitingCapacity);
+      this.assignWorkers();
+    }
+    return displaced;
+  }
+
   capacityFor(type: ConstructionType): number {
     return jobsByType[type];
   }
@@ -143,7 +195,7 @@ export class Population {
         const connected = connections.isConnected(cell);
         if (type === 'house') {
           residences.set(key(cell), {
-            cell, connected, residents: this.residentsAt(cell),
+            cell, connected, residents: this.residentsAt(cell), level: this.housingLevelAt(cell),
           });
         }
         if (connected && jobsByType[type] > 0) {
@@ -210,12 +262,12 @@ export class Population {
         : this.foodSupportedArrivals(food), this.availableHousing);
     if (remaining <= 0) return 0;
     const plots = [...this.residences.values()]
-      .filter(plot => plot.connected && plot.residents < populationRules.residentsPerPlot
+      .filter(plot => plot.connected && plot.residents < housingLevels[plot.level].capacity
         && (!supply || (supply.get(key(plot.cell)) ?? 0) > 0))
       .sort((a, b) => a.residents - b.residents);
     let arrived = 0;
     for (const plot of plots) {
-      const count = Math.min(remaining, populationRules.residentsPerPlot - plot.residents,
+      const count = Math.min(remaining, housingLevels[plot.level].capacity - plot.residents,
         supply?.get(key(plot.cell)) ?? populationRules.familySize);
       plot.residents += count;
       remaining -= count;

@@ -3,6 +3,7 @@ import type { ConstructionMap } from '../map/ConstructionMap';
 import { MarketCoverage } from '../map/MarketCoverage.ts';
 import type { RoadConnections } from '../map/RoadConnections';
 import type { Population } from '../population/Population';
+import type { Household } from '../population/HouseholdNeeds';
 
 export const waterRules = { capacity: 20, roadRange: 6 } as const;
 export type WellSnapshot = Readonly<{ connected: boolean; workers: number; served: number }>;
@@ -17,7 +18,7 @@ export class WaterService {
   private roads: RoadConnections | undefined;
   private revision = -1;
 
-  refresh(map: ConstructionMap, roads: RoadConnections, population: Pick<Population, 'workersAt' | 'residencesSnapshot'>): void {
+  refresh(map: ConstructionMap, roads: RoadConnections, population: Pick<Population, 'workersAt'> & { residencesSnapshot: readonly Household[] }): void {
     if (map !== this.map || roads !== this.roads || roads.revision !== this.revision) {
       this.map = map;
       this.roads = roads;

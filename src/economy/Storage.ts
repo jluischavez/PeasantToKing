@@ -12,7 +12,7 @@ export const storageRules = { warehouseCapacity: 300 } as const;
 export type WarehouseSnapshot = Readonly<{
   food: number; wood: number; used: number; free: number; capacity: number;
   workers: number; workerCapacity: number; connected: boolean; operational: boolean;
-  accepts: Readonly<ProductFlags>; draining: boolean; drainStatus: string;
+  accepts: Readonly<ProductFlags>; marketDispatch: Readonly<ProductFlags>; draining: boolean; drainStatus: string;
 }>;
 type Warehouse = { id: string; cell: Cell; workers: number; workerCapacity: number; connected: boolean };
 type Allocation = { destination: string; units: number };
@@ -79,6 +79,7 @@ export class Storage {
       capacity: inventory.capacity / unitsPerResource,
       workers: warehouse.workers, workerCapacity: warehouse.workerCapacity,
       connected: warehouse.connected, operational: inventory.operational, accepts: inventory.products,
+      marketDispatch: inventory.marketDispatch,
       draining: inventory.draining, drainStatus: inventory.draining ? this.drainStatus(inventory) : '',
     };
   }
@@ -89,6 +90,10 @@ export class Storage {
 
   setDraining(cell: Cell, draining: boolean): boolean {
     return this.inventories.setDraining(key(cell), draining);
+  }
+
+  setMarketDispatch(cell: Cell, product: ProductId, enabled: boolean): boolean {
+    return this.inventories.setMarketDispatch(key(cell), product, enabled);
   }
 
   private drainDestinations(network: string): string[] {
@@ -173,7 +178,9 @@ export class Storage {
     let units = 0;
     for (const warehouse of this.warehouses.values()) {
       const inventory = this.inventories.snapshot(warehouse.id)!;
-      if (warehouse.connected && (!operationalOnly || inventory.operational)) units += inventory.goods.food;
+      if (warehouse.connected && inventory.marketDispatch.food && (!operationalOnly || inventory.operational)) {
+        units += inventory.goods.food;
+      }
     }
     return units / unitsPerResource;
   }
@@ -227,6 +234,23 @@ export class Storage {
     }
     this.inventories.discardTransient('production-batch');
     return true;
+  }
+
+  restoreWarehouseOrder(ids: readonly string[]): void {
+    const warehouses = new Map(this.warehouses);
+    this.warehouses.clear();
+    for (const id of ids) {
+      const warehouse = warehouses.get(id);
+      if (warehouse) this.warehouses.set(id, warehouse);
+    }
+  }
+
+  get fullWarehouseCount(): number {
+    let count = 0;
+    for (const id of this.warehouses.keys()) {
+      if (this.inventories.snapshot(id)?.free === 0) count++;
+    }
+    return count;
   }
 
   operationalWarehouseIds(): string[] {

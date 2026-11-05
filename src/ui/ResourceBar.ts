@@ -1,29 +1,25 @@
 import { formatNumber } from '../formatNumber';
-import { resourceNames } from '../economy/Economy';
-import type { Resource, Resources } from '../economy/Economy';
+import type { Resources } from '../economy/Economy';
+import type { Goods } from '../economy/Inventories';
 import type { OperatingCosts } from '../economy/OperatingCosts';
 import { perGameHour } from '../simulation/GameTime';
 import { taxPolicies } from '../economy/TaxPolicy';
 import type { TaxPolicy } from '../economy/TaxPolicy';
+import { financeSummary, signedRate } from './FinanceSummary';
+import { setText } from './domText';
+
+const fieldIds = [
+  'resource-gold', 'resource-food', 'resource-wood', 'production-gold', 'production-food', 'production-wood',
+  'initial-food-reserve', 'reserve-status', 'available-food', 'construction-wood', 'construction-reserve',
+  'finance-gold', 'food-sales-rate', 'wood-sales-rate', 'tax-rate', 'total-income', 'wages-rate', 'maintenance-rate',
+  'total-expenses', 'finance-net', 'net-rate', 'finance-balance-state',
+] as const;
+type Field = typeof fieldIds[number];
 
 export class ResourceBar {
-  private readonly reserve = document.querySelector<HTMLElement>('#initial-food-reserve')!;
-  private readonly constructionWood = document.querySelector<HTMLElement>('#construction-wood')!;
-  private readonly constructionReserve = document.querySelector<HTMLElement>('#construction-reserve')!;
-  private readonly reserveStatus = document.querySelector<HTMLElement>('#reserve-status')!;
-  private readonly available = document.querySelector<HTMLElement>('#available-food')!;
-  private readonly storageStatus = document.querySelector<HTMLElement>('#storage-status')!;
+  private readonly fields = Object.fromEntries(fieldIds.map(id => [id, document.getElementById(id)!])) as Record<Field, HTMLElement>;
   private readonly taxSelect = document.querySelector<HTMLSelectElement>('#tax-policy')!;
-  private readonly taxes = document.querySelector<HTMLElement>('#tax-rate')!;
   private readonly events = new AbortController();
-  private readonly wages = document.querySelector<HTMLElement>('#wages-rate')!;
-  private readonly maintenance = document.querySelector<HTMLElement>('#maintenance-rate')!;
-  private readonly net = document.querySelector<HTMLElement>('#net-rate')!;
-  private readonly fields = (Object.keys(resourceNames) as Resource[]).map(resource => ({
-    resource,
-    amount: document.querySelector<HTMLElement>(`#resource-${resource}`)!,
-    rate: document.querySelector<HTMLElement>(`#production-${resource}`)!,
-  }));
 
   constructor(policy: TaxPolicy, onTaxChange: (policy: TaxPolicy) => void) {
     this.taxSelect.replaceChildren(...Object.entries(taxPolicies).map(([value, tax]) =>
@@ -37,30 +33,41 @@ export class ResourceBar {
 
   destroy(): void { this.events.abort(); }
 
-  render(resources: Readonly<Resources>, perSecond: Readonly<Resources>,
-    storage: {
-      reserve: number; availableFood: number; blocked: number; bootstrap: boolean;
-      constructionReserve: number; constructionWood: number;
-      costs: OperatingCosts; taxes: number;
-    }): void {
-    this.reserveStatus.textContent = storage.reserve === 0 ? 'agotada' : storage.bootstrap ? 'reserva de arranque' : 'cerrada: consumo por mercados';
-    this.reserve.textContent = formatNumber(storage.reserve);
-    this.available.textContent = formatNumber(storage.availableFood);
-    this.constructionWood.textContent = formatNumber(storage.constructionWood);
-    this.constructionReserve.textContent = formatNumber(storage.constructionReserve);
-    const storageMessage = storage.blocked > 0
-      ? `Producción bloqueada por falta de almacenamiento: ${formatNumber(storage.blocked)} edificio(s).`
-      : 'Almacenamiento sin bloqueos.';
-    if (this.storageStatus.textContent !== storageMessage) this.storageStatus.textContent = storageMessage;
-    this.taxes.textContent = formatNumber(storage.taxes);
-    this.wages.textContent = formatNumber(storage.costs.wages);
-    this.maintenance.textContent = formatNumber(storage.costs.maintenance);
-    const net = perGameHour(perSecond.gold) + storage.taxes - storage.costs.wages - storage.costs.maintenance;
-    this.net.textContent = formatNumber(net);
-    for (const { resource, amount, rate } of this.fields) {
-      amount.textContent = formatNumber(resources[resource]);
-      const value = formatNumber(perGameHour(perSecond[resource]));
-      rate.textContent = resource === 'gold' ? `(ventas: +${value}/h)` : `(+${value}/h)`;
+  render(resources: Readonly<Resources>, perSecond: Readonly<Resources>, data: {
+    reserve: number; availableFood: number; bootstrap: boolean; constructionReserve: number; constructionWood: number;
+    costs: OperatingCosts; taxes: number; sales: Readonly<Goods>;
+  }): number {
+    const { food, wood, income, expenses, net } = financeSummary(data.sales, perSecond.gold, data.taxes, data.costs);
+    const displayNet = signedRate(net);
+    const trend = displayNet.startsWith('−') ? 'negative' : displayNet.startsWith('+') ? 'positive' : 'neutral';
+    const values: Record<Field, string> = {
+      'resource-gold': formatNumber(resources.gold),
+      'resource-food': formatNumber(resources.food),
+      'resource-wood': formatNumber(resources.wood),
+      'production-gold': signedRate(perGameHour(perSecond.gold)) + ' ventas/h',
+      'production-food': signedRate(perGameHour(perSecond.food)) + ' prod./h',
+      'production-wood': signedRate(perGameHour(perSecond.wood)) + ' prod./h',
+      'initial-food-reserve': formatNumber(data.reserve),
+      'reserve-status': data.reserve === 0 ? 'agotada' : data.bootstrap ? 'de arranque' : 'cerrada',
+      'available-food': formatNumber(data.availableFood),
+      'construction-wood': formatNumber(data.constructionWood),
+      'construction-reserve': formatNumber(data.constructionReserve),
+      'finance-gold': formatNumber(resources.gold),
+      'food-sales-rate': signedRate(food),
+      'wood-sales-rate': signedRate(wood),
+      'tax-rate': signedRate(data.taxes),
+      'total-income': signedRate(income),
+      'wages-rate': signedRate(-data.costs.wages),
+      'maintenance-rate': signedRate(-data.costs.maintenance),
+      'total-expenses': signedRate(-expenses),
+      'finance-net': displayNet,
+      'net-rate': displayNet,
+      'finance-balance-state': trend === 'positive' ? 'Positivo' : trend === 'negative' ? 'Negativo' : 'Neutral',
+    };
+    for (const id of fieldIds) setText(this.fields[id], values[id]);
+    for (const id of ['finance-net', 'net-rate'] as const) {
+      if (this.fields[id].dataset.trend !== trend) this.fields[id].dataset.trend = trend;
     }
+    return net;
   }
 }

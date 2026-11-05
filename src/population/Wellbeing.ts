@@ -1,3 +1,5 @@
+import type { ConstructionMap } from '../map/ConstructionMap';
+import { check, label, list, range, restoreEntries, whole } from '../persistence/validation.ts';
 import type { TaxPolicy } from '../economy/TaxPolicy';
 import type { Cell } from '../map/CellSelection';
 import type { NeedCoverage } from './HouseholdNeeds';
@@ -27,7 +29,7 @@ export type CityWellbeing = Readonly<{
   crisis: number;
   concerns: readonly string[];
 }>;
-export type EmigrationEvent = Readonly<{ timeMs: number; cell: Readonly<Cell>; residents: number }>;
+export type EmigrationEvent = Readonly<{ timeMs: number; cell: Readonly<Cell>; residents: number; reason?: 'deterioration' }>;
 
 const key = (cell: Cell) => cell.column + ',' + cell.row;
 const initialHappiness = populationRules.migration.neutralHappiness;
@@ -44,6 +46,31 @@ export class Wellbeing {
   private readonly homes = new Map<string, HomeState>();
   private readonly departures: EmigrationEvent[] = [];
   private lastDeparture = -Infinity;
+
+  saveState() {
+    return { homes: [...this.homes], departures: [...this.departures],
+      lastDeparture: Number.isFinite(this.lastDeparture) ? this.lastDeparture : null };
+  }
+
+  restoreState(state: ReturnType<Wellbeing['saveState']>, map: ConstructionMap, time: number): void {
+    const { homes, departures, lastDeparture } = state;
+    list(departures, wellbeingRules.eventLimit);
+    check(lastDeparture === (departures.at(-1)?.timeMs ?? null));
+    let previousTime = 0;
+    for (const event of departures) {
+      check(map.contains(event.cell) && whole(event.timeMs, previousTime, time) && whole(event.residents, 1, 12)
+        && (event.reason === undefined || event.reason === 'deterioration'));
+      previousTime = event.timeMs;
+    }
+    restoreEntries(this.homes, homes, map.rows * map.columns, (id, home) => {
+      const cell = map.cellAtKey(id);
+      list(home.concerns, 5);
+      return !!cell && map.getConstruction(cell) === 'house' && range(home.happiness, 0, 100)
+        && whole(home.distressedSeconds, 0, time / 1000) && home.concerns.every(label);
+    });
+    this.departures.splice(0, this.departures.length, ...departures);
+    this.lastDeparture = lastDeparture ?? -Infinity;
+  }
 
   get emigrationEvents(): readonly EmigrationEvent[] { return this.departures; }
 
@@ -96,11 +123,11 @@ export class Wellbeing {
     return candidate;
   }
 
-  recordDeparture(timeMs: number, cell: Cell, remaining: number): void {
+  recordDeparture(timeMs: number, cell: Cell, remaining: number, residents = 1, reason?: 'deterioration'): void {
     this.lastDeparture = timeMs;
     if (remaining === 0) this.forget(cell);
     else this.homes.get(key(cell))!.distressedSeconds = 0;
-    this.departures.push({ timeMs, cell: { ...cell }, residents: 1 });
+    this.departures.push({ timeMs, cell: { ...cell }, residents, ...(reason && { reason }) });
     if (this.departures.length > wellbeingRules.eventLimit) this.departures.shift();
   }
 
