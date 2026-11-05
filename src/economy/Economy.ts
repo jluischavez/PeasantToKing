@@ -1,3 +1,4 @@
+import { EconomicHistory } from './EconomicHistory.ts';
 import { populationRules } from '../population/Population.ts';
 import type { LaborContext } from '../population/Population';
 import { productNames } from './Products.ts';
@@ -51,16 +52,21 @@ export class Economy {
   private productionUnits: Resources = { gold: 0, food: 0, wood: 0 };
   private readonly buildings = new Map<string, BuildingProductivity>();
   private elapsedMs = 0;
+  private completedMs = 0;
+  readonly history: EconomicHistory;
 
   // Called once for a new settlement. Recalculation and UI never grant resources.
-  constructor(initial: Readonly<Resources> = economyRules.initialResources) {
+  constructor(initial: Readonly<Resources> = economyRules.initialResources, historyCapacity = 200) {
+    this.history = new EconomicHistory(historyCapacity, () => this.completedMs);
     this.goldUnits = Math.round(initial.gold * unitsPerResource);
     this.storage = new Storage({
       food: Math.round(initial.food * unitsPerResource),
       wood: Math.round(initial.wood * unitsPerResource),
-    });
+    }, this.history);
     this.distribution = new Distribution(this.storage);
   }
+
+  get simulatedTimeMs(): number { return this.completedMs; }
 
   get resources(): Readonly<Resources> {
     const goods = this.storage.totalsUnits;
@@ -125,7 +131,14 @@ export class Economy {
   consumeHomes(population: Pick<Population, 'residencesSnapshot'>, foodPerResident: number): void {
     // Provisional revenue: one gold per resource unit delivered by a market.
     // No revenue from replenishment, reserve consumption or unsatisfied demand.
-    this.goldUnits += this.distribution.consumeHomes(population.residencesSnapshot, foodPerResident);
+    this.distribution.consumeHomes(population.residencesSnapshot, foodPerResident, (market, household, units) => {
+      const before = this.goldUnits;
+      this.goldUnits += units;
+      this.history.record({
+        operation: 'sale', resource: 'gold', units, origin: market, destination: 'treasury',
+        household, destinationBalance: { before, after: this.goldUnits },
+      });
+    });
     this.refresh();
   }
 
@@ -208,6 +221,7 @@ export class Economy {
     this.elapsedMs -= seconds * 1000;
     // Capacity is shared and can fill between seconds, even within one update.
     for (let second = 0; second < seconds; second++) {
+      this.completedMs += 1000;
       this.refresh();
 
       for (const batch of this.batches) {

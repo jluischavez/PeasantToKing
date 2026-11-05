@@ -1,3 +1,4 @@
+import { SimulationPanel } from '../ui/SimulationPanel';
 import { ProductConfigurationPanel } from '../ui/ProductConfigurationPanel';
 import Phaser from 'phaser';
 import { GridMap } from '../map/GridMap';
@@ -59,6 +60,8 @@ export class MapScene extends Phaser.Scene {
         cell ? economy.storage.warehouseAt(cell) : undefined,
         cell ? economy.distribution.marketAt(cell) : undefined,
         cell && constructions.getConstruction(cell) === 'house' ? economy.distribution.supplyAt(cell) : undefined);
+      const type = cell && constructions.getConstruction(cell);
+      simulationPanel.render(cell && type ? type + ':' + cell.column + ',' + cell.row : null);
       configuration.render(cell, cell ? economy.storage.warehouseAt(cell) : undefined,
         cell ? economy.distribution.marketAt(cell) : undefined);
     };
@@ -76,6 +79,11 @@ export class MapScene extends Phaser.Scene {
     let buildType: ConstructionType | null = null;
     let hoveredCell: Cell | null = null;
     const updatePointerFeedback = (): void => {
+      if (simulation.paused) {
+        map.renderHover(null);
+        map.renderPreview(null, null, false);
+        return;
+      }
       map.renderHover(buildType ? hoveredCell : null);
       map.renderPreview(hoveredCell, buildType,
         hoveredCell !== null && constructions.canPlace(hoveredCell, buildType ?? undefined),
@@ -86,8 +94,19 @@ export class MapScene extends Phaser.Scene {
       map.renderSelection(selection.selected);
       renderSelected();
     });
+    const settings = document.querySelector<HTMLFieldSetElement>('#product-configuration')!;
+    const constructionControls = document.querySelector<HTMLElement>('#construction-menu')!;
+    const updatePauseControls = (): void => {
+      settings.disabled = simulation.paused;
+      constructionControls.inert = simulation.paused;
+    };
+    updatePauseControls();
+    const simulationPanel = new SimulationPanel(simulation, economy.history, () => {
+      updatePauseControls();
+      updatePointerFeedback();
+    });
     const configuration = new ProductConfigurationPanel((cell, kind, product, enabled) => {
-      if (constructions.getConstruction(cell) !== kind) return;
+      if (simulation.paused || constructions.getConstruction(cell) !== kind) return;
       if (kind === 'warehouse') economy.setWarehouseAcceptance(cell, product, enabled);
       else economy.setMarketSale(cell, product, enabled);
       renderSummary();
@@ -128,7 +147,7 @@ export class MapScene extends Phaser.Scene {
       const cell = map.getCellAt(pointer.x, pointer.y);
       if (!cell) return;
       selection.select(cell);
-      if (buildType && constructions.place(cell, buildType)) {
+      if (!simulation.paused && buildType && constructions.place(cell, buildType)) {
         simulation.recalculate();
         renderSummary();
         map.renderConstructions(constructions, connections, population);
@@ -145,6 +164,7 @@ export class MapScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off(Phaser.Scale.Events.RESIZE, layout);
       this.events.off(Phaser.Scenes.Events.UPDATE, updateSimulation);
+      simulationPanel.destroy();
       configuration.destroy();
       panel.destroy();
       menu.destroy();

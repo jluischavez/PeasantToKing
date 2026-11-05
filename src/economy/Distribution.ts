@@ -202,15 +202,20 @@ export class Distribution {
       : { status: 'market', market: { ...source.cell! }, distance: source.distance };
   }
 
-  consumeHomes(homes: readonly Residence[], foodPerResident: number): number {
+  consumeHomes(homes: readonly Residence[], foodPerResident: number,
+    onSale?: (market: string, household: string, units: number) => void): number {
     this.finishBootstrapIfStocked();
     this.salesUnits = 0;
     for (const home of homes) {
       let remaining = Math.round(home.residents * foodPerResident * U);
+      const household = 'house:' + key(home.cell);
       for (const source of this.sources(home.cell)) {
-        const delivered = this.storage.consumeInventoryFood(source.id, remaining);
+        const delivered = this.storage.consumeInventoryFood(source.id, remaining, household);
         remaining -= delivered;
-        if (source.id !== 'initial-reserve') this.salesUnits += delivered;
+        if (delivered > 0 && source.id !== 'initial-reserve') {
+          this.salesUnits += delivered;
+          onSale?.(source.id, household, delivered);
+        }
         if (remaining === 0) break;
       }
     }

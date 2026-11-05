@@ -24,26 +24,64 @@
         <p>Consumo: <span id="food-consumption">0,0</span> comida/s</p>
       </section>
     </header>
-    <main id="game" aria-label="Peasant to King — Mapa inicial de 20 por 20 casillas"></main>
+    <div id="workspace">
+      <main id="game" aria-label="Peasant to King — Mapa inicial de 20 por 20 casillas"></main>
+      <aside id="workspace-panels" aria-label="Paneles de la partida">
+        <section id="selection-panel" aria-labelledby="selection-title">
+          <header class="inspector-heading">
+            <h2 id="selection-title">Detalles de la casilla</h2>
+            <button id="cancel-selection" type="button" disabled>Cancelar selección</button>
+          </header>
+          <div id="selection-content" tabindex="0" role="region" aria-label="Información y configuración de la casilla">
+            <div aria-live="polite" aria-atomic="true">
+              <p>Coordenadas (0–19): <span id="cell-coordinates">X: — · Y: —</span></p>
+              <p>Tipo de terreno: <span id="cell-terrain">—</span></p>
+              <p>Estado: <span id="cell-status">Sin selección</span></p>
+            </div>
+            <fieldset id="product-configuration" hidden>
+              <legend id="product-config-title">Configuración de productos</legend>
+              <div id="product-config-options"></div>
+            </fieldset>
+          </div>
+        </section>
+        <details id="audit-panel" open>
+          <summary>Historial económico</summary>
+          <section id="audit-content" aria-label="Movimientos económicos recientes">
+            <div class="audit-filters">
+              <label>Recurso
+                <select id="audit-resource">
+                  <option value="">Todos</option>
+                  <option value="food">Comida</option>
+                  <option value="wood">Madera</option>
+                  <option value="gold">Oro</option>
+                </select>
+              </label>
+              <label><input id="audit-selected-only" type="checkbox"> Edificio seleccionado</label>
+            </div>
+            <p id="audit-empty">Todavía no hay movimientos.</p>
+            <ol id="audit-list" aria-label="Movimientos completados"></ol>
+          </section>
+        </details>
+      </aside>
+    </div>
     <footer id="controls">
+      <nav id="simulation-controls" aria-label="Control de simulación">
+        <button id="simulation-pause" type="button">Pausar</button>
+        <label>Velocidad
+          <select id="simulation-speed">
+            <option value="1">×1</option>
+            <option value="2">×2</option>
+            <option value="3">×3</option>
+          </select>
+        </label>
+        <span id="simulation-time">0 s simulados</span>
+      </nav>
       <nav id="construction-menu" aria-label="Construcción">
         <div class="construction-buttons">
           <button type="button" data-construction="cancel" disabled>Cancelar construcción</button>
         </div>
         <p id="construction-status" aria-live="polite">Selecciona un tipo de construcción.</p>
       </nav>
-      <section id="selection-panel" aria-label="Información de la casilla">
-        <div aria-live="polite" aria-atomic="true">
-          <p>Coordenadas (0–19): <span id="cell-coordinates">X: — · Y: —</span></p>
-          <p>Tipo de terreno: <span id="cell-terrain">—</span></p>
-          <p>Estado: <span id="cell-status">Sin selección</span></p>
-        </div>
-        <button id="cancel-selection" type="button" disabled>Cancelar selección</button>
-        <fieldset id="product-configuration" hidden>
-          <legend id="product-config-title">Configuración de productos</legend>
-          <div id="product-config-options"></div>
-        </fieldset>
-      </section>
     </footer>
     <script type="module" src="/src/main.ts"></script>
   </body>

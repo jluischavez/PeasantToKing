@@ -115,3 +115,15 @@
 - La suite usa modelos independientes de Phaser. La revisión visual de la escena se mantiene como prueba manual.
 - docs/PRUEBAS_AUTOMATIZADAS.md explica cómo ejecutar y ampliar la suite. Las guías anteriores usan los comandos de Vitest.
 - Verificación de 08T. npm test ejecutó 101 pruebas en ocho archivos, con 101 aprobadas y cero fallidas. npm run build correcto.
+
+- 2026-11-04 — Etapa 08F. SettlementSimulation aplica la pausa y las velocidades ×1, ×2 y ×3 al delta antes de ejecutar los pasos de un segundo simulado. Producción, asignación laboral, reposición, consumo, ventas e inmigración conservan sus tasas e intervalos base.
+- La pausa descarta el tiempo real recibido mientras está activa y conserva la fracción de segundo previa y la velocidad elegida. La escena permite seleccionar edificios y consultar paneles. La construcción y la edición de permisos se suspenden hasta reanudar.
+- EconomicHistory conserva en memoria los últimos 200 eventos confirmados por defecto. Cada evento tiene ID creciente, tiempo simulado, recurso, cantidad entera en unidades de 1/30, extremos, operación, resultado y saldos cuando corresponden.
+- Inventories registra una fila por traspaso confirmado con saldos de ambos inventarios. La producción se registra al crear un lote admitido y el consumo al retirar comida de la reserva o del mercado para la vivienda. La venta identifica la vivienda y el crédito de oro efectivamente aplicado a la tesorería.
+- El panel HTML filtra por recurso y edificio seleccionado y presenta los registros más recientes primero. La lectura del historial es independiente del estado económico.
+- Verificación de 08F. npm test ejecutó 112 pruebas en nueve archivos, con 112 aprobadas y cero fallidas. Se conservaron las 101 previas y se añadieron 11 casos. npm run build correcto, con el aviso conocido de tamaño del paquete de Phaser. Comprobación visual pendiente, con pasos en docs/PRUEBAS_08F.md.
+
+- 2026-11-04 — Corrección de interfaz de 08F. El canvas, el inspector de casillas y el historial tienen áreas reservadas. Seleccionar edificios, mostrar permisos, filtrar o plegar el historial no cambia sus dimensiones ni su posición.
+- El inspector reúne los datos de cualquier casilla y, cuando corresponde, los permisos del almacén o mercado. Los controles de productos se siguen generando desde el catálogo para admitir futuras ampliaciones.
+- El inspector y el historial tienen desplazamiento interno. El historial abre desplegado y conserva su espacio al plegarlo. En ventanas estrechas, los paneles pasan debajo del mapa.
+- Verificación en Chrome a 1280 × 720 y 390 × 844 con selección de vivienda, almacén y mercado, cambio de permiso, filtros y movimientos reales. Se comprobaron las dimensiones y la posición del canvas y de los paneles. npm test aprobó 112 pruebas, con cero fallidas. npm run build correcto, con el aviso conocido de tamaño del paquete de Phaser.

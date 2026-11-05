@@ -1,3 +1,4 @@
+import type { EconomicHistory } from './EconomicHistory';
 import type { ProductId, ProductFlags } from './Products';
 import { Inventories, unitsPerResource } from './Inventories.ts';
 import type { Goods, StoredResource } from './Inventories';
@@ -18,12 +19,13 @@ type Workforce = Pick<Population, 'workersAt' | 'capacityFor'>;
 const key = (cell: Cell): string => `warehouse:${cell.column},${cell.row}`;
 
 export class Storage {
-  readonly inventories = new Inventories();
+  readonly inventories: Inventories;
   private readonly warehouses = new Map<string, Warehouse>();
   private connections: RoadConnections | null = null;
   private readonly producers = new Map<string, StoredResource>();
 
-  constructor(initial: Goods) {
+  constructor(initial: Goods, history?: EconomicHistory) {
+    this.inventories = new Inventories(history);
     this.inventories.create('initial-reserve', {
       kind: 'reserve', capacity: Number.MAX_SAFE_INTEGER, network: null, operational: true,
     }, initial);
@@ -157,7 +159,8 @@ export class Storage {
     if (!plan) return false;
     this.inventories.create('production-batch', {
       kind: 'production', capacity: units, network: this.connections!.networkFor(cell), operational: true,
-    }, { food: resource === 'food' ? units : 0, wood: resource === 'wood' ? units : 0 });
+    }, { food: resource === 'food' ? units : 0, wood: resource === 'wood' ? units : 0 },
+    (resource === 'food' ? 'farm:' : 'lumberjack:') + cell.column + ',' + cell.row);
     for (const allocation of plan) {
       if (!this.inventories.transfer('production-batch', allocation.destination, resource, allocation.units)) {
         throw new Error('A validated production transfer failed');
@@ -172,7 +175,7 @@ export class Storage {
   }
 
   // Homes can consume only reserve or market food, never warehouse stocks.
-  consumeInventoryFood(id: string, units: number): number {
+  consumeInventoryFood(id: string, units: number, destination = 'food-consumption'): number {
     if (!Number.isSafeInteger(units) || units <= 0) return 0;
     const source = this.inventories.snapshot(id);
     if (!source?.operational || (source.kind !== 'reserve' && source.kind !== 'market')) return 0;
@@ -180,7 +183,7 @@ export class Storage {
     if (quantity === 0) return 0;
     this.inventories.create('food-consumption', {
       kind: 'consumer', capacity: quantity, network: null, operational: true,
-    });
+    }, undefined, destination);
     const transferred = this.inventories.transfer(id, 'food-consumption', 'food', quantity);
     this.inventories.discardTransient('food-consumption');
     return transferred ? quantity : 0;

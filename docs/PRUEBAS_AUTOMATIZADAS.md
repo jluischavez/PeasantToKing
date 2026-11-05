@@ -10,6 +10,7 @@ Vitest usa Vite y el TypeScript del proyecto. Las pruebas se ejecutan en Node e 
 | Producción | Proporción por trabajador, máximo, productores desconectados o sin personal |
 | Almacenes y transferencias | Capacidad, permisos, operación, inventarios separados y saldos exactos, incluso tras rechazar una transferencia |
 | Mercados | Empleo, permisos, cobertura vial, existencias e ingresos por comida entregada |
+| Simulación y auditoría | Pausa, reanudación, velocidades, saldos por evento, filtros, rechazos y límite del historial |
 | Integración | Granja → almacén → mercado → vivienda y recuperación con dos trabajadores, mercados inactivos y reserva agotada |
 
 ## Agregar un caso

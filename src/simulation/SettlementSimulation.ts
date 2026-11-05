@@ -4,8 +4,12 @@ import type { RoadConnections } from '../map/RoadConnections';
 import type { Economy } from '../economy/Economy';
 import type { Population } from '../population/Population';
 
+export type SimulationSpeed = 1 | 2 | 3;
+
 export class SettlementSimulation {
   private elapsedMs = 0;
+  private isPaused = false;
+  private multiplier: SimulationSpeed = 1;
   private immigrationSeconds = 0;
   private readonly economy: Economy;
   private readonly population: Population;
@@ -22,6 +26,13 @@ export class SettlementSimulation {
     this.immigrationIntervalSeconds = immigrationIntervalSeconds;
   }
 
+  get paused(): boolean { return this.isPaused; }
+  get speed(): SimulationSpeed { return this.multiplier; }
+  get simulatedTimeMs(): number { return this.economy.simulatedTimeMs; }
+
+  setPaused(paused: boolean): void { this.isPaused = paused; }
+  setSpeed(speed: SimulationSpeed): void { this.multiplier = speed; }
+
   recalculate(): void {
     this.connections.recalculate(this.map);
     this.economy.recalculate(this.map, this.connections, this.population);
@@ -31,8 +42,8 @@ export class SettlementSimulation {
 
   // One shared clock processes production, consumption and immigration in order.
   advance(deltaMs: number): boolean {
-    if (!Number.isFinite(deltaMs) || deltaMs <= 0) return false;
-    this.elapsedMs += deltaMs;
+    if (this.paused || !Number.isFinite(deltaMs) || deltaMs <= 0) return false;
+    this.elapsedMs += deltaMs * this.speed;
     let advanced = false;
     while (this.elapsedMs >= 1000) {
       this.elapsedMs -= 1000;

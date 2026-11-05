@@ -1,3 +1,4 @@
+import type { EconomicHistory } from './EconomicHistory';
 import { isProductId, marketProductIds, productFlags, productIds } from './Products.ts';
 import type { ProductId, ProductFlags } from './Products';
 // Integer units preserve all current production fractions and food consumption.
@@ -11,24 +12,39 @@ export type InventoryAccess = {
   network: string | null;
   operational: boolean;
 };
-type Inventory = InventoryAccess & { goods: Goods; products: ProductFlags };
+type Inventory = InventoryAccess & { goods: Goods; products: ProductFlags; auditId: string };
 
 export class Inventories {
   private readonly entries = new Map<string, Inventory>();
 
-  create(id: string, access: InventoryAccess, goods: Goods = { food: 0, wood: 0 }): void {
+  private readonly history?: EconomicHistory;
+
+  constructor(history?: EconomicHistory) {
+    this.history = history;
+  }
+
+  create(id: string, access: InventoryAccess, goods: Goods = { food: 0, wood: 0 }, auditId = id): void {
     if (this.entries.has(id)) throw new Error('Inventory already exists: ' + id);
     if (![access.capacity, goods.food, goods.wood].every(value => Number.isSafeInteger(value) && value >= 0)
       || goods.food + goods.wood > access.capacity) throw new Error('Invalid inventory');
-    this.entries.set(id, { ...access, goods: { ...goods },
+    this.entries.set(id, { ...access, auditId, goods: { ...goods },
       products: productFlags(access.kind === 'market' ? marketProductIds : productIds) });
+    if (access.kind === 'production' && this.history) {
+      for (const resource of productIds) {
+        if (goods[resource] > 0) this.history.record({
+          resource, units: goods[resource], origin: 'production', destination: auditId,
+          operation: 'production', destinationBalance: { before: 0, after: goods[resource] },
+        });
+      }
+    }
   }
 
   snapshot(id: string): (InventoryAccess & { goods: Readonly<Goods>; products: Readonly<ProductFlags>; used: number; free: number }) | undefined {
     const entry = this.entries.get(id);
     if (!entry) return undefined;
     const used = entry.goods.food + entry.goods.wood;
-    return { ...entry, goods: { ...entry.goods }, products: { ...entry.products }, used, free: entry.capacity - used };
+    const { auditId: _auditId, ...inventory } = entry;
+    return { ...inventory, goods: { ...entry.goods }, products: { ...entry.products }, used, free: entry.capacity - used };
   }
 
   setAccess(id: string, network: string | null, operational: boolean): void {
@@ -76,6 +92,14 @@ export class Inventories {
     if (source.goods[resource] < units || free < units) return false;
     source.goods[resource] -= units;
     destination.goods[resource] += units;
+    const consumed = destination.kind === 'consumer';
+    this.history?.record({
+      resource, units, origin: source.auditId, destination: destination.auditId,
+      operation: consumed ? 'consumption' : 'transfer',
+      originBalance: { before: source.goods[resource] + units, after: source.goods[resource] },
+      destinationBalance: consumed ? undefined
+        : { before: destination.goods[resource] - units, after: destination.goods[resource] },
+    });
     return true;
   }
 

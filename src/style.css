@@ -8,7 +8,25 @@ body {
   height: 100vh;
   height: 100dvh;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  --resource-bar-size: 7.5rem;
+  --controls-size: 7.25rem;
+  grid-template-rows: min(var(--resource-bar-size), 24vh) minmax(0, 1fr) min(var(--controls-size), 24vh);
+}
+
+#workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(17rem, 28vw, 23rem);
+  min-block-size: 0;
+}
+
+#workspace-panels {
+  display: grid;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  min-inline-size: 0;
+  min-block-size: 0;
+  border-inline-start: 1px solid #527b43;
+  color: #c1c7b7;
+  font: 14px Arial, sans-serif;
 }
 
 #game {
@@ -23,22 +41,36 @@ canvas {
 }
 
 #selection-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.inspector-heading {
   display: flex;
-  align-items: center;
-  justify-content: center;
   flex-wrap: wrap;
-  gap: 12px 32px;
-  padding: 12px 16px;
-  border-top: 1px solid #527b43;
-  color: #c1c7b7;
-  font: 14px Arial, sans-serif;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #527b43;
+}
+
+.inspector-heading h2 {
+  margin: 0;
+  color: #ecd5a2;
+  font-size: 1em;
+}
+
+#selection-content {
+  padding: 8px 12px;
 }
 
 #selection-panel p {
-  margin: 4px 0;
+  margin: 0 0 6px;
 }
 
-#controls button {
+#controls button,
+#cancel-selection {
   padding: 8px 12px;
   border: 1px solid #c1c7b7;
   border-radius: 4px;
@@ -48,9 +80,24 @@ canvas {
   cursor: pointer;
 }
 
-#controls button:disabled {
+#controls button:disabled,
+#cancel-selection:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+#resource-bar,
+#controls,
+#selection-content,
+#audit-panel {
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+#selection-content,
+#audit-panel {
+  overflow-wrap: anywhere;
+  overscroll-behavior: contain;
 }
 
 #construction-menu {
@@ -108,9 +155,8 @@ canvas {
 }
 
 #product-configuration {
-  flex-basis: 100%;
   min-inline-size: 0;
-  margin: 0;
+  margin: 12px 0 0;
   padding: 8px 12px;
   border: 1px solid #527b43;
   border-radius: 4px;
@@ -137,4 +183,87 @@ canvas {
   block-size: 1.15em;
   margin: 0;
   accent-color: #ecd5a2;
+}
+
+#simulation-controls,
+.audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+#simulation-controls {
+  justify-content: center;
+  padding: 8px 12px 0;
+  color: #c1c7b7;
+  font: 14px Arial, sans-serif;
+}
+
+#simulation-controls select,
+.audit-filters select {
+  font: inherit;
+  padding: 5px;
+}
+
+#audit-panel {
+  border-top: 1px solid #527b43;
+}
+
+#audit-panel summary {
+  position: sticky;
+  inset-block-start: 0;
+  padding: 12px;
+  cursor: pointer;
+  color: #ecd5a2;
+  background: #1c211d;
+}
+
+#audit-content {
+  padding: 0 12px 12px;
+}
+
+#audit-list {
+  padding: 0;
+  margin: 8px 0 0;
+  list-style: none;
+  font-variant-numeric: tabular-nums;
+}
+
+#audit-list li {
+  padding: 8px 0;
+  border-top: 1px solid #527b43;
+  overflow-wrap: anywhere;
+}
+
+#audit-list strong {
+  color: #ecd5a2;
+}
+
+#construction-menu[inert] {
+  opacity: 0.5;
+}
+
+@media (max-width: 48rem) {
+  body {
+    --resource-bar-size: 10rem;
+    --controls-size: 9rem;
+  }
+
+  #workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
+  }
+
+  #workspace-panels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: minmax(0, 1fr);
+    border-inline-start: 0;
+    border-block-start: 1px solid #527b43;
+  }
+
+  #audit-panel {
+    border-top: 0;
+    border-inline-start: 1px solid #527b43;
+  }
 }
