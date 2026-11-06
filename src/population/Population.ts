@@ -28,7 +28,8 @@ export const employmentRules = {
   minimumServices: ['market', 'warehouse', 'farm', 'well'],
   productionRecoveryServices: ['farm', 'warehouse', 'market', 'well'],
   singleWorkerRecoveryServices: ['warehouse', 'market', 'farm', 'well'],
-  fillPriority: { farm: 0, warehouse: 1, market: 2, well: 3, lumberjack: 10, house: 20, road: 20, bridge: 20, villageCenter: 20 },
+  fillPriority: { farm: 0, warehouse: 1, market: 2, well: 3, lumberjack: 10, house: 20, road: 20, bridge: 20,
+    villageCenter: 20, garden: 20, park: 20, plaza: 20 },
 } as const;
 
 type MigrationConditions = {
@@ -40,17 +41,19 @@ type MigrationConditions = {
 
 export type LaborContext = {
   produceFoodFirst?: boolean;
+  unavailable?: (cell: Cell, type: ConstructionType) => boolean;
   essentialEligible?: (cell: Cell, type: ConstructionType) => boolean;
   marketCoverage?: (cell: Cell) => readonly string[];
 };
 
 const jobsByType: Record<ConstructionType, number> = {
   house: 0, road: 0, bridge: 0, villageCenter: 0,
+  garden: 0, park: 0, plaza: 0,
   farm: 4, lumberjack: 3, market: 3, warehouse: 2, well: 1,
 };
 
 type Residence = { cell: Cell; residents: number; connected: boolean; level: HousingLevel };
-type Workplace = { cell: Cell; type: ConstructionType; capacity: number; workers: number };
+type Workplace = { cell: Cell; type: ConstructionType; capacity: number; workers: number; eligible: boolean };
 const key = (cell: Cell): string => `${cell.column},${cell.row}`;
 
 export class Population {
@@ -137,7 +140,7 @@ export class Population {
   }
 
   get jobCapacity(): number {
-    return [...this.workplaces.values()].reduce((sum, workplace) => sum + workplace.capacity, 0);
+    return [...this.workplaces.values()].reduce((sum, workplace) => sum + (workplace.eligible ? workplace.capacity : 0), 0);
   }
 
   get employed(): number {
@@ -195,7 +198,9 @@ export class Population {
         });
       }
       if (connected && jobsByType[type] > 0) {
-        workplaces.set(key(cell), { cell, type, capacity: jobsByType[type], workers: 0 });
+        const previous = this.workplaces.get(key(cell));
+        const workers = previous?.type === type ? previous.workers : 0;
+        workplaces.set(key(cell), { cell, type, capacity: jobsByType[type], workers, eligible: true });
       }
     }
     this.residences = residences;
@@ -284,40 +289,71 @@ export class Population {
   }
 
   private assignWorkers(): void {
-    let available = this.activePopulation;
+    const active = this.activePopulation;
+    let available = active;
     const workplaces = [...this.workplaces.values()];
-    for (const workplace of workplaces) workplace.workers = 0;
-    const eligible = (workplace: Workplace) =>
+    for (const workplace of workplaces) {
+      workplace.eligible = !this.laborContext.unavailable?.(workplace.cell, workplace.type);
+      if (!workplace.eligible) workplace.workers = 0;
+    }
+    const eligible = workplaces.filter(workplace => workplace.eligible);
+    const priority = [...eligible].sort((a, b) => employmentRules.fillPriority[a.type] - employmentRules.fillPriority[b.type]
+      || a.cell.row - b.cell.row || a.cell.column - b.cell.column);
+    const essential = (workplace: Workplace) =>
       this.laborContext.essentialEligible?.(workplace.cell, workplace.type) ?? true;
+    const firstPosts = new Set<Workplace>();
+    const cover = (workplace: Workplace) => {
+      if (available > 0 && !firstPosts.has(workplace)) {
+        firstPosts.add(workplace);
+        available--;
+      }
+    };
     const order = available < 2 ? employmentRules.singleWorkerRecoveryServices
       : this.laborContext.produceFoodFirst ? employmentRules.productionRecoveryServices
       : employmentRules.minimumServices;
-    // One worker per essential TYPE before second buildings or extra posts.
-    // Equal candidates use stable row/column order, with authorized food services first.
+    // Preserve the recovery order and prefer incumbents among equally useful services.
     for (const type of order) {
-      const workplace = workplaces.find(entry => entry.type === type && eligible(entry));
-      if (available > 0 && workplace) {
-        workplace.workers = 1;
-        available--;
-      }
+      if (available === 0) break;
+      const candidates = eligible.filter(entry => entry.type === type && essential(entry));
+      const workplace = candidates.find(entry => entry.workers > 0) ?? candidates[0];
+      if (workplace) cover(workplace);
     }
     // An extra market gets a minimum worker only if it reaches inhabitants
     // not covered by an already staffed market; redundant markets wait.
-    const covered = new Set(workplaces.filter(entry => entry.type === 'market' && entry.workers > 0)
+    const covered = new Set([...firstPosts].filter(entry => entry.type === 'market')
       .flatMap(entry => [...(this.laborContext.marketCoverage?.(entry.cell) ?? [])]));
-    for (const workplace of workplaces) {
+    const markets = eligible.filter(workplace => workplace.type === 'market')
+      .sort((a, b) => Number(b.workers > 0) - Number(a.workers > 0));
+    for (const workplace of markets) {
+      if (available === 0) break;
+      if (firstPosts.has(workplace) || !essential(workplace)) continue;
       const homes = this.laborContext.marketCoverage?.(workplace.cell) ?? [];
-      if (available > 0 && workplace.type === 'market' && workplace.workers === 0
-        && eligible(workplace) && homes.some(home => !covered.has(home))) {
-        workplace.workers = 1;
-        available--;
+      if (homes.some(home => !covered.has(home))) {
+        cover(workplace);
         for (const home of homes) covered.add(home);
       }
     }
-    // Fill food production first; secondary services precede normal lumber jobs.
-    workplaces.sort((a, b) => employmentRules.fillPriority[a.type] - employmentRules.fillPriority[b.type]
-      || a.cell.row - b.cell.row || a.cell.column - b.cell.column);
-    for (const workplace of workplaces) {
+    // Keep existing first posts where possible, then cover empty workplaces before filling extras.
+    for (const workplace of priority) if (workplace.workers > 0) cover(workplace);
+    for (const workplace of priority) cover(workplace);
+    let assigned = 0, highest = 0;
+    for (const workplace of eligible) {
+      workplace.workers = firstPosts.has(workplace) ? Math.max(1, workplace.workers) : 0;
+      assigned += workplace.workers;
+      highest = Math.max(highest, workplace.workers);
+    }
+    // Unemployed residents cover vacancies first. If needed, transfer surplus from the largest rosters.
+    const donors = [...priority].reverse();
+    for (let staff = highest; staff > 1 && assigned > active; staff--) {
+      for (const workplace of donors) {
+        if (assigned <= active) break;
+        if (workplace.workers !== staff) continue;
+        workplace.workers--;
+        assigned--;
+      }
+    }
+    available = active - assigned;
+    for (const workplace of priority) {
       const assigned = Math.min(available, workplace.capacity - workplace.workers);
       workplace.workers += assigned;
       available -= assigned;

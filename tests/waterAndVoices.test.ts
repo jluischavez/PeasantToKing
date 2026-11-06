@@ -86,7 +86,7 @@ test('a well charges construction, pays its water carrier and loses coverage, em
   assert.equal(economy.resources.wood, 40);
   assert.equal(simulation.water.suppliedAt(servedHome), 2);
   assert.equal(population.employed, 1);
-  assert.deepEqual(economy.operatingCostsPerHour(population.employed), { wages: 0.1, maintenance: 0.07 });
+  assert.deepEqual(economy.operatingCostsPerHour(population.employed), { wages: 0.4, maintenance: 0.18 });
   simulation.advance(25_000);
   assert.ok(economy.history.read('gold').some(event => event.operation === 'wages' && event.result === 'completed'));
   assert.equal(simulation.requestDemolition(firstWell), null);
@@ -94,7 +94,7 @@ test('a well charges construction, pays its water carrier and loses coverage, em
   assert.equal(simulation.water.wellAt(firstWell), undefined);
   assert.equal(simulation.water.suppliedAt(servedHome), 0);
   assert.equal(population.employed, 0);
-  assert.deepEqual(economy.operatingCostsPerHour(population.employed), { wages: 0, maintenance: 0.02 });
+  assert.deepEqual(economy.operatingCostsPerHour(population.employed), { wages: 0, maintenance: 0.03 });
 });
 
 test('water shortages reduce wellbeing gradually and recovery is gradual too', () => {

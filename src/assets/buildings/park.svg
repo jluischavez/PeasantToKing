@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+<rect x="6" y="8" width="181" height="180" rx="16" fill="#4e6b3e" stroke="#384832" stroke-width="4"/>
+<path d="M0 98h26c27 0 37-33 68-33s42 33 68 33h30M96 0v192M21 97c20 0 31 40 75 40s54-40 74-40" fill="none" stroke="#755f44" stroke-width="15"/>
+<path d="M0 96h26c27 0 37-33 68-33s42 33 68 33h30M96 0v192M21 95c20 0 31 40 75 40s54-40 74-40" fill="none" stroke="#bfa677" stroke-width="10"/>
+<defs><g id="oak"><ellipse cx="4" cy="6" rx="20" ry="15" fill="#253e31" opacity=".6"/><circle r="16" fill="#29553e"/><circle cx="-5" cy="-5" r="11" fill="#507a48"/><circle cx="-7" cy="-8" r="5" fill="#759358"/></g></defs>
+<use href="#oak" x="32" y="33"/><use href="#oak" x="61" y="20"/><use href="#oak" x="135" y="30"/><use href="#oak" x="159" y="47"/><use href="#oak" x="25" y="145"/><use href="#oak" x="53" y="166"/><use href="#oak" x="146" y="162"/><use href="#oak" x="165" y="137"/>
+<path d="M105 81q22 0 22 16t-22 18Z" fill="#537e79" stroke="#a9a881" stroke-width="3"/>
+<path d="M112 95q5 2 9 0m-10 9 6-1" stroke="#9ebf9e" fill="none"/>
+<path d="M72 83h11m-17 34h13m33 35h12m23-78h11" stroke="#6f482d" stroke-width="5" stroke-linecap="round"/>
+<path d="M71 81h11m-17 34h13m33 35h12m23-78h11" stroke="#c68b51" stroke-width="2" stroke-linecap="round"/>
+</svg>

@@ -125,6 +125,48 @@ Multijugador, login, servidor, cuentas en nube, ranking global, combate, ejérci
 - En **Caminos → Puente de madera**, selecciona un camino conectado en la orilla y una casilla de río en línea recta. El inspector muestra el tramo y el costo total antes de confirmar. Se admiten hasta 8 casillas de agua y cuesta 15 oro y 10 madera por casilla. El tablero conecta solo por sus extremos y conserva el río.
 - **Demoler** retira el tramo completo por 5 oro por casilla. Si era el único acceso, se interrumpen las conexiones. El guardado conserva el recorrido, la entrada y los puentes. Los mapas anteriores mantienen sus construcciones y siguen sin camino exterior.
 
+### Etapa 13B. Rebalance económico y empleo
+
+Las ventas municipales pasan de 1 oro por unidad a importes de 0,10 por comida y 0,20 por madera efectivamente entregadas. Se mantiene el volumen de producción y consumo. La reserva inicial, los traslados y la demanda sin atender quedan fuera de las ventas. Los impuestos conservan su base y sus políticas de 5 %, 10 % y 20 %.
+
+| Tarifa | Antes | Ahora |
+| --- | ---: | ---: |
+| Comida, oro por unidad vendida | 1,00 | 0,10 |
+| Madera, oro por unidad vendida | 1,00 | 0,20 |
+| Salario, oro/h por empleado | 0,10 | 0,40 |
+| Mantenimiento de solar, oro/h | 0,01 | 0,02 |
+| Mantenimiento de granja, oro/h | 0,05 | 0,25 |
+| Mantenimiento de campamento, oro/h | 0,05 | 0,20 |
+| Mantenimiento de almacén, oro/h | 0,08 | 0,35 |
+| Mantenimiento de mercado, oro/h | 0,08 | 0,30 |
+| Mantenimiento de pozo, oro/h | 0,05 | 0,15 |
+| Mantenimiento de camino normal, oro/h | 0,01 | 0,01 |
+| Centro de Aldea, camino del reino y puentes, oro/h | 0 | 0 |
+
+- Se asigna un primer puesto a cada negocio elegible antes de cubrir puestos adicionales. Se usa el personal libre y, si falta, se toma de los equipos más numerosos sin vaciar al donante. En escasez rigen primero los servicios esenciales, incluida la cobertura de mercados por zona. Se conservan los puestos ya cubiertos cuando las prioridades lo permiten y se llenan los puestos adicionales libres por prioridad y coordenadas.
+- Un mercado con ambas ventas deshabilitadas queda sin personal. Un almacén vacío que esté en vaciado o tenga cerradas ambas entradas queda sin personal. Los productores conservan la posibilidad de trabajar cuando se resuelve un bloqueo temporal de almacenamiento.
+- Con dos trabajadores, el cambio de producción a venta requiere el doble del colchón alimentario que activa el retorno a producción. Se cuentan las existencias de los mercados útiles aunque estén sin personal, de modo que trasladar a un empleado no cambie las existencias contabilizadas.
+- Las partidas anteriores conservan tesorería, historial y gastos ya devengados. La carga verifica la elegibilidad y la cobertura de puestos con la configuración real de los edificios. Finanzas extrapola las ventas del último segundo simulado y muestra las tasas por hora del juego.
+
+### Etapa 13C. Urbanismo y belleza residencial
+
+| Construcción nueva | Huella | Costo de decoración | Mantenimiento de decoración por hora |
+| --- | --- | --- | --- |
+| Solar residencial, pozo, Centro de Aldea y camino | 1 × 1 | — | — |
+| Campamento maderero, almacén y mercado | 2 × 2 | — | — |
+| Granja | 3 × 3 | — | — |
+| Jardín | 1 × 1 | 40 oro | 0,50 oro |
+| Parque | 3 × 3 | 150 oro | 2 oro |
+| Plaza con fuente | 2 × 2 | 300 oro | 4 oro |
+| Puente de madera | Una casilla por segmento | — | — |
+
+- Cada edificio se cobra y opera una vez, con un anclaje y conexión desde cualquiera de sus bordes. Cualquier casilla selecciona la huella completa. Los edificios y sus miniaturas usan los mismos SVG locales provisionales. Las cuatro viviendas conservan su arte.
+- La belleza parte de 15 y llega hasta 100. Se mide la distancia ortogonal desde la casilla más cercana de cada huella. Con acceso vial en la vivienda y la decoración, el jardín aporta hasta 25 en 3 casillas, el parque hasta 35 en 6 y la plaza hasta 40 en 5. El aporte disminuye con la distancia y se toma el mayor por cada tipo.
+- La decoración tiene un costo fijo de mantenimiento, emplea a cero trabajadores y aporta cero producción. Los pozos siguen siendo la fuente del abastecimiento de agua. Las tres decoraciones están disponibles desde el inicio de la partida.
+- Las casas de nivel 3 y 4 requieren 35 y 65 de belleza respectivamente, además del abastecimiento, la felicidad y el empleo para evolucionar. Mejorar o deteriorarse toma 60 segundos simulados. Necesidades muestra la media de los hogares habitados.
+- Selecciona un camino normal, elige **Mejorar** y confirma. Tierra a grava cuesta 6 oro y 2 madera. Grava a piedra cuesta 15 oro y 4 madera. El mejor tramo conectado a dos casillas o menos aporta 5 o 10 puntos respectivamente. Cada tramo conserva la red, y el camino del reino y los puentes conservan sus reglas.
+- Las partidas de esquema 1 cargan sus edificios compactos de 1 × 1 y sus caminos de tierra. El esquema 2 registra huellas grandes y superficies mejoradas. La belleza se deriva de esos datos y de la red vial al cargar.
+
 ### Funcionalidad futura reservada: evolución visual de la ciudad
 
 **Prioridad:** después de finalizar, probar y publicar el MVP funcional (etapas 06–11), **no antes**. Es una expansión planificada, no un requisito inmediato ni una orden de implementación automática. Dividir en tareas pequeñas independientes:
@@ -133,7 +175,7 @@ Multijugador, login, servidor, cuentas en nube, ranking global, combate, ejérci
 |---|---|---|
 | F01 | Prosperidad y servicios | Calcular por vivienda una puntuación basada en acceso por caminos, abastecimiento, mercado, seguridad y otros servicios; ajustar las reglas tras probar la economía. |
 | F02 | Evolución visual ampliada de viviendas | 10B cubre los cuatro niveles residenciales. Los efectos visuales adicionales forman parte del pulido futuro. |
-| F03 | Mejoras de calles | Camino de tierra → grava → piedra → piedra pulida/real; mantener las uniones automáticas de rectas, curvas, T y cruces en todos los niveles. |
+| F03 | Mejoras de calles | 13C cubre tierra, grava y piedra con uniones automáticas. Un nivel adicional queda reservado para una etapa futura. |
 | F04 | Evolución de edificios | Granja, leñador/aserradero, almacén y mercado tendrán apariencias más desarrolladas según nivel/mejoras económicas; siempre reconocibles. |
 | F05 | Centro de aldea y defensa | Centro de Aldea → ayuntamiento/casa señorial → castillo; añadir torres de vigilancia, guardias, murallas y portones por etapas posteriores. |
 | F06 | Pulido visual | Barrios pobres y prósperos distinguibles, decoración y animaciones ligeras; sin exigir simulación de ciudadanos ni rehacer el motor. |

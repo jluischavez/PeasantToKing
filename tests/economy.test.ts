@@ -24,7 +24,7 @@ function setup() {
   const fillWorkers = (workers: number) => {
     const farmOnly = map.getConstruction(cell(13, 1)) === 'farm'
       && map.getConstruction(cell(14, 1)) === null;
-    const storageWorkers = farmOnly ? 1 : 2;
+    const storageWorkers = farmOnly || workers === 0 ? 1 : 2;
     const residents = (workers + storageWorkers) * 2;
     // Use actual immigration/assignment, limiting arrivals with the food reserve.
     for (let i = 0; i < 100 && population.total < residents; i++) {

@@ -19,6 +19,7 @@ export class PopulationPanel {
   private readonly waiting = document.querySelector<HTMLElement>('#migration-waiting')!;
   private readonly happiness = document.querySelector<HTMLElement>('#city-happiness')!;
   private readonly wellbeing = document.querySelector<HTMLElement>('#city-wellbeing')!;
+  private readonly beauty = document.getElementById('city-beauty')!;
   private readonly wellbeingCounts = document.querySelector<HTMLElement>('#housing-wellbeing-counts')!;
   private readonly concerns = document.querySelector<HTMLElement>('#wellbeing-concerns')!;
   private readonly reason = document.querySelector<HTMLElement>('#migration-reason')!;
@@ -45,7 +46,7 @@ export class PopulationPanel {
   }
 
   render(population: Population, attraction: number, city: CityWellbeing, reason: string, shortage: number,
-    needs: ReturnType<HouseholdNeeds['summarize']>): void {
+    needs: ReturnType<HouseholdNeeds['summarize']>, beauty?: number): void {
     for (const need of needIds) {
       const percent = needs.percentages?.[need];
       setText(this.needs[need], percent === undefined ? '—' : formatNumber(percent) + ' %');
@@ -70,6 +71,7 @@ export class PopulationPanel {
     this.waiting.title = 'Límite de la lista de espera: ' + population.waitingCapacity;
     setText(this.happiness, formatNumber(city.happiness));
     setText(this.wellbeing, city.state + ' · ' + formatNumber(city.happiness) + '/100');
+    setText(this.beauty, beauty === undefined ? '—' : formatNumber(beauty) + '/100');
     setText(this.wellbeingCounts, 'Viviendas satisfechas: ' + city.satisfied
       + ' · Inconformes: ' + city.dissatisfied + ' · En crisis: ' + city.crisis);
     this.concerns.hidden = city.concerns.length === 0;

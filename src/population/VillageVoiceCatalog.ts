@@ -1,10 +1,15 @@
 import type { TaxPolicy } from '../economy/TaxPolicy';
 import type { Need, NeedsObservation } from './HouseholdNeeds';
+import type { Cell } from '../map/CellSelection';
+import { beautyRules } from './ResidentialBeauty.ts';
+import type { Beauty } from './ResidentialBeauty';
 
 export type VoiceTone = 'positive' | 'negative' | 'neutral';
 export type VoiceCity = Readonly<{
   unemployment: number; tax: TaxPolicy; waiting: number;
   hasMarket?: boolean; hasWarehouse?: boolean; hasRoad?: boolean;
+  beautyAt?: (cell: Cell) => Beauty;
+  lacksHousingBeauty?: (cell: Cell) => boolean;
 }>;
 type Condition = (home: NeedsObservation, city: VoiceCity) => boolean;
 
@@ -28,6 +33,13 @@ const topics = {
   road: { tone: 'neutral', matches: (_home, city) => city.hasRoad === true },
   prosperity: { tone: 'positive', matches: (home, city) =>
     city.unemployment < 0.25 && supplied('food')(home) && supplied('water')(home) && supplied('wood')(home) },
+  garden: { tone: 'positive', matches: (home, city) => !!city.beautyAt?.(home.cell).sources.garden },
+  park: { tone: 'positive', matches: (home, city) => !!city.beautyAt?.(home.cell).sources.park },
+  plaza: { tone: 'positive', matches: (home, city) => !!city.beautyAt?.(home.cell).sources.plaza },
+  beautiful: { tone: 'positive', matches: (home, city) => (city.beautyAt?.(home.cell).score ?? 0) >= 65 },
+  sparse: { tone: 'negative', matches: (home, city) => city.beautyAt?.(home.cell).score === beautyRules.base },
+  urbanDecline: { tone: 'negative', matches: (home, city) => city.lacksHousingBeauty?.(home.cell) === true },
+  paving: { tone: 'positive', matches: (home, city) => !!city.beautyAt?.(home.cell).sources.road },
 } satisfies Record<string, { tone: VoiceTone; matches: Condition }>;
 
 type Topic = keyof typeof topics;
@@ -50,6 +62,16 @@ export const originalVoiceTemplates = [
   ...templates('lowTaxes', ['Con estos impuestos queda más margen para vivir.']),
   ...templates('immigration', ['Hay gente esperando un solar para mudarse.']),
   ...templates('dailyLife', ['Otro día en nuestra aldea.']),
+];
+
+export const urbanVoiceTemplates = [
+  ...templates('garden', ['Las flores del jardín se ven desde casa. Hasta el vecino se asoma a regarlas.']),
+  ...templates('park', ['¡Tenemos un parque cerca! Ahora sí dan ganas de salir a pasear.']),
+  ...templates('plaza', ['Qué bonita quedó la plaza. Hasta parece que el gobernador trabaja.']),
+  ...templates('beautiful', ['Mis visitas dan una vuelta al barrio antes de tocar a la puerta.']),
+  ...templates('sparse', ['Con un poco de sombra y unas flores, esta calle sería otra.']),
+  ...templates('urbanDecline', ['La casa sigue en pie, pero al barrio le hace falta cariño.']),
+  ...templates('paving', ['Desde que arreglaron el camino, llego a casa con menos barro en las botas.']),
 ];
 
 export const newVoiceTemplates = [

@@ -55,6 +55,22 @@ test.each([false, true])('builds a complete crossing with one total charge and p
   assert.equal(economy.resources.gold, 120);
 });
 
+test('upgrading the approach preserves the bridge, the river and connectivity', () => {
+  const { game, from, to, water } = crossing();
+  const { map, simulation, connections } = game;
+  assert.equal(simulation.requestBridge(from, water), null);
+  assert.equal(simulation.confirmBridge(), null);
+  assert.equal(simulation.build(to, 'road'), null);
+  const revision = connections.revision;
+  assert.equal(simulation.upgradeRoad(from, 1), null);
+  assert.equal(simulation.upgradeRoad(from, 2), null);
+  assert.equal(simulation.roadUpgradeAt(water), null);
+  assert.equal(connections.revision, revision);
+  assert.ok(connections.isConnected(to));
+  assert.equal(map.terrain.at(water)?.ground, 'river');
+  assert.deepEqual(map.bridgeAt(water), { from, to });
+});
+
 test('rejects invalid, incomplete, overlong and diagonal crossings without changing balances', () => {
   const base = crossing();
   const { game, from, water, at, to } = base;

@@ -2,6 +2,7 @@ import type { ConstructionMap } from '../map/ConstructionMap';
 import { restoreEntries, whole } from '../persistence/validation.ts';
 import type { Cell } from '../map/CellSelection';
 import type { NeedCoverage } from './HouseholdNeeds';
+import { beautyRules } from './ResidentialBeauty.ts';
 
 export const housingLevels = {
   1: { name: 'Choza', capacity: 4 },
@@ -16,7 +17,11 @@ export const housingRules = {
   upgradeHappiness: 80,
   deteriorationHappiness: 40,
   maximumUnemployment: 0.25,
+  minimumBeauty: { 1: 0, 2: 0, 3: 35, 4: 65 },
 } as const;
+export function nextHousingBeauty(level: HousingLevel): number | undefined {
+  return level < 4 ? housingRules.minimumBeauty[(level + 1) as HousingLevel] : undefined;
+}
 type Progress = { improvement: number; deterioration: number };
 const key = (cell: Cell) => cell.column + ',' + cell.row;
 
@@ -44,11 +49,13 @@ export class HousingEvolution {
   forget(cell: Cell): void { this.progress.delete(key(cell)); }
 
   advanceSecond(cell: Cell, level: HousingLevel, happiness: number, supply: NeedCoverage,
-    unemployment: number): HousingLevel | undefined {
+    unemployment: number, beauty: number = beautyRules.base): HousingLevel | undefined {
     const adequatelySupplied = supply.food >= 1 && supply.wood >= 1 && supply.water >= 1;
-    const improves = level < 4 && happiness >= housingRules.upgradeHappiness
+    const nextBeauty = nextHousingBeauty(level);
+    const improves = nextBeauty !== undefined && beauty >= nextBeauty && happiness >= housingRules.upgradeHappiness
       && adequatelySupplied && unemployment <= housingRules.maximumUnemployment;
-    const deteriorates = level > 1 && (happiness < housingRules.deteriorationHappiness || !adequatelySupplied);
+    const deteriorates = level > 1 && (happiness < housingRules.deteriorationHappiness || !adequatelySupplied
+      || beauty < housingRules.minimumBeauty[level]);
     const previous = this.at(cell);
     const improvement = improves ? previous.improvement + 1 : 0;
     const deterioration = deteriorates ? previous.deterioration + 1 : 0;

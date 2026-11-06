@@ -48,6 +48,7 @@ test('a new browser session restores exact world, selection, stock, housing, wor
   game.economy.setWarehouseMarketDispatch(warehouse, 'food', false);
   game.economy.setWarehouseDraining(warehouse, true);
   game.economy.setMarketSale(market, 'wood', false);
+  game.simulation.refreshWorkforce();
   game.simulation.setSpeed(3);
   game.simulation.setPaused(true);
 

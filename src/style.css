@@ -199,7 +199,7 @@ input[type="checkbox"] { accent-color: #ebd39a; }
 #warehouse-drain, #demolition-confirmation { margin-block: 7px; }
 #warehouse-drain-status, #demolition-issue { margin-block-start: 4px; font-size: .8rem; }
 #demolition-target { margin-block-end: 5px; }
-#clear-terrain { margin-block-start: 7px; }
+#clear-terrain, #upgrade-road { margin-block-start: 7px; }
 
 .audit-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 10px; }
 #audit-empty, #voices-empty, #population-events-empty { margin-block: 8px; color: var(--muted); }
@@ -260,8 +260,9 @@ input[type="checkbox"] { accent-color: #ebd39a; }
 }
 #construction-categories { min-inline-size: 0; overflow: auto; scrollbar-width: thin; }
 #construction-categories button, .construction-actions button { flex: none; font-size: .83rem; }
-.construction-buttons { justify-content: center; min-block-size: 2.55rem; margin-block-start: 3px; }
-.construction-buttons button { padding-block: 2px; }
+.construction-buttons { justify-content: safe center; block-size: 2.9rem; margin-block-start: 3px; overflow: auto; }
+.construction-buttons button:not([hidden]) { display: flex; align-items: center; gap: 4px; flex: none; padding-block: 2px; }
+.construction-thumbnail { inline-size: 2rem; block-size: 2rem; object-fit: contain; }
 .construction-cost { display: block; font-size: .74rem; color: var(--muted); }
 #construction-menu [data-unaffordable] { border-color: #c18473; color: var(--red); }
 #construction-status {

@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import type { Cell } from './CellSelection';
 import type { ConstructionMap } from './ConstructionMap';
+import type { RoadLevel } from './RoadMaterials';
 
 export const RoadDirection = { North: 1, East: 2, South: 4, West: 8 } as const;
 
@@ -10,6 +11,12 @@ const neighbors = [
   { dx: 0, dy: 1, bit: RoadDirection.South },
   { dx: -1, dy: 0, bit: RoadDirection.West },
 ];
+const roadColors = {
+  1: { surface: 0xac8c5d, detail: 0x8c704d },
+  2: { surface: 0xa69a83, detail: 0x777367 },
+  3: { surface: 0xaba89a, detail: 0x77756b },
+  royal: { surface: 0xaca18c, detail: 0xf1d189 },
+} as const;
 
 export function getRoadMask(map: ConstructionMap, cell: Cell): number {
   let mask = 0;
@@ -34,39 +41,38 @@ export function drawRoad(
   alpha = 1,
   mask = 0,
   royal = false,
+  level: RoadLevel = 1,
 ): void {
-  graphics.fillStyle(royal ? 0xaca18c : 0xb99b6a, alpha);
-  graphics.fillRect(x + size * 0.3, y + size * 0.3, size * 0.4, size * 0.4);
-  // Arms meet the cell edges; neighboring roads share the same width.
-  if (mask & RoadDirection.North) {
-    graphics.fillRect(x + size * 0.3, y, size * 0.4, size * 0.3);
+  const { surface, detail } = roadColors[royal ? 'royal' : level];
+  const start = 39 / 128, end = 89 / 128;
+  const rect = (left: number, top: number, width: number, height: number) =>
+    graphics.fillRect(x + left * size, y + top * size, width * size, height * size);
+  graphics.fillStyle(surface, alpha);
+  rect(start, start, end - start, end - start);
+  if (royal) {
+    graphics.fillStyle(detail, alpha);
+    rect(0.35, 0.4, 0.12, 0.08);
+    rect(0.54, 0.54, 0.1, 0.08);
   }
-  if (mask & RoadDirection.East) {
-    graphics.fillRect(x + size * 0.7, y + size * 0.3, size * 0.3, size * 0.4);
+  // Every material uses the same edges, including when it meets a bridge or royal road.
+  for (const { dx, dy, bit } of neighbors) {
+    if (!(mask & bit)) continue;
+    const offset = dx > 0 || dy > 0 ? end : 0;
+    const arm = (along: number, across: number, length: number, width: number) =>
+      dx ? rect(offset + along, across, length, width) : rect(across, offset + along, width, length);
+    graphics.fillStyle(surface, alpha);
+    arm(0, start, start, end - start);
+    graphics.fillStyle(detail, alpha);
+    if (level === 3) {
+      arm(0.08, start, 0.012, end - start);
+      arm(0.21, start, 0.012, end - start);
+      arm(0, 0.47, 0.08, 0.012);
+      arm(0.09, 0.55, 0.12, 0.012);
+      arm(0.22, 0.47, 0.08, 0.012);
+    } else {
+      arm(0.06, 0.42, 0.04, 0.025);
+      arm(0.19, 0.57, 0.05, 0.025);
+      if (level === 2) arm(0.24, 0.37, 0.035, 0.03);
+    }
   }
-  if (mask & RoadDirection.South) {
-    graphics.fillRect(x + size * 0.3, y + size * 0.7, size * 0.4, size * 0.3);
-  }
-  if (mask & RoadDirection.West) {
-    graphics.fillRect(x, y + size * 0.3, size * 0.3, size * 0.4);
-  }
-  graphics.fillStyle(royal ? 0xf1d189 : 0xd4bb8e, alpha);
-  graphics.fillRect(x + size * 0.35, y + size * 0.4, size * 0.12, size * 0.08);
-  graphics.fillRect(x + size * 0.54, y + size * 0.54, size * 0.1, size * 0.08);
-}
-
-export function drawBridge(graphics: Phaser.GameObjects.Graphics, x: number, y: number,
-  size: number, alpha = 1, mask = 0): void {
-  const horizontal = (mask & (RoadDirection.East | RoadDirection.West)) !== 0;
-  const rect = (along: number, across: number, length: number, width: number) => {
-    graphics.fillRect(x + size * (horizontal ? along : across), y + size * (horizontal ? across : along),
-      size * (horizontal ? length : width), size * (horizontal ? width : length));
-  };
-  graphics.fillStyle(0x423123, alpha);
-  rect(0, 0.22, 1, 0.56);
-  graphics.fillStyle(0xb9854d, alpha);
-  for (let plank = 0; plank < 5; plank++) rect(plank / 5 + 0.015, 0.26, 0.17, 0.48);
-  graphics.fillStyle(0xe0b477, alpha);
-  rect(0, 0.22, 1, 0.07);
-  rect(0, 0.71, 1, 0.07);
 }

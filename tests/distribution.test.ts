@@ -153,8 +153,8 @@ test('household consumption uses the nearest stocked market and can finish at th
   consume([{ cell: near, residents: 4 }]);
   assert.equal(economy.distribution.marketAt(market)!.food, 0);
   assert.equal(economy.distribution.marketAt(further)!.food, 9.7);
-  assert.equal(economy.resources.gold, 0.4);
-  assert.equal(economy.perSecond.gold, 0.4);
+  assert.equal(economy.resources.gold, 0.04);
+  assert.equal(economy.perSecond.gold, 0.04);
   assert.deepEqual(economy.distribution.supplyAt(near), { status: 'market', market: further, distance: 4 });
 });
 
@@ -180,13 +180,13 @@ test('sales pay exactly for delivered food, including partial demand, with no pa
   const marketFood = economy.distribution.marketAt(market)!.food;
   const before = economy.resources.food;
   consume([{ cell: near, residents: 4 }, { cell: boundary, residents: 4 }]);
-  assert.equal(economy.resources.gold, marketFood);
+  assert.equal(economy.resources.gold, marketFood / 10);
   assert.equal(economy.resources.food, before - marketFood);
   assert.equal(economy.distribution.marketAt(market)!.food, 0);
   assert.equal(economy.storage.initialFoodReserve, 20);
   consume([{ cell: near, residents: 4 }]);
   assert.equal(economy.perSecond.gold, 0);
-  assert.equal(economy.resources.gold, marketFood);
+  assert.equal(economy.resources.gold, marketFood / 10);
 });
 
 test('the bootstrap reserve feeds first inhabitants until an authorized market has real stock', () => {
@@ -203,7 +203,7 @@ test('the bootstrap reserve feeds first inhabitants until an authorized market h
   restock();
   assert.equal(economy.distribution.bootstrapActive, false);
   for (let i = 0; i < 5; i++) consume([{ cell: near, residents: 2 }]);
-  assert.equal(economy.resources.gold, 1);
+  assert.equal(economy.resources.gold, 0.1);
   assert.equal(economy.storage.initialFoodReserve, 19.6);
   counts.set('4,1', 0);
   for (let i = 0; i < 5; i++) sync();
@@ -266,7 +266,7 @@ test('an unfed house does not prevent immigration into another house with adequa
   assert.equal(population.residentsAt(outside), 2);
   assert.equal(population.residentsAt(near), 4);
   assert.equal(population.total, 8);
-  assert.equal(economy.resources.gold, 0.4);
+  assert.equal(economy.resources.gold, 0.04);
 });
 
 test('central transfers reject unavailable wood, direct warehouse consumption and market production deposits', () => {
@@ -333,7 +333,7 @@ test('multiple markets share finite warehouse stock only on scheduled replenishm
   assert.equal(economy.distribution.marketAt(second)!.food, 50.6);
   assert.equal(economy.storage.warehouseAt(warehouse)!.food, 0);
   assert.equal(economy.resources.food, before + 0.6);
-  assert.equal(economy.resources.gold, 0.4);
+  assert.equal(economy.resources.gold, 0.04);
 });
 
 test('fractional sales conserve food and treasury exactly over a thousand withdrawals', () => {
@@ -341,14 +341,14 @@ test('fractional sales conserve food and treasury exactly over a thousand withdr
   food(100);
   restock();
   for (let i = 0; i < 1000; i++) consume([{ cell: near, residents: 1 }]);
-  assert.equal(economy.resources.gold, 100);
+  assert.equal(economy.resources.gold, 10);
   assert.equal(economy.distribution.marketAt(market)!.food, 0);
   assert.equal(economy.storage.warehouseAt(warehouse)!.food, 0);
   assert.equal(economy.resources.food, 20); // Closed, unused bootstrap stock remains real.
-  assert.equal(economy.perSecond.gold, 0.1);
+  assert.equal(economy.perSecond.gold, 0.01);
   consume([{ cell: near, residents: 1 }]);
   assert.equal(economy.perSecond.gold, 0);
-  assert.equal(economy.resources.gold, 100);
+  assert.equal(economy.resources.gold, 10);
 });
 test('simulation moves farm food through the warehouse and market before households buy it', () => {
   const map = new ConstructionMap(20, 20);
@@ -383,5 +383,5 @@ test('simulation moves farm food through the warehouse and market before househo
   assert.equal(economy.distribution.marketAt(market)!.food, 1.9);
   assert.equal(economy.storage.initialFoodReserve, 17.6);
   assert.equal(economy.resources.food, 19.5);
-  assert.equal(economy.resources.gold, 0.6);
+  assert.equal(economy.resources.gold, 0.06);
 });

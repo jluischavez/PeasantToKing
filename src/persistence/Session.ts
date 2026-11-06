@@ -1,5 +1,6 @@
 import { Economy } from '../economy/Economy.ts';
-import { ConstructionMap, isConstructionType } from '../map/ConstructionMap.ts';
+import { ConstructionMap, constructionDimensions, isConstructionType } from '../map/ConstructionMap.ts';
+import type { Dimensions } from '../map/ConstructionMap';
 import type { Cell } from '../map/CellSelection';
 import { cameraRules, cellSize } from '../map/MapCamera.ts';
 import type { CameraView } from '../map/MapCamera';
@@ -57,15 +58,20 @@ export class Session {
   saveState(selection: Cell | null, camera?: CameraView) {
     const terrainData = this.world.terrain !== worldRules.terrain ? this.map.terrain.save() : undefined;
     const bridgeSpans = this.map.bridgeSpans();
+    const footprints = this.map.saveFootprints();
+    const roadLevels = this.map.saveRoadLevels();
     return { world: this.world, cells: this.map.saveCells(), selection, ...(camera && { camera }),
       ...(terrainData !== undefined && { terrainData }),
       ...(this.map.kingdomRoad && { kingdomRoad: this.map.kingdomRoad }),
       ...(bridgeSpans.length > 0 && { bridgeSpans }),
+      ...(footprints.length > 0 && { footprints }),
+      ...(roadLevels.length > 0 && { roadLevels }),
       economy: this.economy.saveState(), population: this.population.saveState(), simulation: this.simulation.saveState() };
   }
 
   static restore(state: ReturnType<Session['saveState']>): { session: Session; selection: Cell | null; camera?: CameraView } {
-    const { world, cells, selection, economy, population, simulation, camera, terrainData, kingdomRoad, bridgeSpans } = state;
+    const { world, cells, selection, economy, population, simulation, camera, terrainData,
+      kingdomRoad, bridgeSpans, footprints, roadLevels } = state;
     const legacy = world.columns === legacyWorldSize && world.rows === legacyWorldSize;
     check((legacy || (world.columns === worldRules.columns && world.rows === worldRules.rows))
       && whole(world.seed, 0, maxSeed));
@@ -83,6 +89,19 @@ export class Session {
     check(terrain || terrainData === undefined);
     const session = new Session({ ...world, columns: worldRules.columns, rows: worldRules.rows }, terrain);
     const savedBridges = new Set<number>();
+    const sizes = new Map<number, Dimensions>();
+    if (footprints !== undefined) {
+      list(footprints, cells.length);
+      for (const { cell, width, height } of footprints) {
+        check(whole(cell.column, 0, world.columns - 1) && whole(cell.row, 0, world.rows - 1));
+        const index: number = cell.row * world.columns + cell.column;
+        const type = cells[index];
+        check(type && isConstructionType(type) && !sizes.has(index)
+          && width === constructionDimensions[type].width && height === constructionDimensions[type].height
+          && (width > 1 || height > 1));
+        sizes.set(index, { width, height });
+      }
+    }
     for (const [index, type] of cells.entries()) {
       if (type === null) continue;
       check(typeof type === 'string' && isConstructionType(type));
@@ -90,7 +109,7 @@ export class Session {
         savedBridges.add(index);
         continue;
       }
-      check(session.map.place({ column: index % world.columns, row: Math.floor(index / world.columns) }, type));
+      check(session.map.place({ column: index % world.columns, row: Math.floor(index / world.columns) }, type, sizes.get(index)));
     }
     if (bridgeSpans !== undefined) {
       list(bridgeSpans, savedBridges.size);
@@ -108,13 +127,21 @@ export class Session {
       const entry = session.map.kingdomRoad!.entry.cell;
       check(kingdomRoad.entry.cell.column === entry.column && kingdomRoad.entry.cell.row === entry.row);
     } else check(kingdomRoad === undefined);
+    if (roadLevels !== undefined) {
+      list(roadLevels, cells.length);
+      for (const { cell, level } of roadLevels) {
+        check(whole(cell.column, 0, world.columns - 1) && whole(cell.row, 0, world.rows - 1));
+        check((level === 2 || level === 3) && session.map.upgradeRoad(cell, 2));
+        if (level === 3) check(session.map.upgradeRoad(cell, 3));
+      }
+    }
 
     // Set up derived slots and inventories before importing exact state. No ticks or charges occur.
     session.simulation.recalculate();
     session.population.restoreState(population);
     session.economy.restoreState(economy, session.map);
     session.simulation.restoreState(simulation);
-    return { session, selection, camera };
+    return { session, selection: selection ? session.map.constructionAt(selection)?.cell ?? selection : null, camera };
   }
 }
 

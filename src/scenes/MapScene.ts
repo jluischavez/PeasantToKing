@@ -7,6 +7,8 @@ import { MapCamera, cellSize } from '../map/MapCamera';
 import type { CameraView } from '../map/MapCamera';
 import { startingCell } from '../map/World';
 import { housingArt } from '../map/HousingArt';
+import { buildingArt, buildingTexture, upgradedRoadArt } from '../map/BuildingArt';
+import type { ConstructionType } from '../map/ConstructionMap';
 import { CellSelection } from '../map/CellSelection';
 import type { Cell } from '../map/CellSelection';
 import { constructionNames } from '../map/ConstructionMap';
@@ -17,6 +19,8 @@ import { SelectionPanel } from '../ui/SelectionPanel';
 import { ConstructionMenu, formatCost } from '../ui/ConstructionMenu';
 import type { ConstructionMode } from '../ui/ConstructionMenu';
 import { getRoadMask } from '../map/RoadAppearance';
+import { roadMaterials } from '../map/RoadMaterials';
+import type { RoadLevel } from '../map/RoadMaterials';
 import { ResourceBar } from '../ui/ResourceBar';
 import { CityAlerts } from '../ui/CityAlerts';
 import { CityTabs } from '../ui/CityTabs';
@@ -41,7 +45,11 @@ export class MapScene extends Phaser.Scene {
   }
 
   preload(): void {
-    for (const { texture, url } of Object.values(housingArt)) {
+    for (const type of Object.keys(buildingArt) as ConstructionType[]) {
+      const texture = buildingTexture(type);
+      if (!this.textures.exists(texture)) this.load.image(texture, buildingArt[type]);
+    }
+    for (const { texture, url } of [...Object.values(housingArt), ...Object.values(upgradedRoadArt)]) {
       if (!this.textures.exists(texture)) this.load.image(texture, url);
     }
   }
@@ -62,6 +70,10 @@ export class MapScene extends Phaser.Scene {
     };
     const selection = new CellSelection();
     if (this.selectedCell) selection.select(this.selectedCell);
+    const renderMapSelection = (): void => {
+      const cell = selection.selected;
+      map.renderSelection(cell, cell ? constructions.constructionAt(cell) ?? undefined : undefined);
+    };
     const resourceBar = new ResourceBar(economy.currentTaxPolicy, policy => {
       economy.setTaxPolicy(policy);
       renderSummary();
@@ -71,7 +83,7 @@ export class MapScene extends Phaser.Scene {
     const renderSummary = (): void => {
       const net = resourceBar.render(economy.resources, economy.perSecond, {
         reserve: economy.storage.initialFoodReserve, availableFood: population.connectedCapacity > 0 ? economy.availableFood : 0,
-        sales: economy.distribution.salesByProductPerSecond, bootstrap: economy.distribution.bootstrapActive,
+        sales: economy.salesRevenuePerSecond, bootstrap: economy.distribution.bootstrapActive,
         constructionReserve: economy.storage.constructionWoodReserve, constructionWood: economy.availableConstructionWood,
         costs: economy.operatingCostsPerHour(population.employed), taxes: economy.taxIncomePerHour(population.total),
       });
@@ -85,12 +97,14 @@ export class MapScene extends Phaser.Scene {
         ? 'Admisiones en pausa hasta que se recupere el bienestar.'
         : economy.migrationReason(population, supply, attraction);
       const needs = simulation.needs.summarize(population.residencesSnapshot);
-      populationPanel.render(population, attraction, city, reason, economy.distribution.cumulativeFoodShortage, needs);
+      populationPanel.render(population, attraction, city, reason, economy.distribution.cumulativeFoodShortage, needs,
+        simulation.beauty.average(population.residencesSnapshot));
       alerts.render(constructions, connections, needs, economy.storage.fullWarehouseCount, economy.blockedProducers, net);
       menu.renderCosts(cost => simulation.costIssue(cost));
     };
     const renderSelected = (): void => {
       const cell = selection.selected;
+      const building = cell ? constructions.constructionAt(cell) : null;
       const entry = constructions.kingdomRoad?.entry.cell;
       const royal = cell && constructions.isKingdomRoad(cell)
         ? (entry?.column === cell.column && entry.row === cell.row ? 'entry' : 'segment') : undefined;
@@ -99,14 +113,26 @@ export class MapScene extends Phaser.Scene {
       const warehouse = cell && type === 'warehouse' ? economy.storage.warehouseAt(cell) : undefined;
       const market = cell && type === 'market' ? economy.distribution.marketAt(cell) : undefined;
       const home = type === 'house' ? cell : null;
+      const connected = !!cell && connections.isConnected(cell);
+      const productivity = cell ? economy.productivityAt(cell) : undefined;
+      const roadLevel = cell ? constructions.roadLevelAt(cell) : undefined;
+      const upgrade = cell && mode === null ? simulation.roadUpgradeAt(cell) : null;
+      const capacity = type ? population.capacityFor(type) : 0;
+      const workers = cell ? population.workersAt(cell) : 0;
+      const employment = cell && type && capacity > 0 ? { workers, capacity, issue: !connected
+        ? 'Sin conexión vial al Centro de Aldea.'
+        : economy.laborIssue(cell, type) ?? (workers === 0 ? 'Sin empleados asignados.'
+          : productivity?.storageBlocked ? 'Falta un almacén operativo, compatible y con espacio.' : null) } : undefined;
       panel.render(cell, tile, type,
-        cell !== null && connections.isConnected(cell), home ? population.residentsAt(home) : 0,
-        cell ? economy.productivityAt(cell) : undefined, warehouse, market,
+        connected, home ? population.residentsAt(home) : 0,
+        productivity, warehouse, market,
         home ? economy.distribution.supplyAt(home) : undefined, home ? economy.distribution.foodShortageAt(home) : 0,
         home ? economy.distribution.supplyAt(home, 'wood') : undefined, home ? economy.distribution.woodShortageAt(home) : 0,
         home ? simulation.wellbeing.at(home) : undefined, home ? simulation.water.suppliedAt(home) : 0,
         cell && type === 'well' ? simulation.water.wellAt(cell) : undefined,
-        home ? { level: population.housingLevelAt(home), progress: simulation.housing.at(home) } : undefined, royal);
+        home ? { level: population.housingLevelAt(home), progress: simulation.housing.at(home), beauty: simulation.beauty.at(home),
+          needs: simulation.needs.currentAt(home), unemployment: population.unemploymentRate } : undefined,
+        royal, employment, building ?? undefined, roadLevel);
       const demolition = simulation.demolitionTarget;
       const clearing = demolition?.kind === 'obstacle';
       const departing = demolition?.kind === 'building' && demolition.type === 'house'
@@ -119,13 +145,18 @@ export class MapScene extends Phaser.Scene {
           + (demolition.type === 'bridge' ? ' · Retira el cruce completo y puede interrumpir el acceso a la otra orilla.' : departure)
           : null;
       const bridge = simulation.pendingBridgePreview();
-      if (bridge) {
+      if (upgrade && pendingUpgrade !== null) {
+        panel.renderConfirmation(roadMaterials[upgrade.level] + ' → ' + roadMaterials[upgrade.next]
+          + ' · ' + formatCost(upgrade.cost), upgrade.issue, 'upgrade');
+      } else if (bridge) {
         const description = bridge.cost ? 'Puente de madera · ' + bridge.cells.length + ' casillas · ' + formatCost(bridge.cost)
           : 'Puente de madera';
         panel.renderConfirmation(description, bridge.issue, 'bridge');
       } else panel.renderConfirmation(target, demolition ? simulation.demolitionIssue(demolition.cell) : null,
         clearing ? 'clearing' : 'demolition');
       panel.renderClearing(!!tile?.obstacle && !demolition && !bridge);
+      panel.renderRoadUpgrade(upgrade && pendingUpgrade === null
+        ? 'Mejorar a ' + roadMaterials[upgrade.next].toLowerCase() + ' · ' + formatCost(upgrade.cost) : null, simulation.paused);
       simulationPanel.render(cell ? (type ? type + ':' + cell.column + ',' + cell.row : terrainAuditId(cell)) : null);
       configuration.render(cell, warehouse, market, simulation.paused);
       voicesPanel.render();
@@ -155,6 +186,7 @@ export class MapScene extends Phaser.Scene {
     };
     let mode: ConstructionMode = null;
     let bridgeOrigin: Cell | null = null;
+    let pendingUpgrade: RoadLevel | null = null;
     let hoveredCell: Cell | null = null;
     const updatePointerFeedback = (): void => {
       const canvas = this.game.canvas;
@@ -183,11 +215,12 @@ export class MapScene extends Phaser.Scene {
         buildType === 'road' && hoveredCell ? getRoadMask(constructions, hoveredCell) : 0);
     };
     const clearSelection = (): void => {
+      pendingUpgrade = null;
       simulation.cancelDemolition();
       simulation.cancelBridge();
       bridgeOrigin = null;
       selection.clear();
-      map.renderSelection(selection.selected);
+      renderMapSelection();
       renderSelected();
       updatePointerFeedback();
     };
@@ -198,6 +231,18 @@ export class MapScene extends Phaser.Scene {
         : 'Revisa el costo y confirma la demolición en el inspector.'));
     };
     const panel = new SelectionPanel(clearSelection, () => {
+      if (pendingUpgrade !== null) {
+        const cell = selection.selected;
+        const issue = cell ? simulation.upgradeRoad(cell, pendingUpgrade) : 'Selecciona un camino.';
+        if (!issue) {
+          pendingUpgrade = null;
+          map.renderConstructions(constructions, connections, population);
+          renderSummary();
+        }
+        renderSelected();
+        menu.showStatus(issue ?? 'Camino mejorado.');
+        return;
+      }
       if (simulation.bridgeTarget) {
         const issue = simulation.confirmBridge();
         if (!issue) {
@@ -229,6 +274,7 @@ export class MapScene extends Phaser.Scene {
       menu.showStatus(target?.kind === 'obstacle' ? 'Terreno despejado.'
         : 'Demolición realizada. Selecciona otra construcción o cancela el modo.');
     }, () => {
+      pendingUpgrade = null;
       simulation.cancelDemolition();
       simulation.cancelBridge();
       bridgeOrigin = null;
@@ -244,6 +290,12 @@ export class MapScene extends Phaser.Scene {
       requestRemoval(cell);
       renderSelected();
       updatePointerFeedback();
+    }, () => {
+      const cell = selection.selected;
+      const upgrade = cell && mode === null ? simulation.roadUpgradeAt(cell) : null;
+      if (!upgrade || simulation.paused) return;
+      pendingUpgrade = upgrade.level;
+      renderSelected();
     });
     const constructionControls = document.querySelector<HTMLElement>('#construction-menu')!;
     const updatePauseControls = (): void => {
@@ -260,9 +312,10 @@ export class MapScene extends Phaser.Scene {
       if (constructions.getConstruction(cell) !== 'house') return;
       simulation.cancelDemolition();
       simulation.cancelBridge();
+      pendingUpgrade = null;
       bridgeOrigin = null;
       selection.select(cell);
-      map.renderSelection(selection.selected);
+      renderMapSelection();
       renderSelected();
       updatePointerFeedback();
     });
@@ -271,6 +324,7 @@ export class MapScene extends Phaser.Scene {
       if (setting === 'accepts') economy.setWarehouseAcceptance(cell, product, enabled);
       else if (setting === 'marketDispatch') economy.setWarehouseMarketDispatch(cell, product, enabled);
       else economy.setMarketSale(cell, product, enabled);
+      simulation.refreshWorkforce();
       renderSummary();
       renderSelected();
     }, cell => {
@@ -278,11 +332,13 @@ export class MapScene extends Phaser.Scene {
       const warehouse = economy.storage.warehouseAt(cell);
       if (!warehouse) return;
       economy.setWarehouseDraining(cell, !warehouse.draining);
+      simulation.refreshWorkforce();
       renderSummary();
       renderSelected();
     });
     const menu = new ConstructionMenu((choice) => {
       mode = choice;
+      pendingUpgrade = null;
       simulation.cancelDemolition();
       simulation.cancelBridge();
       bridgeOrigin = null;
@@ -309,7 +365,8 @@ export class MapScene extends Phaser.Scene {
     renderSelected();
 
     const clickCell = (cell: Cell): void => {
-      selection.select(cell);
+      pendingUpgrade = null;
+      selection.select(constructions.constructionAt(cell)?.cell ?? cell);
       if (mode === 'demolish') {
         requestRemoval(cell);
       } else if (mode === 'bridge' && !simulation.paused) {
@@ -337,7 +394,7 @@ export class MapScene extends Phaser.Scene {
           menu.renderMode(mode);
         }
       }
-      map.renderSelection(selection.selected);
+      renderMapSelection();
       renderSelected();
       hoveredCell = cell;
       updatePointerFeedback();
@@ -367,7 +424,7 @@ export class MapScene extends Phaser.Scene {
       this.game.canvas.focus({ preventScroll: true });
     }, visibilityOptions);
     layout();
-    map.renderSelection(selection.selected);
+    renderMapSelection();
     this.events.on(Phaser.Scenes.Events.UPDATE, updateSimulation);
     this.scale.on(Phaser.Scale.Events.RESIZE, layout);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {

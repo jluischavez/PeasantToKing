@@ -89,7 +89,7 @@ test('pause preserves the partial second and prevents calendar changes and charg
   simulation.setPaused(false);
   simulation.advance(100);
   assert.deepEqual(simulation.gameTime, stamp(1, 1, 1, 0));
-  assert.equal(economy.resources.gold, 150.03);
+  assert.equal(economy.resources.gold, 149.52);
 });
 
 test('suspension and the first resumed frame add no time or operating expenses', () => {
@@ -105,7 +105,7 @@ test('suspension and the first resumed frame add no time or operating expenses',
   assert.equal(economy.resources.gold, gold);
   assert.deepEqual(economy.history.read('gold'), []);
   simulation.advance(100);
-  assert.equal(economy.resources.gold, 150.03);
+  assert.equal(economy.resources.gold, 149.52);
 });
 
 test('speed changes prorate exactly the same simulated hour and never duplicate payments', () => {
@@ -120,8 +120,8 @@ test('speed changes prorate exactly the same simulated hour and never duplicate 
   assert.deepEqual(accelerated.economy.resources, normal.economy.resources);
   assert.deepEqual(accelerated.economy.history.read(), normal.economy.history.read());
   assert.deepEqual(accelerated.economy.history.read('gold').filter(event => event.operation !== 'tax').map(charge), [
-    ['wages', 'completed', 0.1, 150.2, 150.1, 25_000],
-    ['maintenance', 'completed', 0.07, 150.1, 150.03, 25_000],
+    ['wages', 'completed', 0.4, 150.2, 149.8, 25_000],
+    ['maintenance', 'completed', 0.28, 149.8, 149.52, 25_000],
   ]);
 });
 
@@ -145,10 +145,10 @@ test('only employed workers earn wages when the active population exceeds availa
   simulation.recalculate();
   assert.ok(population.unemployed > 0);
   assert.equal(population.employed, 4);
-  assert.equal(economy.operatingCostsPerHour(population.employed).wages, 0.4);
+  assert.equal(economy.operatingCostsPerHour(population.employed).wages, 1.6);
   simulation.advance(25_000);
   const [wages] = economy.history.read('gold').filter(event => event.operation === 'wages');
-  assert.equal(charge(wages)[2], 0.4);
+  assert.equal(charge(wages)[2], 1.6);
 });
 
 test('cutting the road stops wage accrual and the demolished road stops incurring maintenance', () => {
@@ -157,16 +157,16 @@ test('cutting the road stops wage accrual and the demolished road stops incurrin
   assert.equal(simulation.requestDemolition(road), null);
   assert.equal(simulation.confirmDemolition(), null);
   assert.equal(population.employed, 0);
-  assert.deepEqual(economy.operatingCostsPerHour(population.employed), { wages: 0, maintenance: 0.06 });
+  assert.deepEqual(economy.operatingCostsPerHour(population.employed), { wages: 0, maintenance: 0.27 });
   simulation.advance(15_000);
   assert.deepEqual(economy.history.read('gold').map(charge), [
     ['demolition', 'completed', 5, 150, 145, 10_000],
     ['tax', 'completed', 0.2, 145, 145.2, 25_000],
-    ['wages', 'completed', 0.04, 145.2, 145.16, 25_000],
-    ['maintenance', 'completed', 0.064, 145.16, 145.096, 25_000],
+    ['wages', 'completed', 0.16, 145.2, 145.04, 25_000],
+    ['maintenance', 'completed', 0.274, 145.04, 144.766, 25_000],
   ]);
   simulation.advance(25_000);
-  assert.equal(economy.resources.gold, 145.236);
+  assert.equal(economy.resources.gold, 144.696);
 });
 
 test('maintenance includes all existing construction types even without connections or workers', () => {
@@ -174,10 +174,10 @@ test('maintenance includes all existing construction types even without connecti
   const types = ['road', 'house', 'farm', 'lumberjack', 'warehouse', 'market'] as const;
   types.forEach((type, index) => map.place(cell(index + 1, 5), type));
   simulation.recalculate();
-  assert.deepEqual(economy.operatingCostsPerHour(population.employed), { wages: 0, maintenance: 0.28 });
+  assert.deepEqual(economy.operatingCostsPerHour(population.employed), { wages: 0, maintenance: 1.13 });
   simulation.advance(25_000);
   assert.deepEqual(economy.history.read('gold').map(charge), [
-    ['maintenance', 'completed', 0.28, 150, 149.72, 25_000],
+    ['maintenance', 'completed', 1.13, 150, 148.87, 25_000],
   ]);
 });
 

@@ -8,15 +8,20 @@ import type { BuildingProductivity } from '../economy/Economy';
 import type { Cell } from '../map/CellSelection';
 import { populationRules } from '../population/Population';
 import { wellbeingState } from '../population/Wellbeing';
-import { housingLevels, housingRules } from '../population/HousingEvolution';
+import { housingLevels, housingRules, nextHousingBeauty } from '../population/HousingEvolution';
 import type { HousingLevel, HousingEvolution } from '../population/HousingEvolution';
+import { beautyRules, beautySourceName } from '../population/ResidentialBeauty';
+import type { Beauty, BeautySource } from '../population/ResidentialBeauty';
+import type { NeedCoverage } from '../population/HouseholdNeeds';
 import { waterRules } from '../simulation/WaterService';
 import type { WellSnapshot } from '../simulation/WaterService';
 import { constructionNames } from '../map/ConstructionMap';
-import type { ConstructionType } from '../map/ConstructionMap';
+import type { ConstructionType, Dimensions } from '../map/ConstructionMap';
 import { clearingCosts } from '../map/ConstructionCosts';
 import { groundNames, isProtectedGround, obstacleNames } from '../map/Terrain';
 import type { TerrainTile } from '../map/Terrain';
+import { roadMaterials } from '../map/RoadMaterials';
+import type { RoadLevel } from '../map/RoadMaterials';
 
 export class SelectionPanel {
   private readonly details = document.getElementById('cell-details')!;
@@ -24,6 +29,7 @@ export class SelectionPanel {
   private layout = '';
   private readonly cancel = document.querySelector<HTMLButtonElement>('#cancel-selection')!;
   private readonly clearTerrain = document.querySelector<HTMLButtonElement>('#clear-terrain')!;
+  private readonly upgradeRoad = document.querySelector<HTMLButtonElement>('#upgrade-road')!;
   private readonly demolition = document.querySelector<HTMLElement>('#demolition-confirmation')!;
   private readonly demolitionTarget = document.querySelector<HTMLElement>('#demolition-target')!;
   private readonly demolitionIssue = document.querySelector<HTMLElement>('#demolition-issue')!;
@@ -31,37 +37,53 @@ export class SelectionPanel {
   private readonly cancelDemolition = document.querySelector<HTMLButtonElement>('#cancel-demolition')!;
   private readonly events = new AbortController();
 
-  constructor(onCancel: () => void, onConfirmDemolition: () => void, onCancelDemolition: () => void, onClearTerrain: () => void) {
+  constructor(onCancel: () => void, onConfirm: () => void, onCancelConfirmation: () => void,
+    onClearTerrain: () => void, onUpgradeRoad: () => void) {
     const options = { signal: this.events.signal };
     this.cancel.addEventListener('click', onCancel, options);
-    this.confirmDemolition.addEventListener('click', onConfirmDemolition, options);
-    this.cancelDemolition.addEventListener('click', onCancelDemolition, options);
+    this.confirmDemolition.addEventListener('click', onConfirm, options);
+    this.cancelDemolition.addEventListener('click', onCancelConfirmation, options);
     this.clearTerrain.addEventListener('click', onClearTerrain, options);
+    this.upgradeRoad.addEventListener('click', onUpgradeRoad, options);
     this.render(null);
     this.renderConfirmation(null);
   }
 
   renderConfirmation(target: string | null, issue: string | null = null,
-    action: 'demolition' | 'clearing' | 'bridge' = 'demolition'): void {
+    action: 'demolition' | 'clearing' | 'bridge' | 'upgrade' = 'demolition'): void {
     this.demolition.hidden = target === null;
-    const confirm = action === 'bridge' ? 'Construir puente' : action === 'clearing' ? 'Confirmar limpieza' : 'Confirmar demolición';
+    const labels = {
+      bridge: ['Construir puente', 'Cancelar puente'],
+      clearing: ['Confirmar limpieza', 'Cancelar limpieza'],
+      demolition: ['Confirmar demolición', 'Cancelar demolición'],
+      upgrade: ['Confirmar mejora', 'Cancelar mejora'],
+    } as const;
+    const [confirm, cancel] = labels[action];
     this.demolition.setAttribute('aria-label', confirm);
     setText(this.demolitionTarget, target ?? '');
     this.demolitionIssue.hidden = issue === null;
     setText(this.demolitionIssue, issue ?? '');
     this.confirmDemolition.disabled = issue !== null;
     setText(this.confirmDemolition, confirm);
-    setText(this.cancelDemolition, action === 'bridge' ? 'Cancelar puente' : action === 'clearing' ? 'Cancelar limpieza' : 'Cancelar demolición');
+    setText(this.cancelDemolition, cancel);
   }
 
   renderClearing(available: boolean): void { this.clearTerrain.hidden = !available; }
+
+  renderRoadUpgrade(label: string | null, paused: boolean): void {
+    this.upgradeRoad.hidden = label === null;
+    this.upgradeRoad.disabled = paused;
+    if (label) setText(this.upgradeRoad, label);
+  }
 
   render(cell: Cell | null, terrain?: TerrainTile, construction: ConstructionType | null = null, connected = false, residents = 0,
     productivity?: BuildingProductivity, warehouse?: WarehouseSnapshot, market?: MarketSnapshot,
     supply?: HousingSupply, foodShortage = 0, woodSupply?: HousingSupply, woodShortage = 0,
     wellbeing?: Readonly<{ happiness: number; concerns: readonly string[] }>, waterSupplied = 0, well?: WellSnapshot,
-    housing?: { level: HousingLevel; progress: ReturnType<HousingEvolution['at']> },
-    royal?: 'segment' | 'entry'): void {
+    housing?: { level: HousingLevel; progress: ReturnType<HousingEvolution['at']>; beauty: Beauty;
+      needs?: NeedCoverage; unemployment: number },
+    royal?: 'segment' | 'entry', employment?: { workers: number; capacity: number; issue: string | null },
+    dimensions?: Dimensions, road?: RoadLevel): void {
     const fields: [string, string, string][] = [];
     const add = (id: string, label: string, value: string) => fields.push([id, label, value]);
     const fraction = (value: number, total: number) => formatNumber(value) + ' / ' + formatNumber(total);
@@ -73,7 +95,11 @@ export class SelectionPanel {
     }
     const homeLevel = housing ? housingLevels[housing.level] : undefined;
     if (construction) add('construction', 'Construcción', royal ? 'Camino exterior del reino' : constructionNames[construction]);
+    if (dimensions && (dimensions.width > 1 || dimensions.height > 1)) {
+      add('dimensions', 'Huella', dimensions.width + ' × ' + dimensions.height);
+    }
     if (royal === 'entry') add('entry', 'Punto de entrada', 'Entrada al reino');
+    if (road) add('road-material', 'Superficie', roadMaterials[road] + ' · Nivel ' + road + (road === 3 ? ' (máximo)' : ''));
     const status = royal ? 'Protegido. Este camino pertenece al reino y no puede demolerse.'
       : construction === 'bridge' ? 'Cruce de madera sobre el río.'
       : terrain && isProtectedGround(terrain.ground) ? 'Terreno protegido. No se puede construir ni limpiar.'
@@ -83,19 +109,18 @@ export class SelectionPanel {
       : construction ? 'Ocupada' : cell ? 'Casilla disponible' : 'Sin selección';
     add('status', 'Estado', status);
     if (construction) add('connection', 'Conexión', connected ? 'Conectado' : 'Sin conexión');
-    if (productivity) {
-      add('workers', 'Empleados', fraction(productivity.workers, productivity.capacity));
-      add('productivity', 'Productividad', formatNumber(productivity.ratio * 100) + ' %');
-      if (productivity.storageBlocked) add('blocked', 'Producción', 'Bloqueada por falta de almacenamiento operativo, compatible y con espacio');
+    if (employment) {
+      add('workers', 'Empleados', fraction(employment.workers, employment.capacity));
+      add('operation', 'Operación', employment.issue ? 'Inactivo' : 'Operativo');
+      add('operation-reason', 'Motivo de inactividad', employment.issue ?? '—');
     }
+    if (productivity) add('productivity', 'Productividad', formatNumber(productivity.ratio * 100) + ' %');
     if (warehouse || market) {
       const inventory = warehouse ?? market!;
       add('food-stock', 'Comida', formatNumber(inventory.food));
       add('wood-stock', 'Madera', formatNumber(inventory.wood));
       add('used', 'Capacidad usada', fraction(warehouse?.used ?? inventory.food + inventory.wood, inventory.capacity));
       if (warehouse) add('free', 'Disponible', formatNumber(warehouse.free));
-      if (!productivity) add('workers', 'Empleados', fraction(inventory.workers, inventory.workerCapacity));
-      add('operation', 'Operación', inventory.operational ? 'Operativo' : 'Inactivo');
     }
     if (market) {
       add('coverage', 'Cobertura', formatNumber(market.coveredHomes) + ' solares · hasta ' + formatNumber(market.range) + ' tramos');
@@ -103,6 +128,30 @@ export class SelectionPanel {
       add('market-reason', 'Abastecimiento', market.reason);
     }
     if (housing && homeLevel) {
+      const happiness = wellbeing?.happiness ?? populationRules.migration.neutralHappiness;
+      const requirement = nextHousingBeauty(housing.level);
+      const { score, sources } = housing.beauty;
+      const bonuses = (Object.entries(sources) as [BeautySource, number][])
+        .sort((a, b) => b[1] - a[1]).map(([source, points]) => beautySourceName(source) + ' +' + points);
+      add('beauty', 'Belleza', fraction(score, beautyRules.maximum));
+      add('beauty-sources', 'Fuentes de belleza', ['Base ' + beautyRules.base, ...bonuses].join(' · '));
+      add('beauty-required', 'Belleza para mejorar', requirement === undefined ? 'Nivel máximo'
+        : requirement === 0 ? 'Sin mínimo' : fraction(requirement, beautyRules.maximum));
+      const missing: string[] = [];
+      if (residents === 0) missing.push('Vivienda habitada');
+      else {
+        if ((housing.needs?.food ?? 0) < 1) missing.push('Comida');
+        if ((housing.needs?.wood ?? 0) < 1) missing.push('Madera');
+        if ((housing.needs?.water ?? 0) < 1) missing.push('Agua');
+        if (happiness < housingRules.upgradeHappiness) missing.push('Felicidad ≥ ' + housingRules.upgradeHappiness);
+        if (housing.unemployment > housingRules.maximumUnemployment) {
+          missing.push('Desempleo ≤ ' + formatNumber(housingRules.maximumUnemployment * 100) + ' %');
+        }
+      }
+      if (requirement !== undefined && score < requirement) missing.push('Belleza ≥ ' + requirement);
+      add('housing-missing', 'Pendiente para mejorar', requirement === undefined ? '—' : missing.join(' · ') || 'Requisitos cumplidos');
+      add('beauty-maintain', 'Belleza para conservar el nivel',
+        housingRules.minimumBeauty[housing.level] ? fraction(housingRules.minimumBeauty[housing.level], beautyRules.maximum) : 'Sin mínimo');
       add('housing-level', 'Nivel de vivienda', formatNumber(housing.level));
       add('residents', 'Habitantes', fraction(residents, homeLevel.capacity));
       if (supply) add('food-supply', 'Comida', supply.status === 'reserve' ? 'Reserva inicial'
@@ -111,7 +160,6 @@ export class SelectionPanel {
         add('wood-supply', 'Madera', woodSupply?.status === 'market'
           ? 'Mercado a ' + formatNumber(woodSupply.distance ?? 0) + ' tramos' : 'Sin abastecimiento');
         add('water-supply', 'Agua', fraction(waterSupplied, residents) + ' hab. abastecidos');
-        const happiness = wellbeing?.happiness ?? populationRules.migration.neutralHappiness;
         add('happiness', 'Felicidad', fraction(happiness, 100) + ' · ' + wellbeingState(happiness));
         add('concerns', 'Bienestar', wellbeing?.concerns.join(' · ') ||
           (wellbeing ? 'Suministros cubiertos y empleo estable' : 'Bienestar inicial'));
@@ -126,7 +174,6 @@ export class SelectionPanel {
       add('remaining', 'Tiempo restante', progress > 0 ? formatNumber(housingRules.seconds - progress) + ' s simulados' : '—');
     }
     if (well) {
-      add('workers', 'Aguadores', fraction(well.workers, 1));
       add('well-served', 'Habitantes abastecidos', fraction(well.served, waterRules.capacity));
       add('coverage', 'Cobertura', 'Hasta ' + formatNumber(waterRules.roadRange) + ' tramos');
     }

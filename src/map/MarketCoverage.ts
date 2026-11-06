@@ -18,8 +18,8 @@ export class MarketCoverage {
       const homes = new Map<string, number>();
       const visited = new Set<string>();
       const queue: { cell: Cell; distance: number }[] = [];
-      for (const road of neighbors(market)) {
-        if (map.roadTouches(road, market) && connections.isConnected(road)) {
+      for (const road of map.borderRoads(market)) {
+        if (connections.isConnected(road)) {
           visited.add(key(road));
           queue.push({ cell: road, distance: 1 });
         }

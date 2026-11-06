@@ -4,16 +4,20 @@ import { populationRules } from '../population/Population.ts';
 import { gameTimeAt, gameTimeRules } from './GameTime.ts';
 import { distributionRules } from '../economy/Distribution.ts';
 import { Wellbeing } from '../population/Wellbeing.ts';
-import { HousingEvolution } from '../population/HousingEvolution.ts';
+import { HousingEvolution, housingRules } from '../population/HousingEvolution.ts';
+import { ResidentialBeauty } from '../population/ResidentialBeauty.ts';
 import { HouseholdNeeds } from '../population/HouseholdNeeds.ts';
 import { VillageVoices } from '../population/VillageVoices.ts';
 import { WaterService } from './WaterService.ts';
 import { clearingCosts, constructionCosts, demolitionCost } from '../map/ConstructionCosts.ts';
 import type { ConstructionCost } from '../map/ConstructionCosts';
+import { roadUpgradeCosts } from '../map/RoadMaterials.ts';
+import type { RoadLevel } from '../map/RoadMaterials';
 import type { Cell } from '../map/CellSelection';
 import { groundNames, isProtectedGround, obstacleNames } from '../map/Terrain.ts';
 import type { Obstacle } from '../map/Terrain';
 import type { ConstructionMap, ConstructionType } from '../map/ConstructionMap';
+import { constructionDimensions, footprint } from '../map/ConstructionMap.ts';
 import { bridgeCells, bridgeRules } from '../map/Bridge.ts';
 import type { BridgeSpan } from '../map/Bridge';
 import type { RoadConnections } from '../map/RoadConnections';
@@ -39,6 +43,7 @@ export function terrainAuditId(cell: Cell): string {
 export class SettlementSimulation {
   readonly wellbeing = new Wellbeing();
   readonly housing = new HousingEvolution();
+  readonly beauty = new ResidentialBeauty();
   readonly water = new WaterService();
   readonly needs = new HouseholdNeeds();
   readonly voices = new VillageVoices();
@@ -82,14 +87,35 @@ export class SettlementSimulation {
     this.housing.restoreState(housing, this.map);
     this.needs.restoreState(needs, this.map);
     this.voices.restoreState(voices, this.map, this.simulatedTimeMs);
-    // The saved roster is the roster from the last tick. A new assignment is due on the next tick.
+    // Restore inventories and the previous roster before applying current eligibility rules.
     this.economy.recalculate(this.map, this.connections, this.population);
-    this.water.refresh(this.map, this.connections, this.population);
+    this.refreshWorkforce();
   }
 
   get paused(): boolean { return this.isPaused; }
   get speed(): SimulationSpeed { return this.multiplier; }
   get simulatedTimeMs(): number { return this.economy.simulatedTimeMs; }
+
+  roadUpgradeAt(cell: Cell) {
+    const level = this.map.roadLevelAt(cell);
+    if (level === undefined || level === 3) return null;
+    const next = level === 1 ? 2 : 3;
+    const cost = roadUpgradeCosts[next];
+    const issue = this.paused ? 'Reanuda la simulación para mejorar el camino.' : this.costIssue(cost);
+    return { level, next, cost, issue } as const;
+  }
+
+  upgradeRoad(cell: Cell, expectedLevel: RoadLevel): string | null {
+    const upgrade = this.roadUpgradeAt(cell);
+    if (!upgrade || upgrade.level !== expectedLevel) return 'El tramo seleccionado ya no admite esta mejora.';
+    if (upgrade.issue) return upgrade.issue;
+    if (!this.economy.payBuildingCost(upgrade.cost, 'construction', buildingId(cell, 'road'))) {
+      return 'Recursos insuficientes para mejorar el camino.';
+    }
+    this.map.upgradeRoad(cell, upgrade.next);
+    this.beauty.recalculate(this.map, this.connections);
+    return null;
+  }
 
   get gameTime(): ReturnType<typeof gameTimeAt> {
     return gameTimeAt(this.simulatedTimeMs + this.elapsedMs);
@@ -116,11 +142,15 @@ export class SettlementSimulation {
   constructionIssue(cell: Cell, type: ConstructionType): string | null {
     if (this.paused) return 'Reanuda la simulación para construir.';
     if (type === 'bridge') return 'Selecciona un camino conectado en la orilla para iniciar el puente.';
-    if (this.map.isKingdomRoad(cell)) return 'El camino del reino ocupa esta casilla.';
-    const tile = this.map.terrain.at(cell);
-    if (tile && isProtectedGround(tile.ground)) return groundNames[tile.ground] + '. El terreno no es construible.';
-    if (tile?.obstacle) return obstacleNames[tile.obstacle] + '. Limpia el terreno antes de construir.';
-    if (!this.map.canPlace(cell, type)) return 'La casilla no está disponible para esta construcción.';
+    for (const part of footprint(cell, constructionDimensions[type])) {
+      if (!this.map.contains(part)) return 'Parte de la construcción queda fuera del mapa.';
+      if (this.map.isKingdomRoad(part)) return 'El camino del reino ocupa una casilla de la construcción.';
+      const tile = this.map.terrain.at(part)!;
+      if (isProtectedGround(tile.ground)) return groundNames[tile.ground] + '. El terreno no es construible.';
+      if (tile.obstacle) return obstacleNames[tile.obstacle] + '. Limpia el terreno antes de construir.';
+      if (this.map.getConstruction(part)) return 'Una casilla de la construcción ya está ocupada.';
+    }
+    if (type === 'villageCenter' && this.map.villageCenter) return 'Ya existe un Centro de Aldea.';
     return this.costIssue(constructionCosts[type]);
   }
 
@@ -202,7 +232,7 @@ export class SettlementSimulation {
   build(cell: Cell, type: ConstructionType): string | null {
     const issue = this.constructionIssue(cell, type);
     if (issue) return issue;
-    if (!this.map.place(cell, type)) return 'La casilla no está disponible para esta construcción.';
+    if (!this.map.place(cell, type, constructionDimensions[type])) return 'La casilla no está disponible para esta construcción.';
     // Placement does not change the inventories used by the validated charge.
     if (!this.economy.payBuildingCost(constructionCosts[type], 'construction', buildingId(cell, type))) {
       throw new Error('A validated construction charge failed');
@@ -221,6 +251,7 @@ export class SettlementSimulation {
     }
     if (target.kind === 'obstacle') return this.costIssue(clearingCosts[target.type]);
     const { type } = target;
+    cell = target.cell;
     if (this.map.isKingdomRoad(cell)) return 'Este camino pertenece al reino y no puede demolerse.';
     if (this.map.isProtectedConstruction(cell)) {
       return type === 'villageCenter' ? 'El Centro de Aldea está protegido.' : 'La construcción está protegida.';
@@ -241,8 +272,8 @@ export class SettlementSimulation {
   }
 
   private removalTargetAt(cell: Cell): DemolitionTarget | null {
-    const building = this.map.getConstruction(cell);
-    if (building) return { cell: { ...cell }, kind: 'building', type: building };
+    const building = this.map.constructionAt(cell);
+    if (building) return { cell: { ...building.cell }, kind: 'building', type: building.type };
     const tile = this.map.terrain.at(cell);
     return tile?.obstacle && !isProtectedGround(tile.ground)
       ? { cell: { ...cell }, kind: 'obstacle', type: tile.obstacle } : null;
@@ -296,7 +327,12 @@ export class SettlementSimulation {
 
   recalculate(): void {
     this.connections.recalculate(this.map);
+    this.beauty.recalculate(this.map, this.connections);
     this.economy.recalculate(this.map, this.connections, this.population);
+    this.refreshWorkforce();
+  }
+
+  refreshWorkforce(): void {
     this.population.recalculate(this.map, this.connections, this.economy.laborContext(this.population));
     this.economy.recalculate(this.map, this.connections, this.population);
     this.water.refresh(this.map, this.connections, this.population);
@@ -329,7 +365,7 @@ export class SettlementSimulation {
         continue;
       }
       const level = this.housing.advanceSecond(home.cell, home.level, this.wellbeing.at(home.cell)!.happiness,
-        this.needs.currentAt(home.cell)!, unemployment);
+        this.needs.currentAt(home.cell)!, unemployment, this.beauty.at(home.cell).score);
       if (level === undefined) continue;
       const displaced = this.population.setHousingLevel(home.cell, level);
       this.voices.reportHousingChange(home.cell, level > home.level);
@@ -344,10 +380,7 @@ export class SettlementSimulation {
       this.needs.forget(candidate);
       populationChanged = true;
     }
-    if (populationChanged) {
-      this.economy.recalculate(this.map, this.connections, this.population);
-      this.water.refresh(this.map, this.connections, this.population);
-    }
+    if (populationChanged) this.refreshWorkforce();
   }
 
   // One shared clock processes production, consumption, wellbeing and migration in order.
@@ -381,8 +414,7 @@ export class SettlementSimulation {
           happiness, modifier: this.economy.taxMigrationModifier, seconds: this.immigrationIntervalSeconds,
           admissionsOpen: this.wellbeing.admissionsOpen(this.simulatedTimeMs, happiness),
         }) > 0) {
-          this.economy.recalculate(this.map, this.connections, this.population);
-          this.water.refresh(this.map, this.connections, this.population);
+          this.refreshWorkforce();
         }
       }
       this.voices.advance(this.simulatedTimeMs, () => this.needs.observations(this.population.residencesSnapshot), () => {
@@ -393,6 +425,9 @@ export class SettlementSimulation {
           hasMarket: buildings.some(({ type }) => type === 'market'),
           hasWarehouse: buildings.some(({ type }) => type === 'warehouse'),
           hasRoad: buildings.some(({ type }) => type === 'road'),
+          beautyAt: (cell: Cell) => this.beauty.at(cell),
+          lacksHousingBeauty: (cell: Cell) =>
+            this.beauty.at(cell).score < housingRules.minimumBeauty[this.population.housingLevelAt(cell)],
         };
       });
       advanced = true;

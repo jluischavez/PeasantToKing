@@ -27,7 +27,7 @@ test('rounding a treasury label leaves the fine-grained balance and recorded deb
   const treasury = new Treasury(840.6455, history);
   for (let i = 0; i < 1000; i++) {
     treasury.payBuilding(1, 'construction', 'road:1,1');
-    treasury.creditSale('market:0,0', 'house:0,1', unitsPerResource, 'food');
+    treasury.creditSale('market:0,0', 'house:0,1', 10 * unitsPerResource, 'food');
   }
 
   const debit = history.read('gold').at(-2)!;

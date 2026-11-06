@@ -90,7 +90,7 @@ test('occupied cells and a second village center never charge again', () => {
   assert.equal(simulation.build(farm, 'farm'), null);
   const before = economy.resources, events = economy.history.read();
   assert.match(simulation.build(farm, 'market')!, /casilla/);
-  assert.match(simulation.build(cell(9, 9), 'villageCenter')!, /casilla/);
+  assert.match(simulation.build(cell(9, 9), 'villageCenter')!, /Ya existe/);
   assert.equal(map.getConstruction(farm), 'farm');
   assert.deepEqual(economy.resources, before);
   assert.deepEqual(economy.history.read(), events);
@@ -222,7 +222,7 @@ test('empty warehouse and market inventories are removed and rebuilt with fresh 
   assert.ok(economy.storage.depositProduction(farm, 'food', U / 10));
   for (let i = 0; i < 5; i++) economy.distribution.advanceSecond();
   economy.consumeHomes({ residencesSnapshot: [{ cell: home, residents: 1 }] }, 0.1);
-  assert.equal(economy.perSecond.gold, 0.1);
+  assert.equal(economy.perSecond.gold, 0.01);
   assert.equal(economy.distribution.marketAt(market)?.food, 0);
   for (const target of [warehouse, market]) {
     assert.equal(simulation.requestDemolition(target), null);
@@ -232,9 +232,10 @@ test('empty warehouse and market inventories are removed and rebuilt with fresh 
   assert.equal(economy.storage.inventories.snapshot(marketId), undefined);
   assert.equal(economy.distribution.coverage.coveredHomes(market), 0);
   assert.equal(economy.perSecond.gold, 0);
-  assert.equal(economy.resources.gold, 140.1);
-  assert.equal(simulation.build(warehouse, 'warehouse'), null);
-  assert.equal(economy.storage.warehouseAt(warehouse)?.accepts.wood, true);
+  assert.equal(economy.resources.gold, 140.01);
+  const replacement = cell(2, 2);
+  assert.equal(simulation.build(replacement, 'warehouse'), null);
+  assert.equal(economy.storage.warehouseAt(replacement)?.accepts.wood, true);
 });
 
 test('the village center and empty ground are protected without payment', () => {
@@ -264,18 +265,14 @@ test('confirmation rechecks gold and pausing blocks edits', () => {
 
 test('the default budget can build a connected village and start earning through real sales', () => {
   const { economy, population, simulation } = setup();
-  assert.equal(simulation.build(center, 'villageCenter'), null);
-  for (let x = 1; x <= 5; x++) assert.equal(simulation.build(cell(x, 0), 'road'), null);
-  assert.equal(simulation.build(farm, 'farm'), null);
-  assert.equal(simulation.build(warehouse, 'warehouse'), null);
-  assert.equal(simulation.build(lumberjack, 'lumberjack'), null);
-  assert.equal(simulation.build(market, 'market'), null);
-  assert.equal(simulation.build(home, 'house'), null);
-  assert.equal(simulation.build(cell(5, 2), 'house'), null);
-  // Connect the second plot via a road adjacent to an existing road.
-  assert.equal(simulation.build(cell(6, 0), 'road'), null);
-  assert.equal(simulation.build(cell(6, 1), 'road'), null);
-  assert.equal(simulation.build(cell(6, 2), 'road'), null);
+  assert.equal(simulation.build(cell(0, 4), 'villageCenter'), null);
+  for (let x = 1; x <= 8; x++) assert.equal(simulation.build(cell(x, 4), 'road'), null);
+  assert.equal(simulation.build(cell(1, 1), 'farm'), null);
+  assert.equal(simulation.build(cell(4, 2), 'warehouse'), null);
+  assert.equal(simulation.build(cell(6, 2), 'lumberjack'), null);
+  assert.equal(simulation.build(cell(8, 2), 'market'), null);
+  assert.equal(simulation.build(cell(7, 5), 'house'), null);
+  assert.equal(simulation.build(cell(8, 5), 'house'), null);
   assert.equal(economy.storage.constructionWoodReserve, 0);
   const openingGold = economy.resources.gold;
   simulation.advance(120_000);
@@ -319,7 +316,7 @@ test('isolating the city keeps time and unmet demand advancing, without consumin
   assert.ok(economy.perSecond.gold > 0);
   assert.equal(economy.distribution.foodShortageAt(home), 0);
   assert.equal(economy.distribution.cumulativeFoodShortage, shortageBeforeRecovery);
-  assert.equal(economy.perSecond.gold, people / 10);
+  assert.equal(economy.perSecond.gold, people / 100);
 });
 
 test('an isolated home cannot consume from the initial reserve even before a market opens', () => {

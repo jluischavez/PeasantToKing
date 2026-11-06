@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { Economy } from '../src/economy/Economy.ts';
 import { unitsPerResource as U } from '../src/economy/Inventories.ts';
-import { ConstructionMap } from '../src/map/ConstructionMap.ts';
+import { ConstructionMap, constructionDimensions } from '../src/map/ConstructionMap.ts';
 import { RoadConnections } from '../src/map/RoadConnections.ts';
 import { HousingEvolution, housingLevels, housingRules } from '../src/population/HousingEvolution.ts';
 import { Population, populationRules } from '../src/population/Population.ts';
@@ -15,7 +15,7 @@ const farm = c(1, 2), camp = c(2, 2);
 const complete = { food: 1, wood: 1, water: 1 };
 const duration = housingRules.seconds * 1000;
 
-function village() {
+function village(decorated = false) {
   const map = new ConstructionMap(20, 20), population = new Population(), roads = new RoadConnections();
   const economy = new Economy();
   const simulation = new SettlementSimulation(economy, population, 1000, map, roads);
@@ -23,6 +23,11 @@ function village() {
   for (let x = 1; x <= 6; x++) map.place(c(x, 1), 'road');
   for (const [cell, type] of [[farm, 'farm'], [camp, 'lumberjack'], [c(3, 2), 'warehouse'], [c(4, 2), 'market'],
     [well, 'well'], [house, 'house'], [other, 'house']] as const) map.place(cell, type);
+  if (decorated) {
+    for (let row = 1; row <= 3; row++) assert.ok(map.place(c(7, row), 'road'));
+    assert.ok(map.place(c(5, 3), 'plaza', constructionDimensions.plaza));
+    assert.ok(map.place(c(8, 2), 'park', constructionDimensions.park));
+  }
   simulation.recalculate();
   while (population.total < 8) assert.ok(population.immigrate(100) > 0);
   simulation.recalculate();
@@ -41,7 +46,7 @@ function startProgress(simulation: SettlementSimulation) {
 }
 
 test('continuous good conditions advance through all four capacities and stop at level four', () => {
-  const { simulation, population } = village();
+  const { simulation, population } = village(true);
   startProgress(simulation);
   simulation.advance(duration - 2000);
   assert.equal(population.housingLevelAt(house), 1);
@@ -75,9 +80,9 @@ test('any lost requirement resets continuous improvement and recovery starts a n
 
 test('neutral conditions reset deterioration and the minimum level cannot deteriorate', () => {
   const housing = new HousingEvolution();
-  for (let i = 0; i < 59; i++) housing.advanceSecond(house, 3, 39, complete, 0);
+  for (let i = 0; i < 59; i++) housing.advanceSecond(house, 3, 39, complete, 0, 65);
   assert.equal(housing.at(house).deterioration, 59);
-  assert.equal(housing.advanceSecond(house, 3, 50, complete, 0), undefined);
+  assert.equal(housing.advanceSecond(house, 3, 50, complete, 0, 65), undefined);
   assert.deepEqual(housing.at(house), { improvement: 0, deterioration: 0 });
   for (let i = 0; i < 59; i++) assert.equal(housing.advanceSecond(house, 3, 90, { ...complete, food: 0 }, 0), undefined);
   assert.equal(housing.advanceSecond(house, 3, 90, { ...complete, food: 0 }, 0), 2);
@@ -140,7 +145,7 @@ test('deterioration reduces capacity one level, records displaced residents and 
 });
 
 test('demolishing and rebuilding a developed house clears its level and its progress', () => {
-  const { simulation, population } = village();
+  const { simulation, population } = village(true);
   startProgress(simulation);
   simulation.advance(duration - 1000);
   simulation.advance(5000);

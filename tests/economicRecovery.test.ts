@@ -63,7 +63,7 @@ test('reproduces 4 residents, 23 jobs and stored food with no operational market
   simulation.advance(1);
   assert.equal(economy.storage.warehouseAt(warehouse)!.food, 0);
   assert.equal(economy.distribution.marketAt(market)!.food, 77.1);
-  assert.equal(economy.resources.gold, 0.4);
+  assert.equal(economy.resources.gold, 0.04);
   simulation.advance(5000);
   assert.ok(population.total > 4);
   assert.ok(economy.resources.gold > 0);
@@ -84,7 +84,7 @@ test('recovery uses no extra food: warehouse stocks plus food-sale treasury rema
       .reduce((total, event) => total + event.units / (event.unitScale ?? U), 0);
     const taxes = economy.history.read('gold').filter(event => event.operation === 'tax')
       .reduce((total, event) => total + event.units / (event.unitScale ?? U), 0);
-    assert.ok(Math.abs(economy.resources.food + economy.resources.gold + expenses - taxes - 77.5) < 1e-9);
+    assert.ok(Math.abs(economy.resources.food + (economy.resources.gold + expenses - taxes) * 10 - 77.5) < 1e-9);
     assert.equal(economy.storage.initialFoodReserve, 0);
     assert.equal(population.employed + population.unemployed, population.activePopulation);
     assert.equal(economy.storage.warehouseAt(warehouse)!.accepts.food, false);
@@ -107,6 +107,19 @@ test('an exhausted reserve and empty warehouses can recover by staffed productio
   assert.ok(population.total >= 8);
   assert.ok(economy.resources.gold > 0);
   assert.equal(economy.storage.initialFoodReserve, 0);
+});
+
+test('scarce workers keep producing until the recovery buffer is ready for a sustained switch to sales', () => {
+  const { population, economy, simulation } = town(4, 0);
+  simulation.recalculate();
+  assert.ok(economy.storage.depositProduction(farm, 'food', 3 * U));
+  for (let i = 0; i < 10; i++) simulation.recalculate();
+  assert.equal(population.workersAt(farm), 1);
+  assert.equal(population.workersAt(market), 0);
+  assert.ok(economy.storage.depositProduction(farm, 'food', 2 * U));
+  for (let i = 0; i < 10; i++) simulation.recalculate();
+  assert.equal(population.workersAt(farm), 0);
+  assert.equal(population.workersAt(market), 1);
 });
 
 test('one active resident can operate storage and recruit moderately before a market can be staffed', () => {

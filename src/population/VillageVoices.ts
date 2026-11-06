@@ -3,12 +3,12 @@ import { check, label, list, restoreEntries, whole } from '../persistence/valida
 import type { Cell } from '../map/CellSelection';
 import { simulatedMsPerGameHour } from '../simulation/GameTime.ts';
 import type { NeedsObservation } from './HouseholdNeeds';
-import { housingVoiceTemplates, newVoiceTemplates, originalVoiceTemplates } from './VillageVoiceCatalog.ts';
+import { housingVoiceTemplates, newVoiceTemplates, originalVoiceTemplates, urbanVoiceTemplates } from './VillageVoiceCatalog.ts';
 import type { VoiceCity, VoiceTone } from './VillageVoiceCatalog';
 
 export type { VoiceTone } from './VillageVoiceCatalog';
 type VoiceMessage = Readonly<{ timeMs: number; home: Readonly<Cell>; originExists: boolean; tone: VoiceTone; text: string }>;
-const templates = [...originalVoiceTemplates, ...newVoiceTemplates];
+const templates = [...originalVoiceTemplates, ...newVoiceTemplates, ...urbanVoiceTemplates];
 type Template = typeof templates[number];
 const homeKey = (cell: Cell): string => cell.column + ',' + cell.row;
 

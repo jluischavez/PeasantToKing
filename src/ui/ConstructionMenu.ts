@@ -1,5 +1,6 @@
 import { formatNumber } from '../formatNumber';
-import { constructionNames, isConstructionType } from '../map/ConstructionMap';
+import { constructionDimensions, constructionNames, isConstructionType } from '../map/ConstructionMap';
+import { buildingArt } from '../map/BuildingArt';
 import type { ConstructionType } from '../map/ConstructionMap';
 import { constructionCosts, demolitionCost } from '../map/ConstructionCosts';
 import type { ConstructionCost } from '../map/ConstructionCosts';
@@ -12,12 +13,14 @@ const categories = {
   storage: { label: 'Almacenamiento', icon: '▣' },
   economy: { label: 'Economía', icon: '◈' },
   services: { label: 'Servicios', icon: '✦' },
+  decoration: { label: 'Decoración y bienestar', icon: '❀' },
 } as const;
 type Category = keyof typeof categories;
 
 const categoryFor: Readonly<Record<ConstructionType, Category>> = {
   house: 'housing', road: 'roads', bridge: 'roads', farm: 'agriculture', lumberjack: 'resources',
   warehouse: 'storage', market: 'economy', villageCenter: 'services', well: 'services',
+  garden: 'decoration', park: 'decoration', plaza: 'decoration',
 };
 
 export type ConstructionMode = ConstructionType | 'demolish' | null;
@@ -92,15 +95,19 @@ export class ConstructionMenu {
     label.textContent = name;
     if (type === 'demolish') {
       this.cancel.before(button);
+      button.append(label, price);
     } else {
-      const thumbnail = document.createElement('span');
+      const thumbnail = document.createElement('img');
       thumbnail.className = 'construction-thumbnail';
-      thumbnail.hidden = true;
-      thumbnail.setAttribute('aria-hidden', 'true');
-      button.append(thumbnail);
+      thumbnail.alt = '';
+      thumbnail.src = buildingArt[type];
+      const { width, height } = constructionDimensions[type];
+      if (width * height > 1) label.append(` · ${width}×${height}`);
+      const details = document.createElement('span');
+      details.append(label, price);
+      button.append(thumbnail, details);
       this.buttons.append(button);
     }
-    button.append(label, price);
     this.choices.set(type, button);
   }
 

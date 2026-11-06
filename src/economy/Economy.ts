@@ -4,7 +4,7 @@ import { Treasury } from './Treasury.ts';
 import { check, range, whole } from '../persistence/validation.ts';
 import { taxPolicies, taxRules } from './TaxPolicy.ts';
 import type { TaxPolicy } from './TaxPolicy';
-import { centsPerGold, maintenanceByType, wagePerWorker } from './OperatingCosts.ts';
+import { centsPerGold, maintenanceByType, salePriceCents, wagePerWorker } from './OperatingCosts.ts';
 import type { OperatingCosts } from './OperatingCosts';
 import { simulatedMsPerGameHour } from '../simulation/GameTime.ts';
 import { populationRules } from '../population/Population.ts';
@@ -15,7 +15,7 @@ import { Distribution } from './Distribution.ts';
 import type { Residence } from './Distribution';
 import { Storage } from './Storage.ts';
 import { unitsPerResource } from './Inventories.ts';
-import type { StoredResource } from './Inventories';
+import type { Goods, StoredResource } from './Inventories';
 import type { Cell } from '../map/CellSelection';
 import type { ConstructionCost } from '../map/ConstructionCosts';
 import type { ConstructionMap, ConstructionType } from '../map/ConstructionMap';
@@ -44,6 +44,9 @@ const productionByType: Record<ConstructionType, Readonly<Resources>> = {
   market: { gold: 0, food: 0, wood: 0 },
   well: { gold: 0, food: 0, wood: 0 },
   villageCenter: { gold: 0, food: 0, wood: 0 },
+  garden: { gold: 0, food: 0, wood: 0 },
+  park: { gold: 0, food: 0, wood: 0 },
+  plaza: { gold: 0, food: 0, wood: 0 },
 };
 
 export type BuildingProductivity = Readonly<{ workers: number; capacity: number; ratio: number; storageBlocked: boolean }>;
@@ -164,7 +167,16 @@ export class Economy {
   }
 
   get perSecond(): Readonly<Resources> {
-    return { ...asResources(this.productionUnits), gold: this.distribution.salesPerSecond };
+    const sales = this.salesRevenuePerSecond;
+    return { ...asResources(this.productionUnits), gold: sales.food + sales.wood };
+  }
+
+  get salesRevenuePerSecond(): Readonly<Goods> {
+    const quantities = this.distribution.salesByProductPerSecond;
+    return {
+      food: quantities.food * salePriceCents.food / centsPerGold,
+      wood: quantities.wood * salePriceCents.wood / centsPerGold,
+    };
   }
 
   productivityAt(cell: Cell): BuildingProductivity | undefined {
@@ -207,8 +219,7 @@ export class Economy {
   }
 
   consumeHomes(population: Readonly<{ residencesSnapshot: readonly Residence[] }>, foodPerResident: number): void {
-    // Provisional municipal revenue: one gold per food or wood unit consumed from a market.
-    // No revenue from replenishment, reserve consumption or unsatisfied demand.
+    // Only units actually delivered from a market generate municipal revenue.
     this.distribution.consumeHomes(population.residencesSnapshot, foodPerResident,
       (market, household, units, product) => this.treasury.creditSale(market, household, units, product));
     this.refresh();
@@ -233,17 +244,35 @@ export class Economy {
   }
 
   laborContext(population: Pick<Population, 'total' | 'activePopulation' | 'residencesSnapshot'>): LaborContext {
-    const food = this.storage.connectedWarehouseFood(false) + this.distribution.availableFood;
+    const homes = population.residencesSnapshot;
+    const markets = this.distribution.essentialMarkets(homes);
+    const market = this.distribution.foodForStaffing(markets);
+    const food = this.storage.connectedWarehouseFood(false) + market.stock;
     const buffer = (population.total + 1) * populationRules.foodPerResidentPerSecond * populationRules.immigrationIntervalSeconds;
+    const warehouses = this.storage.essentialWarehouses();
     return {
-      produceFoodFirst: population.activePopulation < 3 && food < buffer,
-      marketCoverage: cell => this.distribution.inhabitedCoverage(cell, population.residencesSnapshot),
+      // Require a fuller buffer before moving a scarce worker back to sales.
+      produceFoodFirst: population.activePopulation < 3 && food < buffer * (market.staffed ? 1 : 2),
+      unavailable: (cell, type) => this.laborIssue(cell, type) !== null,
+      marketCoverage: cell => this.distribution.inhabitedCoverage(cell, homes),
       essentialEligible: (cell, type) => {
-        if (type === 'market') return this.distribution.essentialMarket(cell, population.residencesSnapshot);
-        if (type === 'warehouse') return this.storage.essentialWarehouse(cell);
+        if (type === 'market') return markets.has(key(cell));
+        if (type === 'warehouse') return warehouses.has('warehouse:' + key(cell));
         return true;
       },
     };
+  }
+
+  laborIssue(cell: Cell, type: ConstructionType): string | null {
+    if (type !== 'market' && type !== 'warehouse') return null;
+    const inventory = this.storage.inventories.snapshot(type + ':' + key(cell));
+    if (!inventory) return null;
+    if (type === 'market') {
+      return inventory.products.food || inventory.products.wood ? null : 'Ventas de comida y madera deshabilitadas.';
+    }
+    if (inventory.used > 0) return null;
+    if (inventory.draining) return 'El almacén en vaciado ya está vacío.';
+    return inventory.products.food || inventory.products.wood ? null : 'Recepción deshabilitada y sin existencias.';
   }
 
   migrationFood(population: Population): number {

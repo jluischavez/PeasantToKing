@@ -157,8 +157,8 @@ export class Distribution {
       coveredHomes: this.coverage.coveredHomes(cell), range: distributionRules.coverageRoadTiles,
       sells: inventory.products,
       reason: !market.connected ? 'Sin conexión al Centro de Aldea'
-        : market.workers === 0 ? 'Sin empleados asignados'
         : !inventory.products.food && !inventory.products.wood ? 'Ventas deshabilitadas'
+        : market.workers === 0 ? 'Sin empleados asignados'
         : !(inventory.products.food && inventory.goods.food > 0) && !(inventory.products.wood && inventory.goods.wood > 0)
           ? 'Sin existencias de productos habilitados; esperando reposición'
         : 'Abasteciendo viviendas en cobertura',
@@ -188,6 +188,18 @@ export class Distribution {
       if (inventory.operational && this.storage.inventories.isProductEnabled(id, 'food')) units += inventory.goods.food;
     }
     return units / U;
+  }
+
+  foodForStaffing(eligibleMarkets: ReadonlySet<string>): { stock: number; staffed: boolean } {
+    let units = this.bootstrap ? this.storage.initialFoodReserve * U : 0;
+    let staffed = false;
+    for (const market of this.markets.values()) {
+      if (!eligibleMarkets.has(key(market.cell))) continue;
+      const inventory = this.storage.inventories.snapshot(market.id)!;
+      units += inventory.goods.food;
+      staffed ||= inventory.operational;
+    }
+    return { stock: units / U, staffed };
   }
 
   // A single settlement clock controls replenishment, never UI reconstruction.
@@ -248,13 +260,13 @@ export class Distribution {
       .map(home => key(home.cell));
   }
 
-  essentialMarket(cell: Cell, homes: readonly Residence[]): boolean {
+  essentialMarkets(homes: readonly Residence[]): ReadonlySet<string> {
     const authorized = [...this.markets.values()].filter(market => market.connected
       && this.storage.inventories.isProductEnabled(market.id, 'food')
       && this.coverage.coveredHomes(market.cell) > 0);
     const inhabited = authorized.filter(market => homes.some(home => home.residents > 0
       && this.coverage.distance(market.cell, home.cell) !== undefined));
-    return (inhabited.length > 0 ? inhabited : authorized).some(market => key(market.cell) === key(cell));
+    return new Set((inhabited.length > 0 ? inhabited : authorized).map(market => key(market.cell)));
   }
 
   hasAuthorizedCoverage(cell: Cell): boolean {

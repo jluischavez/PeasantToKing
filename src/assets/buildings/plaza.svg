@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">
+<defs><pattern id="paving" width="24" height="16" patternUnits="userSpaceOnUse"><rect width="24" height="16" fill="#aa9980"/><path d="M0 0h24M0 8h24M0 0v8m12 0v8" stroke="#887963" fill="none"/><path d="M2 2h12m1 8h7" stroke="#c6b49a"/></pattern></defs>
+<rect x="9" y="12" width="146" height="144" rx="13" fill="#383b32" opacity=".65"/>
+<rect x="5" y="5" width="147" height="147" rx="12" fill="url(#paving)" stroke="#5e574c" stroke-width="4"/>
+<path d="M80 26 132 78 80 132 26 78Z" fill="#c2a17c" stroke="#e2c3a0" stroke-width="3"/>
+<path d="M56 46h47l14 16v40l-16 14H58l-15-16V63Z" fill="#65594b"/>
+<path d="M56 41h47l14 16v40l-16 14H58L43 95V58Z" fill="#ded0ad" stroke="#817866" stroke-width="3"/>
+<path d="M61 49h38l10 12v32l-11 10H61L51 93V62Z" fill="#51858f" stroke="#9ab5ab" stroke-width="2"/>
+<circle cx="80" cy="75" r="15" fill="#dac8a6" stroke="#7a7866" stroke-width="3"/><circle cx="80" cy="73" r="9" fill="#83bec1"/>
+<path d="M80 70v-21m-4 20q-11-9-14 5m22-5q11-9 14 5M60 87q20 14 40 0" fill="none" stroke="#c6ded3" stroke-width="2" stroke-linecap="round"/>
+<path d="M19 21h21v15H19zm100 0h21v15h-21zM19 122h21v15H19zm100 0h21v15h-21z" fill="#604b35"/>
+<path d="M22 23h15m85 0h15M22 124h15m85 0h15" stroke="#72905b" stroke-width="7" stroke-linecap="round"/>
+</svg>

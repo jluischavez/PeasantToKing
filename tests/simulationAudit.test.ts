@@ -190,15 +190,15 @@ test('the audited food chain distinguishes production, transfers, consumption an
     assert.equal(sale.origin, marketId);
     assert.equal(sale.destination, 'treasury');
     assert.equal(sale.household, meal.destination);
-    assert.equal(sale.units, meal.units);
+    assert.equal(sale.units, meal.units / 10);
     assert.deepEqual(sale.destinationBalance, { before: goldUnits, after: goldUnits + sale.units });
     goldUnits += sale.units;
     marketUnits -= meal.units;
   }
-  assert.equal(goldUnits, 0.6 * U);
+  assert.equal(goldUnits, 0.06 * U);
   assert.equal(marketUnits, 1.9 * U);
   assert.equal(economy.resources.food, 19.5);
-  assert.equal(economy.resources.gold, 0.6);
+  assert.equal(economy.resources.gold, 0.06);
   assert.equal(events.filter(event => event.timeMs < 5000 && event.operation === 'sale').length, 0);
   assert.ok(events.some(event => event.operation === 'consumption' && event.origin === 'initial-reserve'));
   assert.equal(economy.history.read('gold', nearId).length, 1);

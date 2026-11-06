@@ -229,8 +229,8 @@ test('homes fall back to the next authorized covered market despite stock in the
   consume();
   assert.equal(economy.distribution.marketAt(firstMarket)!.food, 1);
   assert.equal(economy.distribution.marketAt(secondMarket)!.food, 1.6);
-  assert.equal(economy.resources.gold, 0.4);
-  assert.equal(economy.perSecond.gold, 0.4);
+  assert.equal(economy.resources.gold, 0.04);
+  assert.equal(economy.perSecond.gold, 0.04);
 });
 
 test('re-enabling a market resumes sales from its existing stock without granting resources', () => {
@@ -243,7 +243,7 @@ test('re-enabling a market resumes sales from its existing stock without grantin
   assert.deepEqual(economy.resources, before);
   consume();
   assert.equal(economy.distribution.marketAt(firstMarket)!.food, 0.6);
-  assert.equal(economy.resources.gold, 0.4);
+  assert.equal(economy.resources.gold, 0.04);
   assert.equal(economy.resources.food, before.food - 0.4);
 });
 

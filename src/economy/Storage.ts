@@ -163,11 +163,16 @@ export class Storage {
     return food;
   }
 
-  essentialWarehouse(cell: Cell): boolean {
-    const stocked = [...this.warehouses.values()].filter(warehouse => warehouse.connected
-      && this.inventories.snapshot(warehouse.id)!.goods.food > 0);
-    if (stocked.length > 0) return stocked.some(warehouse => warehouse.id === key(cell));
-    return this.inventories.snapshot(key(cell))?.products.food ?? true;
+  essentialWarehouses(): ReadonlySet<string> {
+    const stocked = new Set<string>();
+    const accepting = new Set<string>();
+    for (const warehouse of this.warehouses.values()) {
+      const inventory = this.inventories.snapshot(warehouse.id)!;
+      if (!warehouse.connected || !inventory.marketDispatch.food) continue;
+      if (inventory.goods.food > 0) stocked.add(warehouse.id);
+      if (!inventory.draining && inventory.products.food) accepting.add(warehouse.id);
+    }
+    return stocked.size > 0 ? stocked : accepting;
   }
 
   connectedWarehouseFood(operationalOnly: boolean): number {

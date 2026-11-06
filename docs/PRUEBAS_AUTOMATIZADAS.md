@@ -24,6 +24,22 @@ Vitest usa Vite y el TypeScript del proyecto. Las pruebas se ejecutan en Node e 
 | Persistencia de terreno | Restauración del mapa exacto, obstáculos limpiados, cámara, recarga de pestaña y mapas de pasto anteriores |
 | Camino del reino | Entrada de borde, ruta determinista y conectada, protección, gratuidad y restauración sin duplicados |
 | Puentes | Ambos ejes, costos, cancelación, cruces inválidos, conexión y cobertura, demolición, reconstrucción y guardado |
+| Rebalance de empleo | Primer puesto, excedentes, desempleo, prioridades, cambios de población y carga de un reparto anterior |
+| Rebalance económico | Precios sobre entregas reales, gastos, déficit, recuperación desde cero y comparación durante tres días |
+| Huellas multicelda | Identidad compartida, bloqueo en cualquier casilla, cobro, demolición, producción y acceso por el perímetro |
+| Belleza y decoración | Cobertura desde el borde, acceso vial, tope, mantenimiento, voces y umbrales de evolución y deterioro |
+| Superficies de caminos | Costo por mejora, protección, conectividad, belleza, puentes y carga de caminos mejorados |
+| Ilustraciones | SVG locales distintos y completos para el catálogo y las mejoras de caminos |
+
+### Simulación de la Etapa 13B
+
+`tests/economicBalance.test.ts` arranca con infraestructura preparada y 18 habitantes. Compara el saldo operativo en oro al cierre de cada día. El escenario de recuperación abre el mercado tras seis horas de déficit y mide los tres días siguientes. Estos saldos incluyen las reglas de belleza de 13C. El escenario carece de decoración y sus viviendas permanecen como máximo en el nivel 2.
+
+| Escenario | Saldo al inicio de la comparación | Día 1 | Día 2 | Día 3 |
+| --- | ---: | ---: | ---: | ---: |
+| Abastecida | 150,00 | 214,03 | 279,07 | 335,16 |
+| Diez edificios sobrantes y mercado cerrado | 150,00 | 16,82 | 0,00 | 0,00 |
+| Recuperación al reabrir el mercado | 0,00 | 55,38 | 120,42 | 185,46 |
 
 ## Agregar un caso
 

@@ -6,7 +6,7 @@ import type { CameraView } from '../map/MapCamera';
 export const saveSlots = [1, 2, 3] as const;
 export type SaveSlot = typeof saveSlots[number];
 export const autosaveMs = 60_000;
-const version = 1;
+const version = 2;
 const maxSaveLength = 2_000_000;
 const tabKey = 'peasant-to-king:tab-session';
 export const saveKey = (slot: SaveSlot) => 'peasant-to-king:save:' + slot;
@@ -18,7 +18,7 @@ type TabCheckpoint = Envelope & { active: ActiveSave | null };
 function parse(raw: string): Envelope {
   check(raw.length <= maxSaveLength);
   const save = JSON.parse(raw) as Envelope;
-  if (save?.version !== version) throw new Error('La versión del guardado no es compatible.');
+  if (save?.version !== 1 && save?.version !== version) throw new Error('La versión del guardado no es compatible.');
   check(whole(save.savedAt, 1, 8.64e15) && save.state && typeof save.state === 'object');
   return save;
 }

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+<ellipse cx="66" cy="109" rx="59" ry="13" fill="#233527" opacity=".38"/>
+<path d="M12 93 21 51h87l13 43-19 21H21z" fill="#a88d65" stroke="#68553e" stroke-width="3"/>
+<path d="M16 54 64 30l48 27v36l-28 14-68-15z" fill="#ad8258" stroke="#5a4131" stroke-width="3"/>
+<path d="M78 68l34-11v36l-28 14z" fill="#795a43"/><path d="M22 70l54 11m-54-4 55 11m-54-4 55 11m-47-28v25m15-21v25m13-23v26" stroke="#71533f" stroke-width="2"/>
+<path d="M43 96V76l10-8 13 4v31z" fill="#47372c" stroke="#d5a776" stroke-width="2.5"/><path d="M53 75v24m-8-13 18 4" stroke="#8c6849" stroke-width="2"/>
+<path d="m8 56 16-24L66 9l47 21 9 29-42 19z" fill="#754838" stroke="#47382e" stroke-width="3"/>
+<path d="m24 32 42-23 18 24-42 21z" fill="#ac6950"/><path d="m66 9 18 24 38 26-9-29z" fill="#9b5a45"/><path d="m42 54 42-21 38 26-42 19z" fill="#8d513e"/>
+<path d="m24 32 42-23m-33 30 42-22m-33 30 42-22m-34 31 43-21m-33 30 43-21m-32 29 42-20" stroke="#dc9670" stroke-width="2" opacity=".8"/>
+<g transform="translate(14 94)" stroke="#62472d" stroke-width="1.5"><path d="m0 4 5-4 12 3-4 5z" fill="#d0a672"/><path d="M0 4v11l13 3V8z" fill="#a77845"/><path d="M13 8l4-5v11l-4 4z" fill="#795535"/><path d="m1 6 10 10m0-8L2 14" fill="none"/></g><g transform="translate(27 100)" stroke="#62472d" stroke-width="1.5"><path d="m0 4 5-4 12 3-4 5z" fill="#d0a672"/><path d="M0 4v11l13 3V8z" fill="#a77845"/><path d="M13 8l4-5v11l-4 4z" fill="#795535"/><path d="m1 6 10 10m0-8L2 14" fill="none"/></g><g transform="translate(96 101)" stroke="#503a2c" stroke-width="1.5"><path d="M-5 1q-3 7 0 13 5 4 10 0 3-6 0-13" fill="#966c40"/><ellipse cy="1" rx="5" ry="2.5" fill="#c29360"/><path d="M-6 6q6 3 12 0m-12 5q6 3 12 0" fill="none" stroke="#584e42"/></g><g transform="translate(108 94)" stroke="#503a2c" stroke-width="1.5"><path d="M-5 1q-3 7 0 13 5 4 10 0 3-6 0-13" fill="#966c40"/><ellipse cy="1" rx="5" ry="2.5" fill="#c29360"/><path d="M-6 6q6 3 12 0m-12 5q6 3 12 0" fill="none" stroke="#584e42"/></g>
+</svg>

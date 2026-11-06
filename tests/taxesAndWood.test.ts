@@ -193,12 +193,12 @@ test('production, restocking and consumption complete the food and wood chains w
   assert.equal(economy.distribution.marketAt(market)?.food, 2.5);
   assert.equal(economy.distribution.marketAt(market)?.wood, 10 / 3);
   consume();
-  assert.equal(economy.resources.gold, 0.12);
-  assert.equal(economy.perSecond.gold, 0.12);
+  assert.equal(economy.resources.gold, 0.014);
+  assert.equal(economy.perSecond.gold, 0.014);
   assert.deepEqual(economy.distribution.salesByProductPerSecond, { food: 0.1, wood: 0.02 });
   assert.equal(economy.distribution.woodShortageAt(home), 0);
   const sales = economy.history.read('gold').filter(event => event.operation === 'sale');
-  assert.deepEqual(sales.map(event => [event.soldProduct, amount(event)]), [['food', 0.1], ['wood', 0.02]]);
+  assert.deepEqual(sales.map(event => [event.soldProduct, amount(event)]), [['food', 0.01], ['wood', 0.004]]);
 });
 
 test('a household can get food and wood from different markets without double consumption', () => {
@@ -216,10 +216,10 @@ test('a household can get food and wood from different markets without double co
   assert.equal(economy.distribution.marketAt(market)?.wood, 1 / U);
   assert.equal(economy.distribution.marketAt(secondMarket)?.wood, 0.5);
   assert.equal(economy.resources.wood, 1.5);
-  assert.equal(economy.resources.gold, 3);
+  assert.equal(economy.resources.gold, 0.35);
   const soldWood = economy.history.read('gold').filter(event => event.soldProduct === 'wood');
   assert.equal(soldWood.length, 25);
-  assert.ok(soldWood.every(event => event.origin === 'market:6,1' && amount(event) === 0.02));
+  assert.ok(soldWood.every(event => event.origin === 'market:6,1' && amount(event) === 0.004));
 });
 
 test('empty, out-of-range and unstaffed supplies do not consume warehouse or market wood', () => {

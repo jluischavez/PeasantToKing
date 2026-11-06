@@ -2,7 +2,7 @@ import { check, whole } from '../persistence/validation.ts';
 import type { EconomicHistory, SiteCharge } from './EconomicHistory';
 import type { ProductId } from './Products';
 import { unitsPerResource } from './Inventories.ts';
-import { centsPerGold } from './OperatingCosts.ts';
+import { centsPerGold, salePriceCents } from './OperatingCosts.ts';
 import type { OperatingCosts } from './OperatingCosts';
 import { gameTimeRules } from '../simulation/GameTime.ts';
 
@@ -54,7 +54,9 @@ export class Treasury {
   }
 
   creditSale(market: string, household: string, inventoryUnits: number, soldProduct: ProductId): void {
-    const units = inventoryUnits * unitsPerInventoryUnit;
+    const units = inventoryUnits * salePriceCents[soldProduct] * (unitsPerInventoryUnit / centsPerGold);
+    check(whole(units));
+    if (units === 0) return;
     const before = this.units;
     this.units += units;
     this.record({
@@ -98,6 +100,7 @@ export class Treasury {
 
   private debit(units: number, operation: SiteCharge | 'wages' | 'maintenance', destination: string): void {
     if (units === 0) return;
+    check(whole(units, 1, this.units));
     const before = this.units;
     this.units -= units;
     this.record({

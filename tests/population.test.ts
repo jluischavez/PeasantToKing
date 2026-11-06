@@ -377,7 +377,7 @@ test('migration credit preserves batch-versus-frame determinism even after jobs 
   assert.deepEqual(batch.economy.resources, frames.economy.resources);
   assert.ok(batch.population.unemployed > 0);
 });
-test('food-worker priority is preserved when another producer is built without changing stocks', () => {
+test('a new producer receives a worker from a surplus post without removing the farm’s last worker', () => {
   const { map, economy, population, simulation, recalculate } = village();
   for (let x = 1; x <= 3; x++) map.place(cell(x, 1), 'house');
   map.place(cell(8, 1), 'farm');
@@ -386,11 +386,10 @@ test('food-worker priority is preserved when another producer is built without c
   assert.equal(population.total, 4);
   assert.equal(economy.perSecond.food, 0);
   const before = economy.resources;
-  // Existing row-major assignment fills this new workplace before the farm.
   map.place(cell(9, 0), 'lumberjack');
   recalculate();
-  assert.equal(population.workersAt(cell(9, 0)), 0);
-  assert.equal(population.workersAt(cell(8, 1)), 2);
+  assert.equal(population.workersAt(cell(9, 0)), 1);
+  assert.equal(population.workersAt(cell(8, 1)), 1);
   assert.deepEqual(economy.perSecond, { gold: 0, food: 0, wood: 0 });
   assert.deepEqual(economy.resources, before);
   simulation.advance(1000);
