@@ -14,12 +14,16 @@ import { waterRules } from '../simulation/WaterService';
 import type { WellSnapshot } from '../simulation/WaterService';
 import { constructionNames } from '../map/ConstructionMap';
 import type { ConstructionType } from '../map/ConstructionMap';
+import { clearingCosts } from '../map/ConstructionCosts';
+import { groundNames, isProtectedGround, obstacleNames } from '../map/Terrain';
+import type { TerrainTile } from '../map/Terrain';
 
 export class SelectionPanel {
   private readonly details = document.getElementById('cell-details')!;
   private readonly rows = new Map<string, HTMLElement>();
   private layout = '';
   private readonly cancel = document.querySelector<HTMLButtonElement>('#cancel-selection')!;
+  private readonly clearTerrain = document.querySelector<HTMLButtonElement>('#clear-terrain')!;
   private readonly demolition = document.querySelector<HTMLElement>('#demolition-confirmation')!;
   private readonly demolitionTarget = document.querySelector<HTMLElement>('#demolition-target')!;
   private readonly demolitionIssue = document.querySelector<HTMLElement>('#demolition-issue')!;
@@ -27,24 +31,30 @@ export class SelectionPanel {
   private readonly cancelDemolition = document.querySelector<HTMLButtonElement>('#cancel-demolition')!;
   private readonly events = new AbortController();
 
-  constructor(onCancel: () => void, onConfirmDemolition: () => void, onCancelDemolition: () => void) {
+  constructor(onCancel: () => void, onConfirmDemolition: () => void, onCancelDemolition: () => void, onClearTerrain: () => void) {
     const options = { signal: this.events.signal };
     this.cancel.addEventListener('click', onCancel, options);
     this.confirmDemolition.addEventListener('click', onConfirmDemolition, options);
     this.cancelDemolition.addEventListener('click', onCancelDemolition, options);
+    this.clearTerrain.addEventListener('click', onClearTerrain, options);
     this.render(null);
     this.renderDemolition(null);
   }
 
-  renderDemolition(target: string | null, issue: string | null = null): void {
+  renderDemolition(target: string | null, issue: string | null = null, clearing = false): void {
     this.demolition.hidden = target === null;
+    this.demolition.setAttribute('aria-label', clearing ? 'Confirmar limpieza' : 'Confirmar demolición');
     setText(this.demolitionTarget, target ?? '');
     this.demolitionIssue.hidden = issue === null;
     setText(this.demolitionIssue, issue ?? '');
     this.confirmDemolition.disabled = issue !== null;
+    setText(this.confirmDemolition, clearing ? 'Confirmar limpieza' : 'Confirmar demolición');
+    setText(this.cancelDemolition, clearing ? 'Cancelar limpieza' : 'Cancelar demolición');
   }
 
-  render(cell: Cell | null, construction: ConstructionType | null = null, connected = false, residents = 0,
+  renderClearing(available: boolean): void { this.clearTerrain.hidden = !available; }
+
+  render(cell: Cell | null, terrain?: TerrainTile, construction: ConstructionType | null = null, connected = false, residents = 0,
     productivity?: BuildingProductivity, warehouse?: WarehouseSnapshot, market?: MarketSnapshot,
     supply?: HousingSupply, foodShortage = 0, woodSupply?: HousingSupply, woodShortage = 0,
     wellbeing?: Readonly<{ happiness: number; concerns: readonly string[] }>, waterSupplied = 0, well?: WellSnapshot,
@@ -53,10 +63,16 @@ export class SelectionPanel {
     const add = (id: string, label: string, value: string) => fields.push([id, label, value]);
     const fraction = (value: number, total: number) => formatNumber(value) + ' / ' + formatNumber(total);
     add('coordinates', 'Coordenadas', cell ? `X ${cell.column} · Y ${cell.row}` : '—');
-    add('terrain', 'Terreno', cell ? 'Césped' : '—');
+    add('terrain', 'Terreno', terrain ? groundNames[terrain.ground] : '—');
+    if (terrain?.obstacle) {
+      add('obstacle', 'Obstáculo', obstacleNames[terrain.obstacle]);
+      add('clearing-cost', 'Costo de limpieza', formatNumber(clearingCosts[terrain.obstacle].gold) + ' oro');
+    }
     const homeLevel = housing ? housingLevels[housing.level] : undefined;
     if (construction) add('construction', 'Construcción', constructionNames[construction]);
-    const status = housing && homeLevel
+    const status = terrain && isProtectedGround(terrain.ground) ? 'Terreno protegido. No se puede construir ni limpiar.'
+      : terrain?.obstacle ? 'Limpia el terreno antes de construir.'
+      : housing && homeLevel
       ? (residents > 0 || housing.level > 1 ? homeLevel.name : 'Solar vacío')
       : construction ? 'Ocupada' : cell ? 'Casilla disponible' : 'Sin selección';
     add('status', 'Estado', status);

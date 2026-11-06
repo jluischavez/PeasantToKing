@@ -8,8 +8,7 @@ const viewport = { x: 80, y: 50, size: cameraRules.initialTiles * cellSize };
 const middle = { x: viewport.x + viewport.size / 2, y: viewport.y + viewport.size / 2 };
 const start = { column: 50, row: 50 };
 
-function gameAndCamera() {
-  const game = Session.start();
+function gameAndCamera(game = Session.start(12)) {
   const camera = new MapCamera(game.world, game.map.villageCenter!);
   camera.setViewport(viewport);
   return { game, camera };
@@ -95,7 +94,10 @@ test('a drag, canceled gesture or alternate button never returns a construction 
 });
 
 test('a panned camera targets construction and demolition beyond the initial view with working road access', () => {
-  const { game, camera } = gameAndCamera();
+  const flat = new Session();
+  assert.ok(flat.map.place(start, 'villageCenter'));
+  flat.simulation.recalculate();
+  const { game, camera } = gameAndCamera(flat);
   const { simulation, connections, map } = game;
   const far = { column: 72, row: 51 };
   for (let column = start.column + 1; column <= far.column; column++) {

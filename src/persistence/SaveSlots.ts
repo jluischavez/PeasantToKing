@@ -8,9 +8,12 @@ export type SaveSlot = typeof saveSlots[number];
 export const autosaveMs = 60_000;
 const version = 1;
 const maxSaveLength = 2_000_000;
+const tabKey = 'peasant-to-king:tab-session';
 export const saveKey = (slot: SaveSlot) => 'peasant-to-king:save:' + slot;
 type Backend = Pick<Storage, 'getItem' | 'setItem'>;
 type Envelope = { version: number; savedAt: number; state: ReturnType<Session['saveState']> };
+type ActiveSave = { slot: SaveSlot; raw: string };
+type TabCheckpoint = Envelope & { active: ActiveSave | null };
 
 function parse(raw: string): Envelope {
   check(raw.length <= maxSaveLength);
@@ -21,12 +24,38 @@ function parse(raw: string): Envelope {
 }
 
 export class SaveSlots {
-  private active: { slot: SaveSlot; raw: string } | null = null;
+  private active: ActiveSave | null = null;
 
-  constructor(private readonly backend: () => Backend = () => window.localStorage) {}
+  constructor(private readonly backend: () => Backend = () => window.localStorage,
+    private readonly tabBackend: () => Backend = () => window.sessionStorage) {}
 
   get activeSlot(): SaveSlot | null { return this.active?.slot ?? null; }
   detach(): void { this.active = null; }
+
+  checkpointTab(session: Session, selection: Cell | null, camera: CameraView): void {
+    try {
+      const checkpoint = { version, savedAt: Date.now(), state: session.saveState(selection, camera), active: this.active };
+      const raw = JSON.stringify(checkpoint);
+      if (raw.length <= maxSaveLength) this.tabBackend().setItem(tabKey, raw);
+    } catch {
+      // Slot saves are independent of browser support for per-tab storage.
+    }
+  }
+
+  resumeTab(): ReturnType<typeof Session.restore> | undefined {
+    try {
+      const raw = this.tabBackend().getItem(tabKey);
+      if (!raw) return undefined;
+      const { state, active } = parse(raw) as TabCheckpoint;
+      const game = Session.restore(state);
+      // A reload must not claim a slot another tab has changed.
+      if (active && saveSlots.includes(active.slot) && typeof active.raw === 'string'
+        && this.backend().getItem(saveKey(active.slot)) === active.raw) this.active = active;
+      return game;
+    } catch {
+      return undefined;
+    }
+  }
 
   inspect(slot: SaveSlot) {
     const raw = this.backend().getItem(saveKey(slot));

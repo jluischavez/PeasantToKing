@@ -86,7 +86,7 @@ export class ConstructionMenu {
     button.dataset.construction = type;
     const price = document.createElement('span');
     price.className = 'construction-cost';
-    price.textContent = formatCost(cost);
+    price.textContent = type === 'demolish' ? 'Edificios · ' + formatCost(cost) : formatCost(cost);
     const label = document.createElement('span');
     label.textContent = name;
     if (type === 'demolish') {
@@ -119,7 +119,7 @@ export class ConstructionMenu {
     for (const [type, button] of this.choices) {
       button.setAttribute('aria-pressed', String(type === mode));
     }
-    this.showStatus(mode === 'demolish' ? 'Selecciona una construcción para demoler y confirma en el inspector.'
+    this.showStatus(mode === 'demolish' ? 'Selecciona una construcción o un obstáculo y confirma en el inspector.'
       : mode ? constructionNames[mode] + ' · Verde: puedes construir. Rojo: casilla no disponible o recursos insuficientes.'
         : 'Selecciona un tipo de construcción.');
   }
@@ -130,7 +130,7 @@ export class ConstructionMenu {
 
   renderCosts(costIssue: (cost: ConstructionCost) => string | null): void {
     for (const [type, button] of this.choices) {
-      const issue = costIssue(type === 'demolish' ? demolitionCost : constructionCosts[type]);
+      const issue = type === 'demolish' ? null : costIssue(constructionCosts[type]);
       button.toggleAttribute('data-unaffordable', issue !== null);
       button.title = issue ?? '';
       if (issue) button.setAttribute('aria-label', button.textContent + '. ' + issue);

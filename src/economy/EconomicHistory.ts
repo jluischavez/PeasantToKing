@@ -2,7 +2,8 @@ import { check, label, list, whole } from '../persistence/validation.ts';
 import type { ProductId } from './Products';
 
 export type AuditResource = ProductId | 'gold';
-export type AuditOperation = 'production' | 'transfer' | 'consumption' | 'sale' | 'construction' | 'construction-material' | 'demolition' | 'wages' | 'maintenance' | 'tax';
+export type SiteCharge = 'construction' | 'demolition' | 'clearing';
+export type AuditOperation = SiteCharge | 'production' | 'transfer' | 'consumption' | 'sale' | 'construction-material' | 'wages' | 'maintenance' | 'tax';
 type Balance = Readonly<{ before: number; after: number }>;
 type Movement = Readonly<{
   resource: AuditResource;
@@ -50,7 +51,7 @@ export class EconomicHistory {
         && (event.soldProduct === undefined || ['food', 'wood'].includes(event.soldProduct))
         && ['completed', 'unpaid'].includes(event.result) && balance(event.originBalance) && balance(event.destinationBalance)
         && ['production', 'transfer', 'consumption', 'sale', 'construction', 'construction-material',
-          'demolition', 'wages', 'maintenance', 'tax'].includes(event.operation));
+          'demolition', 'clearing', 'wages', 'maintenance', 'tax'].includes(event.operation));
       previousTime = event.timeMs;
     }
     this.sequence = sequence;

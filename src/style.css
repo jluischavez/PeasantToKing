@@ -199,6 +199,7 @@ input[type="checkbox"] { accent-color: #ebd39a; }
 #warehouse-drain, #demolition-confirmation { margin-block: 7px; }
 #warehouse-drain-status, #demolition-issue { margin-block-start: 4px; font-size: .8rem; }
 #demolition-target { margin-block-end: 5px; }
+#clear-terrain { margin-block-start: 7px; }
 
 .audit-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 10px; }
 #audit-empty, #voices-empty, #population-events-empty { margin-block: 8px; color: var(--muted); }
@@ -231,6 +232,8 @@ input[type="checkbox"] { accent-color: #ebd39a; }
 #save-dialog h2 { margin: 0; font-size: 1.1rem; color: var(--accent); }
 #save-slot { display: block; margin-block: 4px 10px; inline-size: 100%; }
 .save-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.save-seed { display: block; margin-block: 7px; font-size: .85rem; }
+.save-seed input { display: block; inline-size: min(14rem, 100%); margin-block-start: 4px; }
 #save-message { margin-block-start: 10px; min-block-size: 1.5em; color: var(--green); }
 #save-status {
   position: fixed;

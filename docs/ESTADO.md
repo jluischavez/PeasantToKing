@@ -201,3 +201,8 @@
 - El terreno prepara su cuadrícula una vez. El dibujo de construcciones se actualiza por región. La simulación recorre las casillas ocupadas en el mismo orden que antes y se mantiene independiente de la cámara.
 - El guardado conserva posición, zoom y mapa completo. Las partidas de 20 × 20 se amplían al cargarlas y mantienen coordenadas, edificios, inventarios, población y reloj.
 - Verificación. `npm test` aprobó 227 pruebas con cero fallidas. `npm run build` pasó con el aviso habitual de tamaño de Phaser. Chrome sin interfaz comprobó el centro inicial, arrastre sin gasto, construcción, zoom, flechas, HUD fijo y guardado de la cámara.
+
+- Etapa 12B. Las nuevas partidas generan un mundo de 100 × 100 con semilla reproducible desde **Partida**. El terreno incluye pasto, pradera, árboles, bosques, rocas, un río continuo, barrancos y montañas. Se valida la zona inicial y su expansión.
+- **Demoler** permite limpiar un árbol por 3 oro, bosque por 8 y rocas por 6 con confirmación. Mantiene el suelo, registra el gasto y actualiza la textura de la región. Los terrenos permanentes quedan protegidos.
+- El guardado conserva semilla, terreno y cámara. Los mapas de pasto anteriores conservan sus casillas. La copia temporal de la pestaña permite recuperar el terreno y los cambios sin guardar al recargar, sin modificar la ranura.
+- Verificación. `npm test` aprobó 240 pruebas con cero fallidas. `npm run build` pasó con el aviso habitual de tamaño de Phaser. Chrome sin interfaz verificó semillas manual y aleatoria, bloqueo de construcción, cancelación, limpieza, recarga y carga de ranuras.

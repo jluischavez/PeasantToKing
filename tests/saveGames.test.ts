@@ -57,6 +57,8 @@ test('a new browser session restores exact world, selection, stock, housing, wor
   assert.deepEqual(selection, home);
   assert.deepEqual(jsonState(loaded), jsonState(game));
   assert.deepEqual(loaded.economy.resources, game.economy.resources);
+  assert.equal(loaded.world.terrain, 'grass-v1');
+  assert.deepEqual(loaded.map.terrain.at(cell(99, 99)), { ground: 'grass', obstacle: null });
   assert.equal(loaded.population.employed, game.population.employed);
   assert.equal(loaded.population.housingLevelAt(home), 2);
   assert.equal(loaded.connections.isConnected(market), true);
@@ -119,6 +121,7 @@ test('loading a legacy 20 by 20 slot expands the world without shifting cells or
   assert.deepEqual(selection, edge);
   assert.deepEqual(loaded.world, { ...oldWorld, columns: 100, rows: 100 });
   assert.equal(loaded.map.getConstruction(edge), 'road');
+  assert.deepEqual(loaded.map.terrain.at(cell(99, 99)), { ground: 'grass', obstacle: null });
   assert.deepEqual(loaded.map.occupiedCells(), game.map.occupiedCells());
   assert.equal(loaded.connections.isConnected(market), true);
   const restored = jsonState(loaded);

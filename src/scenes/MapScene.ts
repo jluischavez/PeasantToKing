@@ -10,7 +10,9 @@ import { housingArt } from '../map/HousingArt';
 import { CellSelection } from '../map/CellSelection';
 import type { Cell } from '../map/CellSelection';
 import { constructionNames } from '../map/ConstructionMap';
-import { constructionCosts, demolitionCost } from '../map/ConstructionCosts';
+import { clearingCosts, constructionCosts, demolitionCost } from '../map/ConstructionCosts';
+import { obstacleNames } from '../map/Terrain';
+import { terrainAuditId } from '../simulation/SettlementSimulation';
 import { SelectionPanel } from '../ui/SelectionPanel';
 import { ConstructionMenu, formatCost } from '../ui/ConstructionMenu';
 import type { ConstructionMode } from '../ui/ConstructionMenu';
@@ -26,12 +28,16 @@ import { SavePanel } from '../ui/SavePanel';
 import { bindMapInput } from './MapInput';
 
 export class MapScene extends Phaser.Scene {
-  private session = Session.start();
+  private session: Session;
   private selectedCell: Cell | null = null;
   private cameraView?: CameraView;
   private readonly saveSlots = new SaveSlots();
   constructor() {
     super('MapScene');
+    const previous = this.saveSlots.resumeTab();
+    this.session = previous?.session ?? Session.start();
+    this.selectedCell = previous?.selection ?? null;
+    this.cameraView = previous?.camera;
   }
 
   preload(): void {
@@ -43,7 +49,7 @@ export class MapScene extends Phaser.Scene {
   create(): void {
     const session = this.session;
     const { map: constructions, world, connections, economy, population, simulation } = session;
-    const map = new GridMap(this, world);
+    const map = new GridMap(this, constructions.terrain);
     const view = new MapCamera(world, constructions.villageCenter ?? this.selectedCell ?? startingCell(world), this.cameraView);
     const camera = this.cameras.main.setBounds(0, 0, world.columns * cellSize, world.rows * cellSize);
     const centerButton = document.querySelector<HTMLButtonElement>('#center-camera')!;
@@ -85,11 +91,12 @@ export class MapScene extends Phaser.Scene {
     };
     const renderSelected = (): void => {
       const cell = selection.selected;
+      const tile = cell ? constructions.terrain.at(cell) : undefined;
       const type = cell ? constructions.getConstruction(cell) : null;
       const warehouse = cell && type === 'warehouse' ? economy.storage.warehouseAt(cell) : undefined;
       const market = cell && type === 'market' ? economy.distribution.marketAt(cell) : undefined;
       const home = type === 'house' ? cell : null;
-      panel.render(cell, type,
+      panel.render(cell, tile, type,
         cell !== null && connections.isConnected(cell), home ? population.residentsAt(home) : 0,
         cell ? economy.productivityAt(cell) : undefined, warehouse, market,
         home ? economy.distribution.supplyAt(home) : undefined, home ? economy.distribution.foodShortageAt(home) : 0,
@@ -98,12 +105,17 @@ export class MapScene extends Phaser.Scene {
         cell && type === 'well' ? simulation.water.wellAt(cell) : undefined,
         home ? { level: population.housingLevelAt(home), progress: simulation.housing.at(home) } : undefined);
       const demolition = simulation.demolitionTarget;
-      const departing = demolition?.type === 'house' ? population.residentsAt(demolition.cell) : 0;
+      const clearing = demolition?.kind === 'obstacle';
+      const departing = demolition?.kind === 'building' && demolition.type === 'house'
+        ? population.residentsAt(demolition.cell) : 0;
       const departure = departing === 1 ? ' · 1 habitante abandonará la ciudad.'
         : departing > 1 ? ' · ' + departing + ' habitantes abandonarán la ciudad.' : '';
-      panel.renderDemolition(demolition ? constructionNames[demolition.type] + ' · ' + formatCost(demolitionCost) + departure : null,
-        demolition ? simulation.demolitionIssue(demolition.cell) : null);
-      simulationPanel.render(cell && type ? type + ':' + cell.column + ',' + cell.row : null);
+      const target = demolition?.kind === 'obstacle'
+        ? 'Limpiar terreno · ' + obstacleNames[demolition.type] + ' · ' + formatCost(clearingCosts[demolition.type])
+        : demolition ? constructionNames[demolition.type] + ' · ' + formatCost(demolitionCost) + departure : null;
+      panel.renderDemolition(target, demolition ? simulation.demolitionIssue(demolition.cell) : null, clearing);
+      panel.renderClearing(!!tile?.obstacle && !demolition);
+      simulationPanel.render(cell ? (type ? type + ':' + cell.column + ',' + cell.row : terrainAuditId(cell)) : null);
       configuration.render(cell, warehouse, market, simulation.paused);
       voicesPanel.render();
     };
@@ -133,15 +145,18 @@ export class MapScene extends Phaser.Scene {
     let mode: ConstructionMode = null;
     let hoveredCell: Cell | null = null;
     const updatePointerFeedback = (): void => {
+      const canvas = this.game.canvas;
       if (simulation.paused) {
+        canvas.title = '';
         map.renderHover(null);
         map.renderPreview(null, null, false);
         return;
       }
       const buildType = mode === 'demolish' ? null : mode;
+      const issue = hoveredCell && buildType ? simulation.constructionIssue(hoveredCell, buildType) : null;
+      canvas.title = issue ?? '';
       map.renderHover(mode ? hoveredCell : null);
-      map.renderPreview(hoveredCell, buildType,
-        !!(hoveredCell && buildType && simulation.constructionIssue(hoveredCell, buildType) === null),
+      map.renderPreview(hoveredCell, buildType, issue === null,
         buildType === 'road' && hoveredCell ? getRoadMask(constructions, hoveredCell) : 0);
     };
     const clearSelection = (): void => {
@@ -150,22 +165,43 @@ export class MapScene extends Phaser.Scene {
       map.renderSelection(selection.selected);
       renderSelected();
     };
+    const requestRemoval = (cell: Cell): void => {
+      const issue = simulation.requestDemolition(cell);
+      menu.showStatus(issue ?? (simulation.demolitionTarget?.kind === 'obstacle'
+        ? 'Revisa el costo y confirma la limpieza en el inspector.'
+        : 'Revisa el costo y confirma la demolición en el inspector.'));
+    };
     const panel = new SelectionPanel(clearSelection, () => {
+      const target = simulation.demolitionTarget;
       const issue = simulation.confirmDemolition();
       if (issue) {
         menu.showStatus(issue);
         renderSelected();
         return;
       }
-      clearSelection();
+      if (target?.kind === 'obstacle') {
+        map.redrawTerrain(target.cell);
+        renderSelected();
+      } else {
+        clearSelection();
+        map.renderConstructions(constructions, connections, population);
+      }
       renderSummary();
-      map.renderConstructions(constructions, connections, population);
       updatePointerFeedback();
-      menu.showStatus('Demolición realizada. Selecciona otra construcción o cancela el modo.');
+      menu.showStatus(target?.kind === 'obstacle' ? 'Terreno despejado.'
+        : 'Demolición realizada. Selecciona otra construcción o cancela el modo.');
     }, () => {
       simulation.cancelDemolition();
       renderSelected();
       menu.renderMode(mode);
+    }, () => {
+      const cell = selection.selected;
+      if (!cell || !constructions.terrain.at(cell)?.obstacle) return;
+      mode = 'demolish';
+      menu.renderMode(mode);
+      requestRemoval(cell);
+      renderSelected();
+      updatePointerFeedback();
     });
     const constructionControls = document.querySelector<HTMLElement>('#construction-menu')!;
     const updatePauseControls = (): void => {
@@ -219,6 +255,7 @@ export class MapScene extends Phaser.Scene {
       this.game.loop.resetDelta();
       this.scene.restart();
     });
+    window.addEventListener('pagehide', () => this.saveSlots.checkpointTab(session, selection.selected, view.view), visibilityOptions);
     if (constructions.villageCenter) menu.disableVillageCenter();
     centerButton.disabled = !constructions.villageCenter;
     renderSummary();
@@ -227,8 +264,7 @@ export class MapScene extends Phaser.Scene {
     const clickCell = (cell: Cell): void => {
       selection.select(cell);
       if (mode === 'demolish') {
-        const issue = simulation.requestDemolition(cell);
-        menu.showStatus(issue ?? 'Revisa el costo y confirma la demolición en el inspector.');
+        requestRemoval(cell);
       } else if (mode && !simulation.paused) {
         const issue = simulation.build(cell, mode);
         if (issue) {
@@ -281,6 +317,7 @@ export class MapScene extends Phaser.Scene {
       this.scale.off(Phaser.Scale.Events.RESIZE, layout);
       this.events.off(Phaser.Scenes.Events.UPDATE, updateSimulation);
       sceneEvents.abort();
+      map.destroy();
       resourceBar.destroy();
       tabs.destroy();
       simulationPanel.destroy();

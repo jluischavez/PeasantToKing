@@ -1,5 +1,5 @@
 import { check, whole } from '../persistence/validation.ts';
-import type { EconomicHistory } from './EconomicHistory';
+import type { EconomicHistory, SiteCharge } from './EconomicHistory';
 import type { ProductId } from './Products';
 import { unitsPerResource } from './Inventories.ts';
 import { centsPerGold } from './OperatingCosts.ts';
@@ -49,7 +49,7 @@ export class Treasury {
     return Math.max(0, Math.round(gold * unitsPerGold) - this.units) / unitsPerGold;
   }
 
-  payBuilding(gold: number, operation: 'construction' | 'demolition', destination: string): void {
+  payBuilding(gold: number, operation: SiteCharge, destination: string): void {
     this.debit(Math.round(gold * unitsPerGold), operation, destination);
   }
 
@@ -96,7 +96,7 @@ export class Treasury {
     return unpaid;
   }
 
-  private debit(units: number, operation: 'construction' | 'demolition' | 'wages' | 'maintenance', destination: string): void {
+  private debit(units: number, operation: SiteCharge | 'wages' | 'maintenance', destination: string): void {
     if (units === 0) return;
     const before = this.units;
     this.units -= units;

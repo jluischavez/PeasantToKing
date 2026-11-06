@@ -1,4 +1,5 @@
 import type { Cell } from './CellSelection';
+import { TerrainMap } from './Terrain.ts';
 
 export const constructionNames = {
   // Stable map identifier: a residential plot, occupied only after immigration.
@@ -26,7 +27,7 @@ export class ConstructionMap {
   readonly columns: number;
   readonly rows: number;
 
-  constructor(columns: number, rows: number) {
+  constructor(columns: number, rows: number, readonly terrain = new TerrainMap(columns, rows)) {
     this.columns = columns;
     this.rows = rows;
     this.cells = Array(columns * rows).fill(null);
@@ -65,18 +66,22 @@ export class ConstructionMap {
   }
 
   canPlace(cell: Cell, type?: ConstructionType): boolean {
-    return this.contains(cell) && this.getConstruction(cell) === null
+    return this.contains(cell) && this.terrain.canBuild(cell) && this.getConstruction(cell) === null
       && (type !== 'villageCenter' || this.center === null);
   }
 
   remove(cell: Cell): boolean {
     const type = this.getConstruction(cell);
-    if (!type || type === 'villageCenter') return false;
+    if (!type || this.isProtectedConstruction(cell)) return false;
     const index = cell.row * this.columns + cell.column;
     this.cells[index] = null;
     this.occupied.delete(index);
     this.orderedCells = null;
     return true;
+  }
+
+  isProtectedConstruction(cell: Cell): boolean {
+    return this.getConstruction(cell) === 'villageCenter';
   }
 
   place(cell: Cell, type: ConstructionType): boolean {

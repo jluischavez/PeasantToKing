@@ -1,5 +1,4 @@
 import type Phaser from 'phaser';
-import type { World } from './World';
 import { cellSize } from './MapCamera';
 import type { Cell } from './CellSelection';
 import type { ConstructionMap, ConstructionType } from './ConstructionMap';
@@ -8,48 +7,29 @@ import type { RoadConnections } from './RoadConnections';
 import type { Population } from '../population/Population';
 import { getRoadMask } from './RoadAppearance';
 import { housingArt } from './HousingArt';
+import { TerrainRenderer } from './TerrainRenderer';
+import type { TerrainRegion } from './TerrainRenderer';
+import type { TerrainMap } from './Terrain';
 
-type Region = { left: number; top: number; right: number; bottom: number };
 const regionPadding = 6;
 
 export class GridMap {
-  private readonly terrain: Phaser.GameObjects.Graphics;
+  private readonly terrainArt: TerrainRenderer;
   private readonly constructions: Phaser.GameObjects.Graphics;
   private readonly preview: Phaser.GameObjects.Graphics;
   private readonly highlight: Phaser.GameObjects.Graphics;
   private readonly selection: Phaser.GameObjects.Graphics;
   private readonly connectionIndicators: Phaser.GameObjects.Graphics;
   private readonly housingImages = new Map<number, Phaser.GameObjects.Image>();
-  private region: Region | null = null;
+  private region: TerrainRegion | null = null;
 
-  constructor(private readonly scene: Phaser.Scene, private readonly world: World) {
-    this.terrain = scene.add.graphics();
+  constructor(private readonly scene: Phaser.Scene, private readonly terrain: TerrainMap) {
+    this.terrainArt = new TerrainRenderer(scene, terrain);
     this.constructions = scene.add.graphics();
     this.preview = scene.add.graphics().setDepth(1);
     this.highlight = scene.add.graphics();
     this.selection = scene.add.graphics().setDepth(0.4);
     this.connectionIndicators = scene.add.graphics().setDepth(0.5);
-    this.drawTerrain();
-  }
-
-  private drawTerrain(): void {
-    const { columns, rows } = this.world;
-    const width = columns * cellSize, height = rows * cellSize;
-    this.terrain.fillStyle(0x527b43);
-    this.terrain.fillRect(0, 0, width, height);
-    this.terrain.lineStyle(1, 0x293f24, 0.85);
-    this.terrain.beginPath();
-    for (let column = 0; column <= columns; column++) {
-      const x = column * cellSize;
-      this.terrain.moveTo(x, 0);
-      this.terrain.lineTo(x, height);
-    }
-    for (let row = 0; row <= rows; row++) {
-      const y = row * cellSize;
-      this.terrain.moveTo(0, y);
-      this.terrain.lineTo(width, y);
-    }
-    this.terrain.strokePath();
   }
 
   updateView(view: { x: number; y: number; size: number }, map: ConstructionMap,
@@ -62,11 +42,16 @@ export class GridMap {
     if (region && left >= region.left && right <= region.right && top >= region.top && bottom <= region.bottom) return;
     this.region = {
       left: Math.max(0, left - regionPadding), top: Math.max(0, top - regionPadding),
-      right: Math.min(this.world.columns, right + regionPadding),
-      bottom: Math.min(this.world.rows, bottom + regionPadding),
+      right: Math.min(this.terrain.columns, right + regionPadding),
+      bottom: Math.min(this.terrain.rows, bottom + regionPadding),
     };
+    this.terrainArt.show(this.region);
     this.renderConstructions(map, connections, population);
   }
+
+  redrawTerrain(cell: Cell): void { this.terrainArt.redraw(cell); }
+
+  destroy(): void { this.terrainArt.destroy(); }
 
   renderHover(cell: Cell | null): void {
     this.clearHighlight();

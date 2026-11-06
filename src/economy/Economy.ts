@@ -1,4 +1,5 @@
 import { EconomicHistory } from './EconomicHistory.ts';
+import type { SiteCharge } from './EconomicHistory';
 import { Treasury } from './Treasury.ts';
 import { check, range, whole } from '../persistence/validation.ts';
 import { taxPolicies, taxRules } from './TaxPolicy.ts';
@@ -121,7 +122,7 @@ export class Economy {
     };
   }
 
-  payBuildingCost(cost: ConstructionCost, operation: 'construction' | 'demolition', destination: string): boolean {
+  payBuildingCost(cost: ConstructionCost, operation: SiteCharge, destination: string): boolean {
     const wood = Math.round(cost.wood * unitsPerResource);
     if (!Number.isFinite(cost.gold) || cost.gold < 0 || this.treasury.shortfall(cost.gold) > 0
       || !this.storage.inventories.spendConstructionWood(wood, destination)) return false;

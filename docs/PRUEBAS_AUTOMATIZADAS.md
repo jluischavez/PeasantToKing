@@ -20,6 +20,8 @@ Vitest usa Vite y el TypeScript del proyecto. Las pruebas se ejecutan en Node e 
 | Catálogo de Voces | 69 plantillas nuevas, condiciones observadas, filtros, rotación y compatibilidad de los enfriamientos |
 | Mapa y cámara | Dimensiones, selección con desplazamiento y zoom, límites, arrastre seguro, conexiones y construcciones lejanas |
 | Guardado del mundo | Vista de cámara, construcciones lejanas, migración desde 20 × 20 y continuidad del estado económico |
+| Terreno procedural | Semillas reproducibles, río continuo, expansión inicial, construcción, costos de limpieza y suelos protegidos |
+| Persistencia de terreno | Restauración del mapa exacto, obstáculos limpiados, cámara, recarga de pestaña y mapas de pasto anteriores |
 
 ## Agregar un caso
 

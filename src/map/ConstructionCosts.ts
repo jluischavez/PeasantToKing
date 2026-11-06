@@ -1,4 +1,5 @@
 import type { ConstructionType } from './ConstructionMap';
+import type { Obstacle } from './Terrain';
 
 export type ConstructionCost = Readonly<{ gold: number; wood: number }>;
 
@@ -14,3 +15,9 @@ export const constructionCosts: Readonly<Record<ConstructionType, ConstructionCo
 };
 
 export const demolitionCost: ConstructionCost = { gold: 5, wood: 0 };
+
+export const clearingCosts: Readonly<Record<Obstacle, ConstructionCost>> = {
+  tree: { gold: 3, wood: 0 },
+  forest: { gold: 8, wood: 0 },
+  rock: { gold: 6, wood: 0 },
+};

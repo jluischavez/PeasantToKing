@@ -111,6 +111,13 @@ Multijugador, login, servidor, cuentas en nube, ranking global, combate, ejérci
 - Los guardados incluyen dimensiones, posición y zoom. Las partidas de 20 × 20 se amplían al cargar usando el ancho original para conservar sus coordenadas.
 - Las dimensiones y el punto de inicio se definen por separado de la cámara. Los terrenos procedurales quedan para 12B y el camino exterior para 12C.
 
+### Etapa 12B. Generación procedural y limpieza
+
+- Nueva partida crea un mapa de 100 × 100 a partir de una semilla entera. **Partida** muestra la semilla y permite reutilizarla. Campos suaves de humedad y elevación agrupan los bosques y las zonas escarpadas. El río sigue un trazado continuo de norte a sur.
+- El Centro de Aldea conserva la casilla (50, 50). La generación despeja una zona de 13 × 13 y valida al menos 350 casillas libres conectadas con expansión en dos direcciones. Corrige el área de forma determinista si hace falta.
+- **Demoler** también limpia obstáculos con confirmación. Árbol individual cuesta 3 oro, bosque denso 8 y rocas superficiales 6. El suelo queda intacto y el gasto entra al historial. Ríos, barrancos y montañas están protegidos.
+- El guardado almacena la semilla, el terreno completo y el zoom y la posición de cámara. Las partidas anteriores conservan su suelo de pasto. Al recargar la pestaña se recupera la sesión desde su copia temporal cuando está disponible.
+
 ### Funcionalidad futura reservada: evolución visual de la ciudad
 
 **Prioridad:** después de finalizar, probar y publicar el MVP funcional (etapas 06–11), **no antes**. Es una expansión planificada, no un requisito inmediato ni una orden de implementación automática. Dividir en tareas pequeñas independientes:

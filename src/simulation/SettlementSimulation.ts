@@ -8,19 +8,27 @@ import { HousingEvolution } from '../population/HousingEvolution.ts';
 import { HouseholdNeeds } from '../population/HouseholdNeeds.ts';
 import { VillageVoices } from '../population/VillageVoices.ts';
 import { WaterService } from './WaterService.ts';
-import { constructionCosts, demolitionCost } from '../map/ConstructionCosts.ts';
+import { clearingCosts, constructionCosts, demolitionCost } from '../map/ConstructionCosts.ts';
 import type { ConstructionCost } from '../map/ConstructionCosts';
 import type { Cell } from '../map/CellSelection';
+import { groundNames, isProtectedGround, obstacleNames } from '../map/Terrain.ts';
+import type { Obstacle } from '../map/Terrain';
 import type { ConstructionMap, ConstructionType } from '../map/ConstructionMap';
 import type { RoadConnections } from '../map/RoadConnections';
 import type { Economy } from '../economy/Economy';
 import type { Population } from '../population/Population';
 
 export type SimulationSpeed = 1 | 2 | 3;
-type DemolitionTarget = Readonly<{ cell: Readonly<Cell>; type: ConstructionType }>;
+type DemolitionTarget = Readonly<{ cell: Cell } & (
+  { kind: 'building'; type: ConstructionType } | { kind: 'obstacle'; type: Obstacle }
+)>;
 
 function buildingId(cell: Cell, type: ConstructionType): string {
   return type + ':' + cell.column + ',' + cell.row;
+}
+
+export function terrainAuditId(cell: Cell): string {
+  return 'terrain:' + cell.column + ',' + cell.row;
 }
 
 export class SettlementSimulation {
@@ -101,6 +109,9 @@ export class SettlementSimulation {
 
   constructionIssue(cell: Cell, type: ConstructionType): string | null {
     if (this.paused) return 'Reanuda la simulación para construir.';
+    const tile = this.map.terrain.at(cell);
+    if (tile && isProtectedGround(tile.ground)) return groundNames[tile.ground] + '. El terreno no es construible.';
+    if (tile?.obstacle) return obstacleNames[tile.obstacle] + '. Limpia el terreno antes de construir.';
     if (!this.map.canPlace(cell, type)) return 'La casilla no está disponible para esta construcción.';
     return this.costIssue(constructionCosts[type]);
   }
@@ -118,10 +129,18 @@ export class SettlementSimulation {
   }
 
   demolitionIssue(cell: Cell): string | null {
-    if (this.paused) return 'Reanuda la simulación para demoler.';
-    const type = this.map.getConstruction(cell);
-    if (!type) return 'Selecciona una construcción existente.';
-    if (type === 'villageCenter') return 'El Centro de Aldea está protegido.';
+    if (this.paused) return 'Reanuda la simulación para demoler o limpiar.';
+    const target = this.removalTargetAt(cell);
+    if (!target) {
+      const tile = this.map.terrain.at(cell);
+      return tile && isProtectedGround(tile.ground) ? groundNames[tile.ground] + '. El terreno no puede limpiarse.'
+        : 'Selecciona una construcción existente o un obstáculo removible.';
+    }
+    if (target.kind === 'obstacle') return this.costIssue(clearingCosts[target.type]);
+    const { type } = target;
+    if (this.map.isProtectedConstruction(cell)) {
+      return type === 'villageCenter' ? 'El Centro de Aldea está protegido.' : 'La construcción está protegida.';
+    }
     if (type === 'warehouse' || type === 'market') {
       const inventory = this.economy.storage.inventories.snapshot(buildingId(cell, type));
       if (inventory && inventory.used > 0) {
@@ -132,13 +151,21 @@ export class SettlementSimulation {
     return this.costIssue(demolitionCost);
   }
 
+  private removalTargetAt(cell: Cell): DemolitionTarget | null {
+    const building = this.map.getConstruction(cell);
+    if (building) return { cell: { ...cell }, kind: 'building', type: building };
+    const tile = this.map.terrain.at(cell);
+    return tile?.obstacle && !isProtectedGround(tile.ground)
+      ? { cell: { ...cell }, kind: 'obstacle', type: tile.obstacle } : null;
+  }
+
   get demolitionTarget(): DemolitionTarget | null { return this.demolition; }
 
   requestDemolition(cell: Cell): string | null {
     this.cancelDemolition();
     const issue = this.demolitionIssue(cell);
     if (issue) return issue;
-    this.demolition = { cell: { ...cell }, type: this.map.getConstruction(cell)! };
+    this.demolition = this.removalTargetAt(cell);
     return null;
   }
 
@@ -146,12 +173,21 @@ export class SettlementSimulation {
 
   confirmDemolition(): string | null {
     const target = this.demolition;
-    if (!target || this.map.getConstruction(target.cell) !== target.type) {
+    const current = target && this.removalTargetAt(target.cell);
+    if (!target || current?.kind !== target.kind || current.type !== target.type) {
       this.cancelDemolition();
-      return 'Selecciona una construcción para demoler.';
+      return 'Selecciona una construcción para demoler o un obstáculo para limpiar.';
     }
     const issue = this.demolitionIssue(target.cell);
     if (issue) return issue;
+    if (target.kind === 'obstacle') {
+      if (!this.map.terrain.clear(target.cell, target.type)) return 'El obstáculo ya no está disponible.';
+      if (!this.economy.payBuildingCost(clearingCosts[target.type], 'clearing', terrainAuditId(target.cell))) {
+        throw new Error('A validated terrain clearing charge failed');
+      }
+      this.cancelDemolition();
+      return null;
+    }
     if (!this.map.remove(target.cell)) return 'La construcción ya no está disponible.';
     if (!this.economy.payBuildingCost(demolitionCost, 'demolition', buildingId(target.cell, target.type))) {
       throw new Error('A validated demolition charge failed');

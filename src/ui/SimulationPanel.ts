@@ -12,7 +12,8 @@ import { formatGameTime, gameTimeAt } from '../simulation/GameTime';
 const operationNames = {
   production: 'Producción', transfer: 'Transferencia', consumption: 'Consumo', sale: 'Venta',
   construction: 'Costo de construcción', 'construction-material': 'Material de construcción',
-  demolition: 'Costo de demolición', wages: 'Salarios', maintenance: 'Mantenimiento', tax: 'Impuestos',
+  demolition: 'Costo de demolición', clearing: 'Limpieza de terreno',
+  wages: 'Salarios', maintenance: 'Mantenimiento', tax: 'Impuestos',
 } as const;
 const endpointNames: Readonly<Record<string, string>> = {
   production: 'Producción local', treasury: 'Tesorería',
@@ -23,6 +24,7 @@ const endpointNames: Readonly<Record<string, string>> = {
 
 function endpointName(id: string): string {
   const [type, coordinates] = id.split(':');
+  if (type === 'terrain' && coordinates) return 'Terreno (' + coordinates + ')';
   return isConstructionType(type) && coordinates
     ? constructionNames[type] + ' (' + coordinates + ')'
     : endpointNames[id] ?? id;

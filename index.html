@@ -43,6 +43,7 @@
               <dt>Terreno</dt><dd id="cell-terrain">—</dd>
               <dt>Estado</dt><dd id="cell-status">Sin selección</dd>
             </dl>
+            <button id="clear-terrain" type="button" hidden>Limpiar terreno</button>
             <section id="demolition-confirmation" aria-label="Confirmar demolición" hidden>
               <p id="demolition-target"></p>
               <button id="confirm-demolition" type="button">Confirmar demolición</button>
@@ -184,8 +185,12 @@
         <h2 id="save-title">Partidas guardadas</h2>
         <form method="dialog"><button type="submit">Cerrar</button></form>
       </header>
+      <p class="save-seed">Semilla actual <output id="current-seed"></output></p>
       <label for="save-slot">Ranura</label>
       <select id="save-slot"></select>
+      <label class="save-seed" for="new-game-seed">Semilla para nueva partida (opcional)
+        <input id="new-game-seed" type="text" inputmode="numeric" maxlength="10" placeholder="Aleatoria" />
+      </label>
       <div class="save-actions">
         <button id="save-game" type="button">Guardar partida</button>
         <button id="load-game" type="button">Cargar partida</button>

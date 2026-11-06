@@ -3,6 +3,7 @@ import type { CameraView } from '../map/MapCamera';
 import { autosaveMs, saveSlots } from '../persistence/SaveSlots.ts';
 import type { SaveSlot, SaveSlots } from '../persistence/SaveSlots';
 import { Session } from '../persistence/Session.ts';
+import { maxSeed, randomSeed } from '../map/World';
 import { setText } from './domText';
 
 const dates = new Intl.DateTimeFormat('es', { dateStyle: 'short', timeStyle: 'short' });
@@ -12,6 +13,7 @@ export class SavePanel {
   private readonly select = document.querySelector<HTMLSelectElement>('#save-slot')!;
   private readonly message = document.getElementById('save-message')!;
   private readonly status = document.getElementById('save-status')!;
+  private readonly seedInput = document.querySelector<HTMLInputElement>('#new-game-seed')!;
   private notice = 0;
   private readonly badge = document.getElementById('save-active-slot')!;
   private readonly events = new AbortController();
@@ -19,6 +21,8 @@ export class SavePanel {
 
   constructor(private readonly slots: SaveSlots, session: Session, selection: () => Cell | null, camera: () => CameraView,
     replace: (session: Session, selection: Cell | null, camera?: CameraView) => void) {
+    setText(document.getElementById('current-seed')!, String(session.world.seed));
+    this.seedInput.value = '';
     const options = { signal: this.events.signal };
     const onClick = (id: string, action: () => void) => {
       document.getElementById(id)!.addEventListener('click', action, options);
@@ -44,11 +48,16 @@ export class SavePanel {
       replace(game.session, game.selection, game.camera);
     }));
     onClick('new-game', () => this.run(() => {
+      const input = this.seedInput.value.trim();
+      if (input && (!/^\d+$/.test(input) || Number(input) > maxSeed)) {
+        throw new Error('Escribe una semilla entera entre 0 y ' + maxSeed + '.');
+      }
       if (!window.confirm('¿Iniciar una nueva partida? Se perderá el progreso sin guardar de la partida activa.')) return;
+      const next = Session.start(input ? Number(input) : randomSeed(session.world.seed));
       this.slots.detach();
       this.dialog.close();
       this.report('Nueva partida iniciada. Las ranuras guardadas se conservan.');
-      replace(Session.start(), null);
+      replace(next, null);
     }));
 
     this.timer = window.setInterval(() => this.run(() => {
