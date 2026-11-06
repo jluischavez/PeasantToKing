@@ -49,7 +49,7 @@ export function hasPlayableStart(terrain: TerrainMap, start: Cell): boolean {
   return false;
 }
 
-export function generateTerrain(world: World): TerrainMap {
+export function generateTerrain(world: World, ensureNorthAccess = false): TerrainMap {
   const { columns, rows, seed } = world;
   const start = startingCell(world);
   const codes = new Uint8Array(columns * rows);
@@ -69,7 +69,9 @@ export function generateTerrain(world: World): TerrainMap {
       const rockiness = elevation * 0.5 + ridge * 0.85;
       const ground = noise(seed ^ 1049, column, row, 18) > 0.5 ? 'meadow' : 'grass';
       const sheltered = Math.max(Math.abs(column - start.column), Math.abs(row - start.row)) <= starterRules.radius;
-      if (sheltered) put(column, row, terrainCode(ground));
+      if (sheltered || (ensureNorthAccess && column === start.column && row < start.row)) {
+        put(column, row, terrainCode(ground));
+      }
       else if (rockiness > 0.78) put(column, row, terrainCode('mountain'));
       else if (rockiness > 0.58 && rockiness < 0.68 && noise(seed ^ 51, column, row, 8) > 0.42) {
         put(column, row, terrainCode('ravine'));

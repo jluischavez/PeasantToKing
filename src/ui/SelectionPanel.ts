@@ -38,18 +38,20 @@ export class SelectionPanel {
     this.cancelDemolition.addEventListener('click', onCancelDemolition, options);
     this.clearTerrain.addEventListener('click', onClearTerrain, options);
     this.render(null);
-    this.renderDemolition(null);
+    this.renderConfirmation(null);
   }
 
-  renderDemolition(target: string | null, issue: string | null = null, clearing = false): void {
+  renderConfirmation(target: string | null, issue: string | null = null,
+    action: 'demolition' | 'clearing' | 'bridge' = 'demolition'): void {
     this.demolition.hidden = target === null;
-    this.demolition.setAttribute('aria-label', clearing ? 'Confirmar limpieza' : 'Confirmar demolición');
+    const confirm = action === 'bridge' ? 'Construir puente' : action === 'clearing' ? 'Confirmar limpieza' : 'Confirmar demolición';
+    this.demolition.setAttribute('aria-label', confirm);
     setText(this.demolitionTarget, target ?? '');
     this.demolitionIssue.hidden = issue === null;
     setText(this.demolitionIssue, issue ?? '');
     this.confirmDemolition.disabled = issue !== null;
-    setText(this.confirmDemolition, clearing ? 'Confirmar limpieza' : 'Confirmar demolición');
-    setText(this.cancelDemolition, clearing ? 'Cancelar limpieza' : 'Cancelar demolición');
+    setText(this.confirmDemolition, confirm);
+    setText(this.cancelDemolition, action === 'bridge' ? 'Cancelar puente' : action === 'clearing' ? 'Cancelar limpieza' : 'Cancelar demolición');
   }
 
   renderClearing(available: boolean): void { this.clearTerrain.hidden = !available; }
@@ -58,7 +60,8 @@ export class SelectionPanel {
     productivity?: BuildingProductivity, warehouse?: WarehouseSnapshot, market?: MarketSnapshot,
     supply?: HousingSupply, foodShortage = 0, woodSupply?: HousingSupply, woodShortage = 0,
     wellbeing?: Readonly<{ happiness: number; concerns: readonly string[] }>, waterSupplied = 0, well?: WellSnapshot,
-    housing?: { level: HousingLevel; progress: ReturnType<HousingEvolution['at']> }): void {
+    housing?: { level: HousingLevel; progress: ReturnType<HousingEvolution['at']> },
+    royal?: 'segment' | 'entry'): void {
     const fields: [string, string, string][] = [];
     const add = (id: string, label: string, value: string) => fields.push([id, label, value]);
     const fraction = (value: number, total: number) => formatNumber(value) + ' / ' + formatNumber(total);
@@ -69,8 +72,11 @@ export class SelectionPanel {
       add('clearing-cost', 'Costo de limpieza', formatNumber(clearingCosts[terrain.obstacle].gold) + ' oro');
     }
     const homeLevel = housing ? housingLevels[housing.level] : undefined;
-    if (construction) add('construction', 'Construcción', constructionNames[construction]);
-    const status = terrain && isProtectedGround(terrain.ground) ? 'Terreno protegido. No se puede construir ni limpiar.'
+    if (construction) add('construction', 'Construcción', royal ? 'Camino exterior del reino' : constructionNames[construction]);
+    if (royal === 'entry') add('entry', 'Punto de entrada', 'Entrada al reino');
+    const status = royal ? 'Protegido. Este camino pertenece al reino y no puede demolerse.'
+      : construction === 'bridge' ? 'Cruce de madera sobre el río.'
+      : terrain && isProtectedGround(terrain.ground) ? 'Terreno protegido. No se puede construir ni limpiar.'
       : terrain?.obstacle ? 'Limpia el terreno antes de construir.'
       : housing && homeLevel
       ? (residents > 0 || housing.level > 1 ? homeLevel.name : 'Solar vacío')

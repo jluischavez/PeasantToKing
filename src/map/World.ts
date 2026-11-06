@@ -1,10 +1,12 @@
 export const worldRules = { columns: 100, rows: 100, terrain: 'grass-v1' } as const;
 export const legacyWorldSize = 20;
-export const proceduralTerrain = 'procedural-v1' as const;
+export const legacyProceduralTerrain = 'procedural-v1' as const;
+export const proceduralTerrain = 'procedural-v2' as const;
 export const maxSeed = 2 ** 32 - 1;
 
 export type World = Readonly<{
-  columns: number; rows: number; terrain: typeof worldRules.terrain | typeof proceduralTerrain; seed: number;
+  columns: number; rows: number;
+  terrain: typeof worldRules.terrain | typeof legacyProceduralTerrain | typeof proceduralTerrain; seed: number;
 }>;
 
 export function startingCell(world: World) {

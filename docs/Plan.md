@@ -118,6 +118,13 @@ Multijugador, login, servidor, cuentas en nube, ranking global, combate, ejérci
 - **Demoler** también limpia obstáculos con confirmación. Árbol individual cuesta 3 oro, bosque denso 8 y rocas superficiales 6. El suelo queda intacto y el gasto entra al historial. Ríos, barrancos y montañas están protegidos.
 - El guardado almacena la semilla, el terreno completo y el zoom y la posición de cámara. Las partidas anteriores conservan su suelo de pasto. Al recargar la pestaña se recupera la sesión desde su copia temporal cuando está disponible.
 
+### Etapa 12C. Camino exterior y puentes
+
+- Las partidas nuevas usan `procedural-v2`. Una búsqueda en anchura determinista encuentra una ruta corta desde el Centro de Aldea hasta un borde por tierra firme. Si hace falta, el generador garantiza un corredor seco hacia el norte. Los obstáculos removibles del trazado se despejan al generar el mundo.
+- El camino del reino tiene segmentos protegidos, una entrada identificable y conexión a la red vial. La generación y el mantenimiento de sus segmentos son gratuitos. La entrada queda disponible como dato para futuras etapas.
+- En **Caminos → Puente de madera**, selecciona un camino conectado en la orilla y una casilla de río en línea recta. El inspector muestra el tramo y el costo total antes de confirmar. Se admiten hasta 8 casillas de agua y cuesta 15 oro y 10 madera por casilla. El tablero conecta solo por sus extremos y conserva el río.
+- **Demoler** retira el tramo completo por 5 oro por casilla. Si era el único acceso, se interrumpen las conexiones. El guardado conserva el recorrido, la entrada y los puentes. Los mapas anteriores mantienen sus construcciones y siguen sin camino exterior.
+
 ### Funcionalidad futura reservada: evolución visual de la ciudad
 
 **Prioridad:** después de finalizar, probar y publicar el MVP funcional (etapas 06–11), **no antes**. Es una expansión planificada, no un requisito inmediato ni una orden de implementación automática. Dividir en tareas pequeñas independientes:

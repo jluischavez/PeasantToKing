@@ -22,6 +22,8 @@ Vitest usa Vite y el TypeScript del proyecto. Las pruebas se ejecutan en Node e 
 | Guardado del mundo | Vista de cámara, construcciones lejanas, migración desde 20 × 20 y continuidad del estado económico |
 | Terreno procedural | Semillas reproducibles, río continuo, expansión inicial, construcción, costos de limpieza y suelos protegidos |
 | Persistencia de terreno | Restauración del mapa exacto, obstáculos limpiados, cámara, recarga de pestaña y mapas de pasto anteriores |
+| Camino del reino | Entrada de borde, ruta determinista y conectada, protección, gratuidad y restauración sin duplicados |
+| Puentes | Ambos ejes, costos, cancelación, cruces inválidos, conexión y cobertura, demolición, reconstrucción y guardado |
 
 ## Agregar un caso
 

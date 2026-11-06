@@ -1,6 +1,6 @@
 import type Phaser from 'phaser';
 import type { ConstructionType } from './ConstructionMap';
-import { drawRoad } from './RoadAppearance';
+import { drawBridge, drawRoad } from './RoadAppearance';
 
 type ConstructionDrawer = (
   graphics: Phaser.GameObjects.Graphics,
@@ -39,6 +39,7 @@ const constructionDrawers: Record<ConstructionType, ConstructionDrawer> = {
     }
   },
   road: drawRoad,
+  bridge: drawBridge,
   farm(graphics, x, y, size, alpha) {
     graphics.fillStyle(0x795238, alpha);
     graphics.fillRect(x + size * 0.08, y + size * 0.08, size * 0.84, size * 0.84);

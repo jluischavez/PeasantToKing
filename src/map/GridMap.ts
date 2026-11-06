@@ -5,7 +5,7 @@ import type { ConstructionMap, ConstructionType } from './ConstructionMap';
 import { drawConstruction } from './drawConstruction';
 import type { RoadConnections } from './RoadConnections';
 import type { Population } from '../population/Population';
-import { getRoadMask } from './RoadAppearance';
+import { drawRoad, getRoadMask, RoadDirection } from './RoadAppearance';
 import { housingArt } from './HousingArt';
 import { TerrainRenderer } from './TerrainRenderer';
 import type { TerrainRegion } from './TerrainRenderer';
@@ -95,10 +95,14 @@ export class GridMap {
           }
           image.setDisplaySize(cellSize, cellSize);
           visibleHousing.add(key);
+        } else if (type === 'road') {
+          drawRoad(this.constructions, x, y, cellSize, 1, getRoadMask(map, cell), map.isKingdomRoad(cell));
         } else {
-          drawConstruction(this.constructions, type, x, y, cellSize, 1, type === 'road' ? getRoadMask(map, cell) : 0);
+          const span = map.bridgeAt(cell);
+          const mask = span && span.from.row === span.to.row ? RoadDirection.East : RoadDirection.North;
+          drawConstruction(this.constructions, type, x, y, cellSize, 1, mask);
         }
-        if (type !== 'road' && !connections.isConnected(cell)) {
+        if (type !== 'road' && type !== 'bridge' && !connections.isConnected(cell)) {
           const markerX = x + 0.86 * cellSize;
           const markerY = y + 0.14 * cellSize;
           this.connectionIndicators.fillStyle(0x1c211d);
@@ -119,6 +123,15 @@ export class GridMap {
   renderPreview(cell: Cell | null, type: ConstructionType | null, available: boolean, roadMask = 0): void {
     this.preview.clear();
     if (!cell || !type) return;
+    this.drawPreview(cell, type, available, roadMask);
+  }
+
+  renderBridgePreview(cells: readonly Cell[], horizontal: boolean, available: boolean): void {
+    this.preview.clear();
+    for (const cell of cells) this.drawPreview(cell, 'bridge', available, horizontal ? RoadDirection.East : RoadDirection.North);
+  }
+
+  private drawPreview(cell: Cell, type: ConstructionType, available: boolean, roadMask: number): void {
     const x = cell.column * cellSize;
     const y = cell.row * cellSize;
     if (available) drawConstruction(this.preview, type, x, y, cellSize, 0.55, roadMask);

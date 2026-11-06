@@ -37,6 +37,7 @@ export const economyRules = {
 const productionByType: Record<ConstructionType, Readonly<Resources>> = {
   house: { gold: 0, food: 0, wood: 0 },
   road: { gold: 0, food: 0, wood: 0 },
+  bridge: { gold: 0, food: 0, wood: 0 },
   farm: { gold: 0, food: 2, wood: 0 },
   lumberjack: { gold: 0, food: 0, wood: 2 },
   warehouse: { gold: 0, food: 0, wood: 0 },
@@ -181,7 +182,7 @@ export class Economy {
     this.buildings.clear();
     this.maintenanceRate = 0;
     for (const { cell, type } of map.occupiedCells()) {
-      this.maintenanceRate += maintenanceByType[type];
+      if (!map.isKingdomRoad(cell)) this.maintenanceRate += maintenanceByType[type];
       const maximum = productionByType[type];
       if (maximum.gold + maximum.food + maximum.wood === 0) continue;
       const capacity = workforce.capacityFor(type);

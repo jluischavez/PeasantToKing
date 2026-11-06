@@ -16,7 +16,7 @@ const categories = {
 type Category = keyof typeof categories;
 
 const categoryFor: Readonly<Record<ConstructionType, Category>> = {
-  house: 'housing', road: 'roads', farm: 'agriculture', lumberjack: 'resources',
+  house: 'housing', road: 'roads', bridge: 'roads', farm: 'agriculture', lumberjack: 'resources',
   warehouse: 'storage', market: 'economy', villageCenter: 'services', well: 'services',
 };
 
@@ -86,7 +86,8 @@ export class ConstructionMenu {
     button.dataset.construction = type;
     const price = document.createElement('span');
     price.className = 'construction-cost';
-    price.textContent = type === 'demolish' ? 'Edificios · ' + formatCost(cost) : formatCost(cost);
+    price.textContent = type === 'demolish' ? 'Edificios · ' + formatCost(cost)
+      : formatCost(cost) + (type === 'bridge' ? ' / casilla' : '');
     const label = document.createElement('span');
     label.textContent = name;
     if (type === 'demolish') {
@@ -120,6 +121,7 @@ export class ConstructionMenu {
       button.setAttribute('aria-pressed', String(type === mode));
     }
     this.showStatus(mode === 'demolish' ? 'Selecciona una construcción o un obstáculo y confirma en el inspector.'
+      : mode === 'bridge' ? 'Selecciona un camino conectado en la orilla y luego agua en línea recta.'
       : mode ? constructionNames[mode] + ' · Verde: puedes construir. Rojo: casilla no disponible o recursos insuficientes.'
         : 'Selecciona un tipo de construcción.');
   }

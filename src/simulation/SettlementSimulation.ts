@@ -14,6 +14,8 @@ import type { Cell } from '../map/CellSelection';
 import { groundNames, isProtectedGround, obstacleNames } from '../map/Terrain.ts';
 import type { Obstacle } from '../map/Terrain';
 import type { ConstructionMap, ConstructionType } from '../map/ConstructionMap';
+import { bridgeCells, bridgeRules } from '../map/Bridge.ts';
+import type { BridgeSpan } from '../map/Bridge';
 import type { RoadConnections } from '../map/RoadConnections';
 import type { Economy } from '../economy/Economy';
 import type { Population } from '../population/Population';
@@ -22,6 +24,9 @@ export type SimulationSpeed = 1 | 2 | 3;
 type DemolitionTarget = Readonly<{ cell: Cell } & (
   { kind: 'building'; type: ConstructionType } | { kind: 'obstacle'; type: Obstacle }
 )>;
+type BridgePreview = {
+  cells: readonly Cell[]; horizontal: boolean; issue: string | null; span?: BridgeSpan; cost?: ConstructionCost;
+};
 
 function buildingId(cell: Cell, type: ConstructionType): string {
   return type + ':' + cell.column + ',' + cell.row;
@@ -44,6 +49,7 @@ export class SettlementSimulation {
   private multiplier: SimulationSpeed = 1;
   private immigrationSeconds = 0;
   private demolition: DemolitionTarget | null = null;
+  private pendingBridge: BridgeSpan | null = null;
   private readonly economy: Economy;
   private readonly population: Population;
   private readonly immigrationIntervalSeconds: number;
@@ -109,11 +115,88 @@ export class SettlementSimulation {
 
   constructionIssue(cell: Cell, type: ConstructionType): string | null {
     if (this.paused) return 'Reanuda la simulación para construir.';
+    if (type === 'bridge') return 'Selecciona un camino conectado en la orilla para iniciar el puente.';
+    if (this.map.isKingdomRoad(cell)) return 'El camino del reino ocupa esta casilla.';
     const tile = this.map.terrain.at(cell);
     if (tile && isProtectedGround(tile.ground)) return groundNames[tile.ground] + '. El terreno no es construible.';
     if (tile?.obstacle) return obstacleNames[tile.obstacle] + '. Limpia el terreno antes de construir.';
     if (!this.map.canPlace(cell, type)) return 'La casilla no está disponible para esta construcción.';
     return this.costIssue(constructionCosts[type]);
+  }
+
+  bridgeOriginIssue(cell: Cell): string | null {
+    if (this.paused) return 'Reanuda la simulación para construir.';
+    const { column, row } = cell;
+    const bank = [{ column: column - 1, row }, { column: column + 1, row },
+      { column, row: row - 1 }, { column, row: row + 1 }]
+      .some(neighbor => this.map.terrain.at(neighbor)?.ground === 'river');
+    return bank && this.map.getConstruction(cell) === 'road' && this.connections.isConnected(cell)
+      ? null : 'Selecciona un camino conectado al Centro de Aldea en la orilla del río.';
+  }
+
+  bridgePreview(from: Cell, selected: Cell): BridgePreview {
+    const cells: Cell[] = [];
+    const dx = Math.sign(selected.column - from.column), dy = Math.sign(selected.row - from.row);
+    const horizontal = dx !== 0;
+    const invalid = (issue: string): BridgePreview => ({ cells, horizontal, issue });
+    const originIssue = this.bridgeOriginIssue(from);
+    if (originIssue) return invalid(originIssue);
+    if ((dx === 0) === (dy === 0) || this.map.terrain.at(selected)?.ground !== 'river') {
+      return invalid('Selecciona agua en línea recta desde la orilla.');
+    }
+    const at = (step: number): Cell => ({ column: from.column + dx * step, row: from.row + dy * step });
+    let to = at(1);
+    while (this.map.terrain.at(to)?.ground === 'river') {
+      if (cells.length >= bridgeRules.maxSegments) return invalid('El cruce supera el límite de ' + bridgeRules.maxSegments + ' casillas.');
+      cells.push(to);
+      to = at(cells.length + 1);
+    }
+    if (!cells.some(cell => cell.column === selected.column && cell.row === selected.row)) {
+      return invalid('El agua debe ser continua desde la orilla seleccionada.');
+    }
+    const destination = this.map.getConstruction(to);
+    if (!this.map.terrain.canBuild(to) || (destination && destination !== 'road')) {
+      return invalid('La orilla opuesta debe ser tierra firme despejada o un camino.');
+    }
+    if (cells.some(cell => this.map.getConstruction(cell))) return invalid('El cruce se superpone con otro puente.');
+    const cost = { gold: constructionCosts.bridge.gold * cells.length, wood: constructionCosts.bridge.wood * cells.length };
+    return { cells, horizontal, span: { from: { ...from }, to }, cost, issue: this.costIssue(cost) };
+  }
+
+  get bridgeTarget(): BridgeSpan | null { return this.pendingBridge; }
+
+  requestBridge(from: Cell, selected: Cell): string | null {
+    this.cancelDemolition();
+    const preview = this.bridgePreview(from, selected);
+    this.pendingBridge = preview.span ?? null;
+    return preview.issue;
+  }
+
+  cancelBridge(): void { this.pendingBridge = null; }
+
+  pendingBridgePreview(): BridgePreview | null {
+    const target = this.pendingBridge;
+    if (!target) return null;
+    const preview = this.bridgePreview(target.from, bridgeCells(target)[0]!);
+    if (preview.span && (preview.span.to.column !== target.to.column || preview.span.to.row !== target.to.row)) {
+      return { ...preview, issue: 'Cambió la orilla del cruce. Selecciona el puente de nuevo.' };
+    }
+    return preview;
+  }
+
+  confirmBridge(): string | null {
+    const preview = this.pendingBridgePreview();
+    if (!preview) return 'Selecciona primero un cruce para construir.';
+    if (preview.issue) return preview.issue;
+    if (!preview.span || !preview.cost || !this.map.placeBridge(preview.span)) return 'El cruce ya no está disponible.';
+    const first = preview.cells[0]!;
+    if (!this.economy.payBuildingCost(preview.cost, 'construction', buildingId(first, 'bridge'))) {
+      this.map.remove(first);
+      return 'Recursos insuficientes para construir el cruce.';
+    }
+    this.cancelBridge();
+    this.recalculate();
+    return null;
   }
 
   build(cell: Cell, type: ConstructionType): string | null {
@@ -138,6 +221,7 @@ export class SettlementSimulation {
     }
     if (target.kind === 'obstacle') return this.costIssue(clearingCosts[target.type]);
     const { type } = target;
+    if (this.map.isKingdomRoad(cell)) return 'Este camino pertenece al reino y no puede demolerse.';
     if (this.map.isProtectedConstruction(cell)) {
       return type === 'villageCenter' ? 'El Centro de Aldea está protegido.' : 'La construcción está protegida.';
     }
@@ -148,7 +232,12 @@ export class SettlementSimulation {
           : 'El inventario debe estar vacío.';
       }
     }
-    return this.costIssue(demolitionCost);
+    return this.costIssue(this.demolitionCostAt(cell));
+  }
+
+  demolitionCostAt(cell: Cell): ConstructionCost {
+    const span = this.map.bridgeAt(cell);
+    return span ? { gold: demolitionCost.gold * bridgeCells(span).length, wood: 0 } : demolitionCost;
   }
 
   private removalTargetAt(cell: Cell): DemolitionTarget | null {
@@ -162,6 +251,7 @@ export class SettlementSimulation {
   get demolitionTarget(): DemolitionTarget | null { return this.demolition; }
 
   requestDemolition(cell: Cell): string | null {
+    this.cancelBridge();
     this.cancelDemolition();
     const issue = this.demolitionIssue(cell);
     if (issue) return issue;
@@ -188,8 +278,9 @@ export class SettlementSimulation {
       this.cancelDemolition();
       return null;
     }
+    const cost = this.demolitionCostAt(target.cell);
     if (!this.map.remove(target.cell)) return 'La construcción ya no está disponible.';
-    if (!this.economy.payBuildingCost(demolitionCost, 'demolition', buildingId(target.cell, target.type))) {
+    if (!this.economy.payBuildingCost(cost, 'demolition', buildingId(target.cell, target.type))) {
       throw new Error('A validated demolition charge failed');
     }
     if (target.type === 'house') {

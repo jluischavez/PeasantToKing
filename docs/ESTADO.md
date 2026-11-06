@@ -206,3 +206,9 @@
 - **Demoler** permite limpiar un árbol por 3 oro, bosque por 8 y rocas por 6 con confirmación. Mantiene el suelo, registra el gasto y actualiza la textura de la región. Los terrenos permanentes quedan protegidos.
 - El guardado conserva semilla, terreno y cámara. Los mapas de pasto anteriores conservan sus casillas. La copia temporal de la pestaña permite recuperar el terreno y los cambios sin guardar al recargar, sin modificar la ranura.
 - Verificación. `npm test` aprobó 240 pruebas con cero fallidas. `npm run build` pasó con el aviso habitual de tamaño de Phaser. Chrome sin interfaz verificó semillas manual y aleatoria, bloqueo de construcción, cancelación, limpieza, recarga y carga de ranuras.
+
+- Etapa 12C. Las partidas nuevas `procedural-v2` generan un camino protegido entre el Centro de Aldea y una entrada estable en el borde. El trazado usa tierra firme, despeja obstáculos removibles y queda exento de costo inicial y mantenimiento.
+- **Puente de madera** está en **Caminos**. Se elige un camino conectado en la orilla y se confirma el cruce recto completo por 15 oro y 10 madera por casilla, hasta 8 casillas. Los puentes no tienen un cargo periódico. **Demoler** retira el tramo por 5 oro por casilla y conserva el río.
+- Los tableros conectan por su eje. Al retirar el único acceso se interrumpen las conexiones y la cobertura de servicios de la otra orilla. Al reconstruirlo se recuperan si el resto de la red sigue intacto.
+- Los guardados restauran exactamente los segmentos protegidos, la entrada y los puentes. Las partidas de pasto y `procedural-v1` conservan su terreno y sus construcciones, y siguen sin camino exterior.
+- Verificación. `npm test` aprobó 253 pruebas con cero fallidas. `npm run build` pasó con el aviso habitual de tamaño de Phaser. Chrome sin interfaz comprobó la protección del camino, el costo previo, la cancelación, la construcción, la demolición y la carga de un puente.

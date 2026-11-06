@@ -28,7 +28,7 @@ export const employmentRules = {
   minimumServices: ['market', 'warehouse', 'farm', 'well'],
   productionRecoveryServices: ['farm', 'warehouse', 'market', 'well'],
   singleWorkerRecoveryServices: ['warehouse', 'market', 'farm', 'well'],
-  fillPriority: { farm: 0, warehouse: 1, market: 2, well: 3, lumberjack: 10, house: 20, road: 20, villageCenter: 20 },
+  fillPriority: { farm: 0, warehouse: 1, market: 2, well: 3, lumberjack: 10, house: 20, road: 20, bridge: 20, villageCenter: 20 },
 } as const;
 
 type MigrationConditions = {
@@ -45,7 +45,7 @@ export type LaborContext = {
 };
 
 const jobsByType: Record<ConstructionType, number> = {
-  house: 0, road: 0, villageCenter: 0,
+  house: 0, road: 0, bridge: 0, villageCenter: 0,
   farm: 4, lumberjack: 3, market: 3, warehouse: 2, well: 1,
 };
 

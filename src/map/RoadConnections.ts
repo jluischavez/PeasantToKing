@@ -36,12 +36,14 @@ export class RoadConnections {
     this.network = center ? key(center) : null;
     if (!center) return;
 
-    // BFS: only roads can extend the network originating at the center.
+    // Only roads and aligned bridge decks can extend the network.
     const queue: Cell[] = [center];
     this.connected.add(key(center));
     for (let index = 0; index < queue.length; index++) {
-      for (const neighbor of neighbors(queue[index]!)) {
-        if (map.getConstruction(neighbor) === 'road' && !this.isConnected(neighbor)) {
+      const cell = queue[index]!;
+      for (const neighbor of neighbors(cell)) {
+        if (!this.isConnected(neighbor) && map.roadTouches(neighbor, cell)
+          && (index === 0 || map.roadTouches(cell, neighbor))) {
           this.connected.add(key(neighbor));
           queue.push(neighbor);
         }
@@ -50,9 +52,8 @@ export class RoadConnections {
 
     // Buildings can access a reachable road, but cannot relay its connection.
     for (const { cell, type } of map.occupiedCells()) {
-      if (type !== 'road' && type !== 'villageCenter'
-        && neighbors(cell).some(neighbor =>
-          map.getConstruction(neighbor) === 'road' && this.isConnected(neighbor))) {
+      if (type !== 'road' && type !== 'bridge' && type !== 'villageCenter'
+        && neighbors(cell).some(neighbor => map.roadTouches(neighbor, cell) && this.isConnected(neighbor))) {
         this.connected.add(key(cell));
       }
     }

@@ -6,6 +6,7 @@ export const centsPerGold = 100;
 export const wagePerWorker = 10;
 export const maintenanceByType: Readonly<Record<ConstructionType, number>> = {
   road: 1,
+  bridge: 0,
   house: 1,
   farm: 5,
   lumberjack: 5,

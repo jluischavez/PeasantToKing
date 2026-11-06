@@ -10,7 +10,7 @@ import { housingArt } from '../map/HousingArt';
 import { CellSelection } from '../map/CellSelection';
 import type { Cell } from '../map/CellSelection';
 import { constructionNames } from '../map/ConstructionMap';
-import { clearingCosts, constructionCosts, demolitionCost } from '../map/ConstructionCosts';
+import { clearingCosts, constructionCosts } from '../map/ConstructionCosts';
 import { obstacleNames } from '../map/Terrain';
 import { terrainAuditId } from '../simulation/SettlementSimulation';
 import { SelectionPanel } from '../ui/SelectionPanel';
@@ -91,6 +91,9 @@ export class MapScene extends Phaser.Scene {
     };
     const renderSelected = (): void => {
       const cell = selection.selected;
+      const entry = constructions.kingdomRoad?.entry.cell;
+      const royal = cell && constructions.isKingdomRoad(cell)
+        ? (entry?.column === cell.column && entry.row === cell.row ? 'entry' : 'segment') : undefined;
       const tile = cell ? constructions.terrain.at(cell) : undefined;
       const type = cell ? constructions.getConstruction(cell) : null;
       const warehouse = cell && type === 'warehouse' ? economy.storage.warehouseAt(cell) : undefined;
@@ -103,7 +106,7 @@ export class MapScene extends Phaser.Scene {
         home ? economy.distribution.supplyAt(home, 'wood') : undefined, home ? economy.distribution.woodShortageAt(home) : 0,
         home ? simulation.wellbeing.at(home) : undefined, home ? simulation.water.suppliedAt(home) : 0,
         cell && type === 'well' ? simulation.water.wellAt(cell) : undefined,
-        home ? { level: population.housingLevelAt(home), progress: simulation.housing.at(home) } : undefined);
+        home ? { level: population.housingLevelAt(home), progress: simulation.housing.at(home) } : undefined, royal);
       const demolition = simulation.demolitionTarget;
       const clearing = demolition?.kind === 'obstacle';
       const departing = demolition?.kind === 'building' && demolition.type === 'house'
@@ -112,9 +115,17 @@ export class MapScene extends Phaser.Scene {
         : departing > 1 ? ' · ' + departing + ' habitantes abandonarán la ciudad.' : '';
       const target = demolition?.kind === 'obstacle'
         ? 'Limpiar terreno · ' + obstacleNames[demolition.type] + ' · ' + formatCost(clearingCosts[demolition.type])
-        : demolition ? constructionNames[demolition.type] + ' · ' + formatCost(demolitionCost) + departure : null;
-      panel.renderDemolition(target, demolition ? simulation.demolitionIssue(demolition.cell) : null, clearing);
-      panel.renderClearing(!!tile?.obstacle && !demolition);
+        : demolition ? constructionNames[demolition.type] + ' · ' + formatCost(simulation.demolitionCostAt(demolition.cell))
+          + (demolition.type === 'bridge' ? ' · Retira el cruce completo y puede interrumpir el acceso a la otra orilla.' : departure)
+          : null;
+      const bridge = simulation.pendingBridgePreview();
+      if (bridge) {
+        const description = bridge.cost ? 'Puente de madera · ' + bridge.cells.length + ' casillas · ' + formatCost(bridge.cost)
+          : 'Puente de madera';
+        panel.renderConfirmation(description, bridge.issue, 'bridge');
+      } else panel.renderConfirmation(target, demolition ? simulation.demolitionIssue(demolition.cell) : null,
+        clearing ? 'clearing' : 'demolition');
+      panel.renderClearing(!!tile?.obstacle && !demolition && !bridge);
       simulationPanel.render(cell ? (type ? type + ':' + cell.column + ',' + cell.row : terrainAuditId(cell)) : null);
       configuration.render(cell, warehouse, market, simulation.paused);
       voicesPanel.render();
@@ -143,6 +154,7 @@ export class MapScene extends Phaser.Scene {
       }
     };
     let mode: ConstructionMode = null;
+    let bridgeOrigin: Cell | null = null;
     let hoveredCell: Cell | null = null;
     const updatePointerFeedback = (): void => {
       const canvas = this.game.canvas;
@@ -150,6 +162,17 @@ export class MapScene extends Phaser.Scene {
         canvas.title = '';
         map.renderHover(null);
         map.renderPreview(null, null, false);
+        return;
+      }
+      if (mode === 'bridge') {
+        const bridge = simulation.pendingBridgePreview()
+          ?? (bridgeOrigin && hoveredCell ? simulation.bridgePreview(bridgeOrigin, hoveredCell) : null);
+        const status = bridge?.cost ? 'Costo total · ' + formatCost(bridge.cost) : '';
+        canvas.title = bridge?.issue ?? (status || (hoveredCell && !bridgeOrigin
+          ? simulation.bridgeOriginIssue(hoveredCell) ?? 'Seleccionar orilla' : ''));
+        map.renderHover(bridgeOrigin ?? hoveredCell);
+        const cells = bridge?.cells.length ? bridge.cells : bridge && hoveredCell ? [hoveredCell] : [];
+        map.renderBridgePreview(cells, bridge?.horizontal ?? false, !!bridge && !bridge.issue);
         return;
       }
       const buildType = mode === 'demolish' ? null : mode;
@@ -161,9 +184,12 @@ export class MapScene extends Phaser.Scene {
     };
     const clearSelection = (): void => {
       simulation.cancelDemolition();
+      simulation.cancelBridge();
+      bridgeOrigin = null;
       selection.clear();
       map.renderSelection(selection.selected);
       renderSelected();
+      updatePointerFeedback();
     };
     const requestRemoval = (cell: Cell): void => {
       const issue = simulation.requestDemolition(cell);
@@ -172,6 +198,18 @@ export class MapScene extends Phaser.Scene {
         : 'Revisa el costo y confirma la demolición en el inspector.'));
     };
     const panel = new SelectionPanel(clearSelection, () => {
+      if (simulation.bridgeTarget) {
+        const issue = simulation.confirmBridge();
+        if (!issue) {
+          bridgeOrigin = null;
+          renderSummary();
+          map.renderConstructions(constructions, connections, population);
+        }
+        renderSelected();
+        updatePointerFeedback();
+        menu.showStatus(issue ?? 'Puente construido. Puedes extender el camino en la otra orilla.');
+        return;
+      }
       const target = simulation.demolitionTarget;
       const issue = simulation.confirmDemolition();
       if (issue) {
@@ -192,12 +230,16 @@ export class MapScene extends Phaser.Scene {
         : 'Demolición realizada. Selecciona otra construcción o cancela el modo.');
     }, () => {
       simulation.cancelDemolition();
+      simulation.cancelBridge();
+      bridgeOrigin = null;
       renderSelected();
+      updatePointerFeedback();
       menu.renderMode(mode);
     }, () => {
       const cell = selection.selected;
       if (!cell || !constructions.terrain.at(cell)?.obstacle) return;
       mode = 'demolish';
+      bridgeOrigin = null;
       menu.renderMode(mode);
       requestRemoval(cell);
       renderSelected();
@@ -217,9 +259,12 @@ export class MapScene extends Phaser.Scene {
     const voicesPanel = new VillageVoicesPanel(simulation.voices, cell => {
       if (constructions.getConstruction(cell) !== 'house') return;
       simulation.cancelDemolition();
+      simulation.cancelBridge();
+      bridgeOrigin = null;
       selection.select(cell);
       map.renderSelection(selection.selected);
       renderSelected();
+      updatePointerFeedback();
     });
     const configuration = new ProductConfigurationPanel((cell, setting, product, enabled) => {
       if (constructions.getConstruction(cell) !== (setting === 'sells' ? 'market' : 'warehouse')) return;
@@ -239,6 +284,8 @@ export class MapScene extends Phaser.Scene {
     const menu = new ConstructionMenu((choice) => {
       mode = choice;
       simulation.cancelDemolition();
+      simulation.cancelBridge();
+      bridgeOrigin = null;
       if (mode && mode !== 'demolish') {
         const issue = simulation.costIssue(constructionCosts[mode]);
         if (issue) menu.showStatus(issue);
@@ -265,6 +312,16 @@ export class MapScene extends Phaser.Scene {
       selection.select(cell);
       if (mode === 'demolish') {
         requestRemoval(cell);
+      } else if (mode === 'bridge' && !simulation.paused) {
+        if (!bridgeOrigin || constructions.getConstruction(cell) === 'road') {
+          simulation.cancelBridge();
+          const issue = simulation.bridgeOriginIssue(cell);
+          if (!issue) bridgeOrigin = cell;
+          menu.showStatus(issue ?? 'Selecciona una casilla de agua en línea recta para revisar el cruce.');
+        } else {
+          const issue = simulation.requestBridge(bridgeOrigin, cell);
+          menu.showStatus(issue ?? 'Revisa el costo total y confirma el puente en el inspector.');
+        }
       } else if (mode && !simulation.paused) {
         const issue = simulation.build(cell, mode);
         if (issue) {

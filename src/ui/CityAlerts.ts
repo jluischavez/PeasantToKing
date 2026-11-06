@@ -19,7 +19,7 @@ export class CityAlerts {
       this.revision = roads.revision;
       this.disconnected = 0;
       for (const { cell, type } of map.occupiedCells()) {
-        if (type !== 'road' && !roads.isConnected(cell)) this.disconnected++;
+        if (type !== 'road' && type !== 'bridge' && !roads.isConnected(cell)) this.disconnected++;
       }
     }
     const alerts = [];

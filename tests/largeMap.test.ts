@@ -19,7 +19,7 @@ test('a new session has a 100 by 100 world and opens on the center with twenty t
   assert.equal(game.map.columns, 100);
   assert.equal(game.map.rows, 100);
   assert.equal(game.map.saveCells().length, 10_000);
-  assert.deepEqual(game.map.occupiedCells(), [{ cell: start, type: 'villageCenter' }]);
+  assert.deepEqual(game.map.villageCenter, start);
   assert.deepEqual(camera.cellAt(middle), start);
   assert.equal(camera.bounds.size / cellSize, 20);
   assert.equal(game.economy.resources.gold, 150);
@@ -67,6 +67,7 @@ test('panning, resizing and zooming keep every visible edge within the world', (
 
 test('a drag, canceled gesture or alternate button never returns a construction click', () => {
   const { camera, game } = gameAndCamera();
+  const occupied = game.map.occupiedCells().length;
   const buildOnRelease = (point: typeof middle) => {
     const cell = camera.endPointer(1, point);
     if (cell) assert.equal(game.simulation.build(cell, 'road'), null);
@@ -86,11 +87,11 @@ test('a drag, canceled gesture or alternate button never returns a construction 
   assert.equal(camera.beginPointer(1, middle, 0), true);
   camera.cancelPointer(1);
   buildOnRelease(middle);
-  assert.equal(game.map.occupiedCells().length, 1);
+  assert.equal(game.map.occupiedCells().length, occupied);
   assert.equal(game.economy.resources.gold, 150);
   assert.equal(camera.beginPointer(1, middle, 0), true);
   buildOnRelease({ ...middle, x: middle.x + 1 });
-  assert.equal(game.map.occupiedCells().length, 2);
+  assert.equal(game.map.occupiedCells().length, occupied + 1);
 });
 
 test('a panned camera targets construction and demolition beyond the initial view with working road access', () => {

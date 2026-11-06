@@ -6,6 +6,7 @@ export type ConstructionCost = Readonly<{ gold: number; wood: number }>;
 export const constructionCosts: Readonly<Record<ConstructionType, ConstructionCost>> = {
   house: { gold: 5, wood: 0 },
   road: { gold: 2, wood: 0 },
+  bridge: { gold: 15, wood: 10 },
   farm: { gold: 20, wood: 10 },
   lumberjack: { gold: 25, wood: 5 },
   warehouse: { gold: 35, wood: 15 },
