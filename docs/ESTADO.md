@@ -1,5 +1,33 @@
 # Estado del proyecto
 
+- 2026-11-09 — Etapa 15A-3: compradores reales salen vacíos, recogen comida/madera autorizada y vuelven a su vivienda; reservas domésticas persistentes agrupan el consumo.
+- Mercado → cargamento registra una sola venta; cargamento → hogar entrega existencias; hogar → consumidor registra consumo. Todo conserva el libro central entero y sus reservas.
+- Corregidos sprites congelados: reconciliación tras reconstruir acceso/personal, bloqueo de todas las fases y exclusión visual inmediata de Blocked; carga/descarga acotadas, finalización y limpieza del pool verificadas.
+- Inmigración visible únicamente tras admisiones reales: entrada del reino o acceso del centro en partidas antiguas. La población se incorpora al aceptar la inmigración, ocupando plazas durante el viaje; llegar no vuelve a incorporarla.
+- Aguadores vinculados a asignaciones reales del servicio existente, uno activo por pozo, visitas agrupadas y reparto por antigüedad; conserva cobertura, capacidad y empleados, sin inventario comercial de agua.
+- Guardado 10 conserva reservas domésticas, compras, llegadas y ventanas de agua; admite esquemas 1–9. Inspector residencial muestra existencias y actividades pendientes.
+- Verificación: 437 pruebas en 41 archivos, build correcto y diff --check limpio. Chrome escritorio/móvil comprobó corte/desvío, compras, llegadas, agua, pausa, recarga, cámara y reinicio sin errores ni sprites huérfanos.
+- Rendimiento: reloj y rutas compartidos, candidatos de mercado cacheados, pool de 96 y culling; estrés con 400 habitantes conserva cantidades por encima del límite visual.
+- Límites: agua mantiene asignación continua (las visitas no condicionan cobertura); inmigración contabilizada al aceptar; sin retorno vacío de repartidores/aguadores. Si se elimina la propia calle ocupada, se conserva el bloqueo invisible hasta reconstruirla.
+
+- 2026-11-07 — Etapa 15A-2: comida y madera viajan físicamente de almacenes a mercados y entre almacenes en vaciado, reutilizando operaciones, rutas, reloj y sprites de 15A-1.
+- Cada pedido reserva existencias en origen y capacidad en destino. La recogida transfiere al cargamento central y la descarga al destino; consumo, construcción, misiones y comercio respetan las reservas.
+- Reposición periódica y de emergencia usan repartidores; los pedidos pendientes cuentan para la capacidad compartida y el límite de madera. Emergencias agrupan una reserva y no generan un viaje por comida vendida.
+- Cargamentos de reparto de hasta 30 recursos, carga de un segundo simulado y cupo de ocho operaciones por origen; producción de 15A-1 mantiene sus parámetros.
+- Vaciado y demolición consideran operaciones pendientes y en tránsito; solicitar demolición de un almacén frena nuevas recepciones y permite terminar sus salidas.
+- Guardado 9 reconstruye reservas de origen/destino y valida cargamentos vacíos antes de recoger o llenos después. Mantiene compatibilidad con los esquemas 1–8.
+- Inspectores muestran pedidos en camino, reservas y reparto; sprites separados ligeramente dentro de la calle para distinguir cargas simultáneas. Canvas, pool de 96 y culling conservados.
+- Verificación: 416 pruebas aprobadas en 39 archivos. Chrome comprobó ambos flujos en escritorio/móvil, pausa y entregas fuera de cámara. Pendientes: comercio exterior físico, retornos y reasignación automática de cargas bloqueadas.
+
+- 2026-11-07 — Etapa 15A-1: granjas y campamentos entregan mediante cargamentos reales y transportistas visibles; el almacén recibe únicamente al terminar la descarga.
+- `Logistics` usa los inventarios centrales en enteros de 1/150, reservas de destino y estados Loading/Carrying/Unloading/Blocked; producción y tránsito suman al total, pero no están disponibles para consumo, comercio ni construcción.
+- Rutas BFS entre accesos del perímetro, puentes por su eje y caché por topología; un corte recalcula desde la posición confirmada o conserva la carga bloqueada.
+- Phaser representa el modelo con sacos/troncos, interpolación, animación, culling y pool limitado a 96 imágenes; la simulación continúa fuera de cámara y por encima del límite visual.
+- Guardado 8: cargas, fases, posiciones, rutas compactas compartidas y reconstrucción de reservas; compatible con esquemas 1–7 y expansión de mapas antiguos.
+- Demolición protegida: solicitarla detiene nuevos despachos del productor o al destino; esperar las entregas y volver a solicitar. Cancelar modo reactiva los despachos.
+- Verificación 15A-1: 399 pruebas aprobadas, build correcto y diff --check limpio; Chrome comprobó comida/madera, movimiento, pausa e inspector en escritorio/móvil. Sin dependencias, ramas, commits, push ni publicación.
+- Pendiente 15A-2: transporte de mercados/comercio; retorno y reasignación de transportistas. Una carga bloqueada conserva su destino reservado hasta recuperar acceso, permisos y personal.
+
 - 2026-11-04 — Tarea 00 implementada: base técnica con Vite, TypeScript y Phaser.
 - 2026-11-04 — Tarea 01 implementada: mapa verde con cuadrícula de 20 × 20 casillas.
 - 2026-11-04 — Tarea 02 implementada: selección persistente con clic izquierdo y cambio de casilla.
@@ -224,3 +252,47 @@
 - Las mejoras se confirman en el inspector por 6 oro y 2 madera para grava, y 15 oro y 4 madera para piedra. Conservan la red vial y los tramos del reino quedan protegidos.
 - El esquema 2 guarda las huellas y niveles de caminos. El esquema 1 carga sus construcciones compactas y sus caminos de tierra en las coordenadas originales. La belleza se reconstruye a partir del mapa. Las tres ranuras y su autoguardado conservan el flujo anterior.
 - Verificación. `npm test` aprobó 279 pruebas y `npm run build` pasó con el aviso habitual de tamaño de Phaser. Chrome comprobó miniaturas, vista previa, selección con zoom, inspector, decoración, mejora de caminos y dimensiones fijas.
+
+- Etapa 14A. Aldea → Pueblo → Villa con reconocimiento manual y un único cargo registrado por ascenso. **Crónicas** muestra rango, objetivos en vivo, desbloqueos y capítulos. El [plan](PLAN.md#etapa-14a-reconocimiento-del-asentamiento-y-crónicas) detalla umbrales y costos.
+- Pueblo habilita parques y grava. Villa habilita plazas con fuente y piedra. Los requisitos se comprobaron mediante una partida simulada que construye, atrae habitantes y ahorra con las reglas vigentes.
+- Cada rango tiene un capítulo y un tutorial opcional, ambos consultables por separado. **Escuchar** inicia la voz en español cuando está disponible. Se puede repetir, pausar, detener o silenciar. Al cerrar se recuperan la pausa y la velocidad previas.
+- El esquema 3 conserva rango, fechas y capítulos o tutoriales vistos u omitidos. Los esquemas 1 y 2 pasan a Aldea con sus edificios, caminos y recursos intactos. Cargar una partida deja la introducción en el archivo de Crónicas.
+- Verificación. `npm test` aprobó 290 pruebas y `npm run build` pasó con el aviso habitual del tamaño de Phaser. Chrome a 1280 × 720 y 390 × 844 comprobó la interfaz, la voz simulada y la alternativa de texto, la pausa, el ascenso a Pueblo y la carga sin repetir el capítulo.
+
+- Corrección de balance inicial. Una granja produce hasta 64 comida/h con cuatro trabajadores. El consumo se mantiene en 2,5 por habitante y hora. Un pozo abastece a 30 habitantes a seis tramos viales e informa el motivo de la falta de agua.
+- Los mercados cubren faltantes con entregas parciales desde almacenes operativos. Las reservas de espacio evitan que la madera desplace toda la comida. Si hay escasez, la asignación protege la cadena esencial y refuerza la granja. La migración usa cobertura reciente, reservas reales y capacidad agrícola.
+- Los campamentos requieren árboles o bosque dentro de su radio. Las semillas nuevas incluyen arbolado cercano. Los mapas de pasto antiguos incorporan árboles en celdas libres y el guardado conserva las talas, los edificios y los inventarios.
+- Simulación con la semilla 23. La aldea llegó a 24 habitantes a las 29 horas del juego. Solicitó Pueblo a las 198 horas y mantuvo 25 habitantes durante tres días con cobertura completa de comida y agua. El [plan](Plan.md#corrección-del-balance-inicial) recoge los valores y [las pruebas](PRUEBAS_AUTOMATIZADAS.md#crecimiento-en-un-mapa-nuevo), las cifras de crecimiento.
+- Verificación. `npm test` aprobó 296 pruebas. `npm run build` pasó con el aviso habitual de tamaño de Phaser. Chrome comprobó los avisos del campamento sin árboles y de la vivienda fuera de cobertura, así como capacidad, alcance y habitantes abastecidos del pozo.
+
+- Etapa 14B. **Crónicas → La Corona** muestra favor, tributos, crédito, gastos pendientes e historial. La primera obligación se emite el día 4 y vence el día 7. Cada emisión fija 50, 150 o 350 oro según el rango vigente.
+- Crédito de 200 oro mediante saldo negativo, con amortización automática por ingresos. Los gastos obligatorios que exceden el límite quedan pendientes y se liquidan al cierre de hora con saldo positivo. Finanzas e Historial separan tributos, ofrendas e impuestos.
+- El favor parte de 50. Los pagos puntuales y las ofrendas lo mejoran. Tres impagos consecutivos terminan la partida. El decreto y la destitución usan el diálogo narrativo con voz opcional. El esquema 4 conserva el estado real y da tres días de gracia a partidas anteriores.
+- Las [simulaciones](PRUEBAS_AUTOMATIZADAS.md#simulaciones-de-la-corona) verifican pagos sostenibles, endeudamiento y recuperación, mantenimiento excesivo y compras ornamentales. El [plan](Plan.md#etapa-14b-la-corona) documenta plazos, montos y prioridad de pagos.
+- Verificación. `npm test` aprobó 308 pruebas. `npm run build` pasó con el aviso habitual de tamaño de Phaser. Chrome comprobó decreto, voz simulada y silencio, pago único, ofrenda, saldo negativo, recarga y recuperación tras derrota a 1280 × 720 y 390 × 844.
+
+- Corrección de inmigración. Cuando la vía normal está cerrada, una Aldea con menos de 12 habitantes y plaza conectada puede admitir una persona en una oportunidad del calendario cada ocho horas. El reloj guardado conserva la fase y las oportunidades pasadas se descartan.
+- Los viajeros consumen y trabajan como residentes. Su vivienda reinicia los contadores de deterioro y descontento sostenido al recibirlos. **Necesidades** indica el tipo de admisión y el motivo. **Historial** registra las llegadas y **Voces de la aldea** las comenta con su cadencia habitual.
+- La simulación de siete habitantes obtuvo su cuarto trabajador y recuperó la inmigración normal. La prueba sin suministros osciló entre cero y un habitante. El [plan](Plan.md#corrección-de-inmigración-y-emigración) recoge las reglas y [las pruebas](PRUEBAS_AUTOMATIZADAS.md#simulaciones-de-inmigración-y-emigración), los cinco escenarios.
+- Verificación. `npm test` aprobó 319 pruebas y `npm run build` pasó con el aviso habitual de tamaño de Phaser. Chrome comprobó Necesidades, Historial, Voces, pausa y recarga a 1280 × 720 y 390 × 844.
+
+- Etapa 14C. Pueblo desbloquea la Casa de Comercio de 2 × 2. Villa cuesta 800 oro. La casa y los almacenes necesitan una ruta vial hasta la entrada del reino.
+- Viajes cada seis horas simuladas, con 30 unidades de carga por trabajador y hasta 60 por casa. Cada producto tiene modo, reserva y objetivo. Las casas comparten inventario y la tesorería respeta el crédito de la Corona.
+- **Comercio**, el inspector, **Finanzas** e **Historial** muestran rutas, ajustes y operaciones realizadas. El guardado 5 conserva viajes y ajustes. Los mapas antiguos sin entrada exterior siguen siendo compatibles.
+- El [plan](Plan.md#etapa-14c-comercio-exterior) recoge tarifas y reglas. Las [simulaciones](PRUEBAS_AUTOMATIZADAS.md#simulaciones-de-comercio-exterior) documentan siete escenarios. En el Pueblo maderero, comerciar adelantó de 103 a 95 horas el objetivo de 800 oro.
+- Verificación. `npm test` aprobó 336 pruebas y `npm run build` pasó con el aviso habitual de tamaño de Phaser. Chrome comprobó el inspector, una venta de 50 madera por 24 oro, Finanzas y la recarga a 1280 × 720 y 390 × 844.
+
+- Ajuste 14B. Llegar a favor real cero abre un plazo de 24 horas del juego. La advertencia persistente muestra el tiempo restante y permite acceder a tributos y ofrendas. Recuperar favor cancela el plazo y queda registrado.
+- Vencer el plazo causa destitución por pérdida de confianza real. Comparte el bloqueo definitivo con los tres impagos. El capítulo final se puede omitir o consultar desde el resumen. La carga desde el menú exige un guardado jugable.
+- Narración española automática para todas las escenas, con pausa, repetición, silencio persistente y reproducción manual si el navegador bloquea el audio. Los cambios de página y el cierre cancelan la voz anterior.
+- El esquema 6 guarda advertencia, vencimiento, derrota y motivo. Los guardados anteriores con favor cero reciben un día completo desde su fecha guardada. Las recargas conservan el plazo y la derrota.
+- Reglas en el [plan](Plan.md#ajuste-14b-la-ira-del-rey) y cobertura en [pruebas](PRUEBAS_AUTOMATIZADAS.md#regresión-de-la-ira-del-rey). Chrome verificó advertencia, recuperación, derrota, voz y guardados en escritorio y móvil.
+- Verificación. `npm test` aprobó 353 pruebas y `npm run build` pasó con el aviso habitual de tamaño del paquete de Phaser.
+- Narración global. También se lee automáticamente la invitación al tutorial. Chrome verificó las 16 páginas de introducciones y tutoriales de todos los rangos, los relatos reales y una escena genérica, respetando el silencio y cancelando la voz anterior al cambiar de página.
+
+- Etapa 14D. Crónicas del Reino incorpora once acontecimientos con dos relatos cada uno, objetivos reales, decisiones, progreso, vencimiento y resultados. El catálogo y el motor están separados de la interfaz.
+- La primera oportunidad llega a las 24 horas del juego. Las siguientes se programan cada 24–48 horas con selección determinista por semilla y estado. Solo hay una misión pendiente y cada tipo tiene enfriamiento propio.
+- Se reutiliza el diálogo narrativo con voz automática. Omitir conserva la misión pendiente. Las entregas usan almacenes autorizados, las obras se verifican por casilla y las exportaciones cuentan desde la aceptación. La Corona aplica los cambios de favor.
+- El esquema 7 conserva generador, misiones, decisiones, resultados y contadores comerciales. Los guardados anteriores conservan su ciudad y reciben una primera oportunidad futura. Las recompensas se entregan una vez.
+- Las [simulaciones de diez días](PRUEBAS_AUTOMATIZADAS.md#crónicas-del-reino-y-simulaciones-de-misiones) con semillas 23, 24 y 1023 completaron 7, 7 y 6 misiones y mantuvieron 48 habitantes. El [plan](Plan.md#etapa-14d-crónicas-del-reino) documenta catálogo, recompensas, riesgos y frecuencia.
+- Verificación. `npm test` aprobó 382 pruebas y `npm run build` pasó con el aviso habitual de tamaño de Phaser. Chrome comprobó narración, omisión, aceptación, pago único, favor, historial, pausa, velocidad y recarga en escritorio y móvil.

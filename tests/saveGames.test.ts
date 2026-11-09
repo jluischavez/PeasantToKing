@@ -21,6 +21,7 @@ function memory() {
 
 function town(session = new Session()) {
   const { map, economy, population, simulation } = session;
+  assert.ok(map.terrain.plantTree(cell(2, 4)));
   map.place(cell(0, 1), 'villageCenter');
   for (let x = 1; x <= 6; x++) map.place(cell(x, 1), 'road');
   // Insertion order matters for warehouse withdrawals. Place them out of grid order.

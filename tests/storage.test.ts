@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { deliverStorageFixture } from './fixtures/logistics.ts';
 import { Inventories, unitsPerResource as U } from '../src/economy/Inventories.ts';
 import type { StoredResource } from '../src/economy/Inventories.ts';
 import { Storage } from '../src/economy/Storage.ts';
@@ -16,6 +17,7 @@ const farm = cell(2, 1);
 const camp = cell(3, 1);
 function setup() {
   const map = new ConstructionMap(20, 20);
+  assert.ok(map.terrain.plantTree(cell(3, 3)));
   map.place(cell(0, 0), 'villageCenter');
   for (let x = 1; x <= 8; x++) map.place(cell(x, 0), 'road');
   map.place(farm, 'farm');
@@ -65,32 +67,35 @@ test('central transfer moves rather than copies stock and rejects invalid quanti
 
 test('warehouse capacity is shared exactly between fractional food and wood quantities', () => {
   const { storage } = setup();
-  assert.equal(storage.depositProduction(farm, 'food', 300 * U - 1), true);
+  assert.equal(storage.depositProduction(camp, 'wood', 30 * U - 1), true);
+  assert.equal(storage.depositProduction(farm, 'food', 270 * U), true);
   assert.equal(storage.depositProduction(camp, 'wood', 1), true);
   assert.equal(storage.warehouseAt(first)!.used, 300);
   assert.equal(storage.warehouseAt(first)!.free, 0);
   assert.equal(storage.depositProduction(camp, 'wood', 1), false);
-  assert.equal(storage.warehouseAt(first)!.food, (300 * U - 1) / U);
-  assert.equal(storage.warehouseAt(first)!.wood, 1 / U);
-  assert.deepEqual(storage.totalsUnits, { food: 320 * U - 1, wood: 1 });
+  assert.equal(storage.warehouseAt(first)!.food, 270);
+  assert.equal(storage.warehouseAt(first)!.wood, 30);
+  assert.deepEqual(storage.totalsUnits, { food: 290 * U, wood: 30 * U });
 });
 
 test('one batch can be split across operational warehouses without duplicating units', () => {
   const { map, storage, sync } = setup();
   map.place(second, 'warehouse');
   sync();
-  storage.depositProduction(farm, 'food', 300 * U - 1);
+  assert.equal(storage.depositProduction(camp, 'wood', 30 * U - 1), true);
+  assert.equal(storage.depositProduction(farm, 'food', 270 * U), true);
   assert.equal(storage.depositProduction(camp, 'wood', 20), true);
   assert.equal(storage.warehouseAt(first)!.used, 300);
-  assert.equal(storage.warehouseAt(first)!.wood, 1 / U);
+  assert.equal(storage.warehouseAt(first)!.wood, 30);
   assert.equal(storage.warehouseAt(second)!.wood, 19 / U);
-  assert.equal(storage.totalsUnits.wood, 20);
+  assert.equal(storage.totalsUnits.wood, 30 * U + 19);
   assert.equal(storage.inventories.snapshot('production-batch'), undefined);
 });
 
 test('a batch that cannot fit is discarded whole and does not partially fill or reserve space', () => {
   const { storage } = setup();
-  storage.depositProduction(farm, 'food', 300 * U - 10);
+  assert.equal(storage.depositProduction(camp, 'wood', 30 * U - 10), true);
+  assert.equal(storage.depositProduction(farm, 'food', 270 * U), true);
   const before = storage.totalsUnits;
   assert.equal(storage.depositProduction(camp, 'wood', 20), false);
   assert.deepEqual(storage.totalsUnits, before);
@@ -200,10 +205,11 @@ test('production blocking is visible and stops resource growth until operational
   economy.recalculate(map, connections, workforce);
   assert.equal(economy.blockedProducers, 0);
   assert.equal(economy.resources.food, 20);
-  assert.equal(economy.perSecond.food, 0.5);
+  assert.equal(economy.perSecond.food, 0.64);
   economy.advance(1000);
-  assert.equal(economy.resources.food, 20.5);
-  assert.equal(economy.storage.warehouseAt(first)!.food, 0.5);
+  assert.equal(economy.resources.food, 20.64);
+  assert.equal(economy.storage.warehouseAt(first)!.food, 0);
+  assert.equal(economy.storage.logistics.goods().food, 0.64 * U);
 });
 
 test('global totals count warehouse food once and legacy consumption withdraws only the initial reserve', () => {
@@ -212,13 +218,13 @@ test('global totals count warehouse food once and legacy consumption withdraws o
   economy.recalculate(map, connections, workforce);
   economy.advance(3000); // Farm: 1.5 food; camp: 2 wood.
   const inventory = economy.storage.warehouseAt(first)!;
-  assert.equal(economy.resources.food, economy.storage.initialFoodReserve + inventory.food);
-  assert.equal(economy.resources.wood, inventory.wood);
+  assert.equal(economy.resources.food, economy.storage.initialFoodReserve + inventory.food + economy.storage.logistics.goods().food / U);
+  assert.equal(economy.resources.wood, inventory.wood + economy.storage.logistics.goods().wood / U);
   assert.equal(economy.consumeFood(20.5), false);
   assert.equal(economy.storage.initialFoodReserve, 0);
-  assert.equal(economy.storage.warehouseAt(first)!.food, 1.5);
-  assert.equal(economy.resources.food, 1.5);
-  assert.equal(economy.resources.wood, 2);
+  assert.equal(economy.storage.warehouseAt(first)!.food, 0);
+  assert.equal(economy.resources.food, 1.92);
+  assert.equal(economy.resources.wood, 1.68);
 });
 
 test('minimal workforce priority bootstraps storage and food even when a camp comes first in map order', () => {
@@ -227,6 +233,7 @@ test('minimal workforce priority bootstraps storage and food even when a camp co
   map.place(cell(0, 1), 'road');
   for (let x = 0; x <= 8; x++) map.place(cell(x, 2), 'road');
   map.place(cell(2, 1), 'lumberjack');
+  assert.ok(map.terrain.plantTree(cell(2, 4)));
   map.place(cell(3, 1), 'warehouse');
   map.place(cell(4, 3), 'farm');
   for (let x = 5; x <= 8; x++) map.place(cell(x, 3), 'house');
@@ -242,9 +249,10 @@ test('minimal workforce priority bootstraps storage and food even when a camp co
   assert.equal(population.workersAt(cell(3, 1)), 1);
   assert.equal(population.workersAt(cell(4, 3)), 1);
   assert.equal(population.workersAt(cell(2, 1)), 0);
-  assert.equal(economy.perSecond.food, 0.5);
+  assert.equal(economy.perSecond.food, 0.64);
   simulation.advance(1000);
-  assert.equal(economy.storage.warehouseAt(cell(3, 1))!.food, 0.5);
+  assert.equal(economy.storage.warehouseAt(cell(3, 1))!.food, 0);
+  assert.equal(economy.storage.logistics.goods().food, 0.64 * U);
   assert.ok(economy.storage.initialFoodReserve < 20);
   assert.equal(population.employed + population.unemployed, population.activePopulation);
 });
@@ -320,6 +328,8 @@ test('drainage moves only accepted products within remaining capacity and conser
   assert.ok(storage.depositProduction(farm, 'food', 300 * U - 1));
   const before = storage.totalsUnits;
   storage.advanceDrain();
+  assert.equal(storage.warehouseAt(second)?.used, 300 - 1 / U);
+  deliverStorageFixture(storage);
   assert.equal(storage.warehouseAt(first)?.food, 2 / U);
   assert.equal(storage.warehouseAt(first)?.wood, 5 / U);
   assert.equal(storage.warehouseAt(second)?.used, 300);
@@ -345,6 +355,7 @@ test('warehouses draining simultaneously cannot swap stock or create transfer cy
 
   assert.equal(storage.setDraining(second, false), true);
   storage.advanceDrain();
+  deliverStorageFixture(storage);
   assert.equal(storage.warehouseAt(first)?.used, 0);
   assert.equal(storage.warehouseAt(second)?.food, 3 / U);
   assert.equal(storage.warehouseAt(second)?.wood, 5 / U);

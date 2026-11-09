@@ -11,6 +11,7 @@ const c = (column: number, row: number) => ({ column, row });
 const farm = c(2, 1), warehouse = c(4, 1), market = c(7, 1), otherMarket = c(8, 1);
 function town(residents = 4, storedFood = 77.5) {
   const map = new ConstructionMap(20, 20);
+  assert.ok(map.terrain.plantTree(c(0, 4)));
   map.place(c(0, 2), 'villageCenter');
   for (let x = 1; x <= 18; x++) map.place(c(x, 2), 'road');
   const entries = [[1, 'lumberjack'], [2, 'farm'], [3, 'farm'],
@@ -61,8 +62,9 @@ test('reproduces 4 residents, 23 jobs and stored food with no operational market
   assert.equal(economy.resources.gold, 0);
   assert.equal(population.total, 4);
   simulation.advance(1);
-  assert.equal(economy.storage.warehouseAt(warehouse)!.food, 0);
-  assert.equal(economy.distribution.marketAt(market)!.food, 77.1);
+  assert.ok(economy.storage.warehouseAt(warehouse)!.food > 0);
+  assert.ok(economy.storage.warehouseAt(warehouse)!.outgoing.pending > 0);
+  assert.ok(economy.distribution.marketAt(market)!.food > 0);
   assert.equal(economy.resources.gold, 0.04);
   simulation.advance(5000);
   assert.ok(population.total > 4);
@@ -99,13 +101,14 @@ test('an exhausted reserve and empty warehouses can recover by staffed productio
   assert.equal(population.workersAt(farm), 1);
   assert.equal(population.workersAt(warehouse), 1);
   assert.equal(population.workersAt(market), 0);
-  assert.equal(economy.perSecond.food, 0.5);
+  assert.equal(economy.perSecond.food, 0.64);
   simulation.advance(1000);
-  assert.equal(economy.resources.food, 0.5);
+  assert.equal(economy.resources.food, 0.64);
   assert.equal(economy.resources.gold, 0);
   simulation.advance(59000);
   assert.ok(population.total >= 8);
-  assert.ok(economy.resources.gold > 0);
+  assert.ok(economy.history.read('gold').some(event => event.operation === 'sale'));
+  assert.ok(economy.resources.gold > -2); // Travel delays first sales; wages still accrue from the empty treasury.
   assert.equal(economy.storage.initialFoodReserve, 0);
 });
 

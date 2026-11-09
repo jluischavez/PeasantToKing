@@ -9,6 +9,7 @@ const farm = c(1), warehouse = c(2), market = c(3), camp = c(4, 3), well = c(5);
 function town(sites: readonly (readonly [number, ConstructionType])[], residents = 12) {
   const game = new Session();
   const { map, population, simulation } = game;
+  assert.ok(map.terrain.plantTree(c(4, 5)));
   assert.ok(map.place(c(0, 2), 'villageCenter'));
   for (let x = 1; x <= 6; x++) assert.ok(map.place(c(x, 2), 'road'));
   for (let x = 1; x <= 3; x++) assert.ok(map.place(c(x, 3), 'house'));
@@ -26,14 +27,16 @@ test('a new camp takes one surplus worker while retaining the other three roster
   assert.equal(simulation.build(camp, 'lumberjack'), null);
   const roster = () => [farm, warehouse, market, camp].map(cell => population.workersAt(cell));
   assert.deepEqual(roster(), [2, 1, 2, 1]);
-  assert.equal(economy.perSecond.food, 1);
-  assert.equal(economy.perSecond.wood, 2 / 3);
+  assert.equal(economy.perSecond.food, 1.28);
+  assert.equal(economy.perSecond.wood, 0.56);
   assert.equal(economy.operatingCostsPerHour(population.employed).wages, 2.4);
   for (let i = 0; i < 12; i++) {
     simulation.recalculate();
     simulation.advance(1000);
     assert.deepEqual(roster(), [2, 1, 2, 1]);
   }
+  assert.match(simulation.requestDemolition(camp)!, /mercancías/);
+  simulation.advance(10000);
   assert.equal(simulation.requestDemolition(camp), null);
   assert.equal(simulation.confirmDemolition(), null);
   assert.deepEqual(roster(), [3, 1, 2, 0]);

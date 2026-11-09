@@ -76,6 +76,7 @@ p { margin: 0; }
 .hud-card strong { color: var(--accent); font-size: clamp(.85rem, 1.85vw, 1.45rem); }
 .hud-card strong[data-trend="positive"] { color: var(--green); }
 .hud-card strong[data-trend="negative"] { color: var(--red); }
+.hud-card strong[data-debt], [data-debt] { color: var(--red); }
 
 #city-alerts { min-inline-size: 0; min-block-size: 0; }
 #city-alerts summary { height: 100%; list-style: none; }
@@ -147,10 +148,10 @@ canvas { display: block; }
 
 #city-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 3px;
 }
-#city-tabs button { min-inline-size: 0; padding-inline: 2px; font-size: .77rem; line-height: 1.15; }
+#city-tabs button { min-inline-size: 0; padding-inline: 2px; font-size: .77rem; line-height: 1.15; overflow-wrap: anywhere; }
 #city-tabs [aria-selected="true"], #construction-menu [aria-pressed="true"] {
   background: #415a38;
   border-color: #829773;
@@ -184,13 +185,19 @@ canvas { display: block; }
 .finance-policy { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-block: 6px; }
 progress { max-inline-size: min(55%, 5rem); inline-size: 5rem; height: .65rem; accent-color: #9dbb7f; }
 
-#product-configuration {
+#product-configuration, #trade-configuration {
   min-inline-size: 0;
   margin: 9px 0 0;
   padding: 6px 8px;
   border: 1px solid var(--edge);
   border-radius: 5px;
 }
+.trade-product { display: grid; gap: 4px; padding: 6px 0; border-block-end: 1px solid var(--edge); }
+.trade-product label { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: .8rem; }
+.trade-product input { inline-size: 5rem; max-inline-size: 100%; }
+.trade-product [data-warning] { color: var(--red); }
+#trade-sites, #trade-history { padding-inline-start: 18px; font-size: .82rem; }
+#trade-sites li, #trade-history li { margin-block: 5px; }
 #product-config-options { display: flex; flex-wrap: wrap; gap: 5px 12px; }
 .product-option-group { flex: 0 0 100%; min-width: 0; margin: 0; padding: 0; border: 0; }
 .product-option-group label { margin-inline-end: 12px; }
@@ -218,7 +225,7 @@ input[type="checkbox"] { accent-color: #ebd39a; }
 #simulation-controls { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 4px; }
 .game-version { color: #cdbb99; white-space: nowrap; }
 #open-save-dialog small { color: var(--muted); margin-inline-start: 3px; }
-#save-dialog {
+#save-dialog, #chapter-dialog {
   inline-size: min(27rem, calc(100% - 24px));
   max-block-size: calc(100% - 24px);
   padding: 14px;
@@ -227,7 +234,18 @@ input[type="checkbox"] { accent-color: #ebd39a; }
   border: 1px solid var(--edge);
   border-radius: 8px;
 }
-#save-dialog::backdrop { background: #101610ab; }
+#save-dialog::backdrop, #chapter-dialog::backdrop { background: #101610ab; }
+#chapter-dialog { inline-size: min(35rem, calc(100% - 24px)); }
+#chapter-title { margin: 0; color: var(--accent); font-size: 1.25rem; }
+#chapter-passage { line-height: 1.55; white-space: pre-line; }
+.chapter-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+#chapter-voice-status { min-block-size: 1.2em; }
+#chapter-next { background: #415a38; border-color: #829773; }
+#chapter-archive { padding-inline-start: 1.35rem; margin-block: 6px; }
+#chapter-archive li { margin-block: 8px; }
+#chapter-archive button { font-size: .8rem; }
+#promotion-target { margin-block: 5px; }
+#promotion-goals [data-complete] { color: var(--green); }
 #save-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
 #save-dialog h2 { margin: 0; font-size: 1.1rem; color: var(--accent); }
 #save-slot { display: block; margin-block: 4px 10px; inline-size: 100%; }
@@ -250,6 +268,41 @@ input[type="checkbox"] { accent-color: #ebd39a; }
 }
 #save-status:empty { display: none; }
 #save-status.save-error, #save-message.save-error { color: var(--red); }
+#crown-notice {
+  position: fixed;
+  z-index: 4;
+  inset-inline-start: 8px;
+  inset-block-end: min(10rem, 30vh);
+  max-inline-size: min(26rem, calc(100% - 16px));
+  padding: 8px;
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--accent);
+  pointer-events: none;
+}
+#crown-section { margin-block: 6px; }
+.mission-card { margin-block: 8px; padding: 8px; border: 1px solid var(--edge); border-radius: 6px; }
+.mission-card h4 { margin: 0 0 6px; color: var(--accent); }
+.mission-card p { margin-block: 4px; overflow-wrap: anywhere; }
+#kingdom-events summary { cursor: pointer; color: var(--accent); }
+#kingdom-events li { margin-block: 8px; overflow-wrap: anywhere; }
+#kingdom-events button { margin-block: 4px; }
+#chapter-decisions:empty, #chapter-decision-feedback:empty { display: none; }
+#royal-status {
+  position: fixed;
+  z-index: 3;
+  inset-block-start: min(6.25rem, 23vh);
+  inset-inline-start: 8px;
+  max-inline-size: min(38rem, calc(100% - 16px));
+  padding: 10px;
+  background: var(--panel);
+  border: 2px solid var(--red);
+  border-radius: 6px;
+}
+#royal-status-title { color: var(--red); }
+#crown-section summary { color: var(--accent); cursor: pointer; }
+#crown-history { padding-inline-start: 20px; font-size: .82rem; }
 #construction-menu { padding: 3px 8px 5px; text-align: center; }
 #construction-menu[inert] { opacity: .55; }
 .construction-toolbar { display: flex; justify-content: center; gap: 5px; min-inline-size: 0; }
@@ -291,6 +344,7 @@ input[type="checkbox"] { accent-color: #ebd39a; }
   .data-rows { font-size: .76rem; }
   #construction-menu { padding-inline: 4px; }
   #save-status { inset-block-start: min(7.25rem, 28vh); }
+  #royal-status { inset-block-start: min(7.25rem, 28vh); }
   #simulation-controls { gap: 4px; }
   .construction-actions button, #construction-categories button { padding-inline: 4px; }
 }

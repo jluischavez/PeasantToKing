@@ -1,0 +1,172 @@
+import assert from 'node:assert/strict';
+import { test } from 'vitest';
+import { EconomicHistory } from '../src/economy/EconomicHistory.ts';
+import { unitsPerResource as U } from '../src/economy/Inventories.ts';
+import { Treasury } from '../src/economy/Treasury.ts';
+import { Session } from '../src/persistence/Session.ts';
+import { SaveSlots } from '../src/persistence/SaveSlots.ts';
+import { Crown, crownRules } from '../src/simulation/Crown.ts';
+import { simulatedMsPerGameHour as hour } from '../src/simulation/GameTime.ts';
+
+const period = crownRules.periodMs;
+const pay = () => true;
+const cell = (column: number, row: number) => ({ column, row });
+
+test('sales repay the signed balance exactly and credit spending is capped and atomic', () => {
+  const history = new EconomicHistory();
+  const treasury = new Treasury(30, history, 200);
+  treasury.payBuilding(100, 'construction', 'farm:1,1');
+  assert.equal(treasury.gold, -70);
+  assert.equal(treasury.debt, 70);
+  assert.equal(treasury.creditAvailable, 130);
+  treasury.creditSale('market', 'home', 400 * U, 'food');
+  assert.equal(treasury.gold, -30);
+  treasury.creditSale('market', 'home', 500 * U, 'food');
+  assert.equal(treasury.gold, 20);
+  assert.equal(treasury.debt, 0);
+  assert.equal(history.read('gold').length, 3);
+
+  const game = new Session();
+  assert.ok(game.economy.payBuildingCost({ gold: 340, wood: 0 }, 'construction', 'fixture'));
+  assert.equal(game.economy.credit.balance, -190);
+  const before = game.economy.saveState();
+  assert.match(game.simulation.build(cell(1, 1), 'warehouse')!, /oro/);
+  assert.deepEqual(game.economy.saveState(), before);
+  assert.equal(game.map.getConstruction(cell(1, 1)), null);
+  assert.ok(game.economy.payBuildingCost({ gold: 10, wood: 0 }, 'construction', 'fixture'));
+  assert.equal(game.economy.credit.balance, -200);
+  assert.equal(game.economy.credit.available, 0);
+  const loaded = Session.restore(game.saveState(null)).session;
+  assert.deepEqual(loaded.economy.credit, game.economy.credit);
+  assert.deepEqual(loaded.economy.history.read(), game.economy.history.read());
+});
+
+test('mandatory costs use credit, and new arrears are repaid once from positive balances', () => {
+  const history = new EconomicHistory();
+  const treasury = new Treasury(0, history, 200);
+  treasury.payBuilding(199.5, 'construction', 'fixture');
+  for (let second = 0; second < 25; second++) treasury.accrueSecond({ wages: 100, maintenance: 100 }, 0);
+  treasury.closeHour();
+  assert.equal(treasury.gold, -200);
+  assert.deepEqual(treasury.arrears, { wages: 0.5, maintenance: 1 });
+  assert.deepEqual(history.read('gold').filter(e => e.result === 'unpaid').map(e => e.operation), ['wages', 'maintenance']);
+  const loaded = new Treasury(0, history, 200);
+  loaded.restoreState(treasury.saveState());
+  loaded.creditSale('market', 'home', 2005 * U, 'food');
+  loaded.closeHour();
+  assert.deepEqual(loaded.arrears, { wages: 0, maintenance: 1 });
+  loaded.creditSale('market', 'home', 20 * U, 'food');
+  loaded.closeHour();
+  loaded.closeHour();
+  assert.deepEqual(loaded.arrears, { wages: 0, maintenance: 0 });
+  assert.equal(loaded.gold, 1);
+  assert.equal(history.read('gold').filter(e => e.destination.endsWith('-arrears')).length, 2);
+});
+
+test('tribute opens on schedule, locks the rank amount and charges a due date once', () => {
+  const crown = new Crown();
+  assert.equal(crown.favor, 50);
+  crown.advance(period - 1000, 'aldea');
+  assert.equal(crown.obligation, null);
+  crown.advance(period, 'aldea');
+  crown.advance(period, 'villa');
+  assert.deepEqual(crown.obligation, { gold: 50, dueAt: 2 * period, paid: false });
+  let charged = 0;
+  const charge = (gold: number) => { charged += gold; return true; };
+  assert.equal(crown.pay(2 * period, period + hour, charge), true);
+  assert.equal(crown.pay(2 * period, period + hour, charge), false);
+  assert.equal(charged, 50);
+  assert.equal(crown.favor, 55);
+  crown.advance(2 * period, 'pueblo');
+  assert.equal(crown.obligation?.gold, 150);
+  assert.equal(crown.pay(2 * period, 2 * period, charge), false);
+  assert.equal(crown.pay(3 * period, 2 * period, () => false), false);
+  assert.equal(crown.pay(3 * period, 2 * period, charge), true);
+  crown.advance(3 * period, 'villa');
+  assert.equal(crown.obligation?.gold, crownRules.tribute.villa);
+  assert.equal(charged, 200);
+});
+
+test('offerings cannot duplicate a quote or replace tribute, and favor is bounded', () => {
+  const { simulation, economy } = new Session();
+  simulation.advance(period);
+  assert.equal(simulation.makeOffering(100, 50), true);
+  assert.equal(simulation.makeOffering(100, 50), false);
+  assert.equal(simulation.crown.favor, 62);
+  assert.equal(simulation.crown.obligation?.paid, false);
+  assert.equal(simulation.makeOffering(200, 62), true);
+  assert.equal(simulation.makeOffering(100, 87), false);
+  assert.equal(economy.credit.balance, -150);
+  assert.equal(simulation.payTribute(2 * period), true);
+  assert.equal(simulation.payTribute(2 * period), false);
+  assert.equal(economy.credit.balance, -200);
+  assert.deepEqual(economy.history.read('gold').map(event => event.operation), ['offering', 'offering', 'tribute']);
+  const crown = new Crown();
+  assert.ok(crown.offer(200, 50, 0, pay));
+  assert.ok(crown.offer(200, 75, 0, pay));
+  assert.equal(crown.favor, 100);
+  assert.equal(crown.offer(50, 100, 0, () => assert.fail()), false);
+});
+
+test('warnings escalate, an on-time payment resets the streak, and the third consecutive miss ends the game', () => {
+  const crown = new Crown();
+  crown.advance(period, 'aldea');
+  crown.advance(2 * period, 'aldea');
+  assert.equal(crown.streak, 1);
+  assert.equal(crown.favor, 35);
+  crown.advance(3 * period, 'aldea');
+  assert.equal(crown.streak, 2);
+  assert.equal(crown.favor, 15);
+  assert.equal(crown.defeated, false);
+  assert.ok(crown.pay(4 * period, 3 * period, pay));
+  assert.equal(crown.streak, 0);
+  assert.ok(crown.offer(200, 20, 3 * period, pay));
+  crown.advance(4 * period, 'aldea');
+  for (let cycle = 5; cycle <= 7; cycle++) crown.advance(cycle * period, 'aldea');
+  assert.equal(crown.favor, 0);
+  assert.equal(crown.defeated, true);
+  assert.deepEqual(crown.history.filter(e => e.kind === 'missed').map(e => e.streak), [1, 2, 1, 2, 3]);
+  assert.equal(crown.pay(7 * period, 7 * period, () => assert.fail()), false);
+});
+
+test.each([1, 2, 3] as const)('pause and speed ×%i use the simulated calendar and freeze on defeat', speed => {
+  const { simulation } = new Session();
+  simulation.setSpeed(speed);
+  simulation.advance((period - 1000) / speed);
+  simulation.setPaused(true);
+  simulation.advance(4 * period);
+  assert.equal(simulation.crown.obligation, null);
+  simulation.setPaused(false);
+  simulation.advance(1000 / speed + 0.01);
+  assert.equal(simulation.crown.obligation?.dueAt, 2 * period);
+  simulation.advance(10 * period);
+  assert.equal(simulation.simulatedTimeMs, 4 * period);
+  assert.equal(simulation.crown.defeated, true);
+  assert.equal(simulation.advance(period), false);
+  assert.match(simulation.build(cell(2, 2), 'road')!, /simulación/);
+});
+
+test('saving preserves decree, paid tribute and defeat, and a legacy save gets one grace period', () => {
+  const game = new Session();
+  game.simulation.advance(2 * hour);
+  const { crown: unused, ...legacy } = game.saveState(null);
+  const migrated = Session.restore(legacy).session;
+  assert.equal(migrated.simulation.crown.nextAt, 2 * hour + period);
+  assert.equal(migrated.simulation.crown.favor, 50);
+  migrated.simulation.advance(period);
+  assert.ok(migrated.simulation.crown.takeDecree());
+  migrated.simulation.crown.markDecree('skipped');
+  assert.ok(migrated.simulation.payTribute(2 * hour + 2 * period));
+  const items = new Map<string, string>();
+  const slots = new SaveSlots(() => ({ getItem: key => items.get(key) ?? null, setItem: (key, value) => { items.set(key, value); } }));
+  slots.save(1, null, migrated, null);
+  const loaded = slots.load(1).session;
+  assert.deepEqual(loaded.simulation.crown.saveState(), migrated.simulation.crown.saveState());
+  assert.equal(loaded.simulation.crown.takeDecree(), false);
+  assert.equal(loaded.simulation.payTribute(2 * hour + 2 * period), false);
+  loaded.simulation.advance(4 * period);
+  assert.equal(loaded.simulation.crown.defeated, true);
+  slots.save(2, null, loaded, null);
+  assert.equal(slots.load(2).session.simulation.crown.defeated, true);
+  assert.equal(slots.load(1).session.simulation.crown.defeated, false);
+});

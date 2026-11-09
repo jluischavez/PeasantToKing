@@ -70,15 +70,21 @@ export class VillageVoices {
   }
 
   reportHousingChange(cell: Cell, upgraded: boolean): void {
-    const key = homeKey(cell);
     const tone = upgraded ? 'positive' : 'negative';
+    this.queueHomeNews(cell, tone, housingVoiceTemplates[tone][0]);
+  }
+
+  reportOccasionalArrival(cell: Cell): void {
+    this.queueHomeNews(cell, 'neutral', 'Un viajero se ha instalado pese a las dificultades. Dice que aquí aún hay trabajo por hacer.');
+  }
+
+  private queueHomeNews(cell: Cell, tone: VoiceTone, text: string): void {
+    const key = homeKey(cell);
     if (this.housingNews.size >= this.limit && !this.housingNews.has(key)) {
       const oldest = this.housingNews.keys().next();
       if (!oldest.done) this.housingNews.delete(oldest.value);
     }
-    this.housingNews.set(key, {
-      home: { ...cell }, originExists: true, tone, text: housingVoiceTemplates[tone][0],
-    });
+    this.housingNews.set(key, { home: { ...cell }, originExists: true, tone, text });
   }
 
   advance(timeMs: number, observe: () => readonly NeedsObservation[], city: VoiceCity | (() => VoiceCity)): void {

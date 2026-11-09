@@ -44,7 +44,7 @@ function village() {
 
 test('pausing freezes production, consumption, sales and the economic history', () => {
   const { simulation, state } = village();
-  assert.equal(simulation.advance(5000), true);
+  assert.equal(simulation.advance(12000), true);
   const before = state();
   assert.ok(before.resources.gold > 0);
   assert.ok(before.history.some(event => event.operation === 'production'));
@@ -70,7 +70,7 @@ test('pausing before an interval boundary freezes immigration and market repleni
   assert.equal(simulation.advance(1), true);
   assert.equal(simulation.simulatedTimeMs, 5000);
   assert.ok(population.total > before.residents);
-  assert.equal(economy.distribution.marketAt(market)?.food, 1.9);
+  assert.equal(economy.distribution.marketAt(market)?.food, 0);
 });
 
 test('resuming discards paused wall time, preserves the fractional tick and keeps the selected speed', () => {
@@ -88,7 +88,7 @@ test('resuming discards paused wall time, preserves the fractional tick and keep
   assert.deepEqual(state(), before);
   assert.equal(simulation.advance(1), true);
   assert.equal(simulation.simulatedTimeMs, 1000);
-  assert.equal(state().warehouse?.goods.food, U / 2);
+  assert.equal(state().warehouse?.goods.food, 0);
 });
 
 test.each([2, 3] as const)('speed ×%i matches an equal duration at ×1 across economic systems', speed => {
@@ -160,51 +160,41 @@ test('a bounded history discards the oldest entries without reusing identifiers'
   assert.equal(ledger.snapshot(warehouseId)!.goods.food + ledger.snapshot(marketId)!.goods.food, 120);
 });
 
-test('the audited food chain distinguishes production, transfers, consumption and gold from sales', () => {
+test('the audited food chain links production, both carrier legs, consumption and sales without duplicate accounting', () => {
   const { simulation, economy } = village();
-  simulation.advance(5000);
+  simulation.advance(12000);
   const events = economy.history.read();
-  const lastTick = events.filter(event => event.timeMs === 5000);
-  const [production, deposit, restock] = lastTick;
-  assert.deepEqual([production.operation, production.destination, production.units], ['production', farmId, U / 2]);
-  assert.deepEqual([deposit.operation, deposit.origin, deposit.destination, deposit.units],
-    ['transfer', farmId, warehouseId, U / 2]);
-  assert.deepEqual([restock.operation, restock.origin, restock.destination, restock.units],
-    ['transfer', warehouseId, marketId, 2.5 * U]);
-  assert.deepEqual(restock.originBalance, { before: 2.5 * U, after: 0 });
-  assert.deepEqual(restock.destinationBalance, { before: 0, after: 2.5 * U });
-
-  const meals = lastTick.filter(event => event.operation === 'consumption');
-  const sales = lastTick.filter(event => event.operation === 'sale');
-  assert.equal(meals.length, 2);
-  assert.equal(sales.length, meals.length);
-  let goldUnits = 0;
-  let marketUnits = 2.5 * U;
-  for (const [index, meal] of meals.entries()) {
-    assert.equal(meal.resource, 'food');
-    assert.equal(meal.origin, marketId);
-    assert.deepEqual(meal.originBalance, { before: marketUnits, after: marketUnits - meal.units });
-    assert.equal(meal.destinationBalance, undefined);
-    const sale = sales[index];
-    assert.equal(sale.resource, 'gold');
-    assert.equal(sale.origin, marketId);
-    assert.equal(sale.destination, 'treasury');
-    assert.equal(sale.household, meal.destination);
-    assert.equal(sale.units, meal.units / 10);
-    assert.deepEqual(sale.destinationBalance, { before: goldUnits, after: goldUnits + sale.units });
-    goldUnits += sale.units;
-    marketUnits -= meal.units;
+  const production = events.find(event => event.operation === 'production')!;
+  const pickup = events.find(event => event.origin === farmId && event.destination.startsWith('cargo:'))!;
+  const deposit = events.find(event => event.origin === pickup.destination && event.destination === warehouseId)!;
+  const restock = events.find(event => event.destination === marketId)!;
+  const dispatch = events.find(event => event.origin === warehouseId && event.destination === restock.origin)!;
+  assert.equal(production.destination, farmId);
+  assert.equal(pickup.units, deposit.units);
+  assert.equal(dispatch.units, restock.units);
+  assert.ok(production.timeMs <= pickup.timeMs && pickup.timeMs < deposit.timeMs);
+  assert.ok(deposit.timeMs <= dispatch.timeMs && dispatch.timeMs < restock.timeMs);
+  for (const movement of [deposit, dispatch, restock]) {
+    assert.equal(movement.operation, 'transfer');
+    assert.equal(movement.originBalance!.before - movement.originBalance!.after, movement.units);
+    assert.equal(movement.destinationBalance!.after - movement.destinationBalance!.before, movement.units);
   }
-  assert.equal(goldUnits, 0.06 * U);
-  assert.equal(marketUnits, 1.9 * U);
-  assert.equal(economy.resources.food, 19.5);
-  assert.equal(economy.resources.gold, 0.06);
-  assert.equal(events.filter(event => event.timeMs < 5000 && event.operation === 'sale').length, 0);
-  assert.ok(events.some(event => event.operation === 'consumption' && event.origin === 'initial-reserve'));
-  assert.equal(economy.history.read('gold', nearId).length, 1);
+  const meals = events.filter(event => event.operation === 'consumption' && event.origin === marketId);
+  const sales = events.filter(event => event.operation === 'sale');
+  assert.ok(meals.length > 0);
+  assert.equal(sales.length, meals.length);
+  for (const sale of sales) {
+    const meal = meals.find(event => event.timeMs === sale.timeMs && event.destination === sale.household)!;
+    assert.ok(meal && sale.timeMs >= restock.timeMs);
+    assert.equal(Math.round(sale.units / (sale.unitScale ?? U) * U * 10), meal.units);
+  }
+  const produced = events.filter(event => event.operation === 'production' && event.resource === 'food').reduce((n, event) => n + event.units, 0);
+  const consumed = events.filter(event => event.operation === 'consumption' && event.resource === 'food').reduce((n, event) => n + event.units, 0);
+  assert.equal(Math.round(economy.resources.food * U), 20 * U + produced - consumed);
+  assert.equal(events.filter(event => event.operation === 'sale' && event.timeMs < restock.timeMs).length, 0);
+  assert.ok(economy.history.read('gold', nearId).length > 0);
   assert.deepEqual(economy.history.read('wood', marketId), []);
 });
-
 test('blocked production does not appear as a successful batch or delivery', () => {
   const { simulation, economy } = village();
   assert.equal(economy.setWarehouseAcceptance(warehouse, 'food', false), true);

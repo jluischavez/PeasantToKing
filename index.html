@@ -59,6 +59,12 @@
                 <p id="warehouse-drain-status" aria-live="polite"></p>
               </div>
             </fieldset>
+            <fieldset id="trade-configuration" hidden>
+              <legend>Casa de Comercio</legend>
+              <p id="trade-site-state" class="panel-note"></p>
+              <div id="trade-product-options"></div>
+              <p id="trade-site-last" class="panel-note"></p>
+            </fieldset>
           </div>
         </section>
         <section id="city-panels" aria-label="Información de la ciudad">
@@ -67,6 +73,8 @@
             <button type="button" role="tab" id="tab-needs" aria-controls="needs-panel" aria-selected="false" tabindex="-1">Necesidades</button>
             <button type="button" role="tab" id="tab-voices" aria-controls="voices-panel" aria-selected="false" tabindex="-1">Voces de la aldea</button>
             <button type="button" role="tab" id="tab-history" aria-controls="audit-panel" aria-selected="false" tabindex="-1">Historial</button>
+            <button type="button" role="tab" id="tab-chronicles" aria-controls="chronicles-panel" aria-selected="false" tabindex="-1">Crónicas</button>
+            <button type="button" role="tab" id="tab-trade" aria-controls="trade-panel" aria-selected="false" tabindex="-1">Comercio</button>
           </div>
           <section id="finances-panel" class="city-pane" role="tabpanel" aria-labelledby="tab-finances" tabindex="0">
             <h3>Tesorería</h3>
@@ -85,8 +93,21 @@
               <dt>Mantenimiento</dt><dd id="maintenance-rate">0</dd>
               <dt class="total-row">Total de gastos</dt><dd id="total-expenses" class="total-row">0</dd>
             </dl>
-            <h3>Balance estimado · oro/h</h3>
+            <h3>Balance operativo estimado · oro/h</h3>
             <dl class="data-rows"><dt id="finance-balance-state">Neutral</dt><dd id="finance-net">0</dd></dl>
+            <h3>Pagos acumulados · oro</h3>
+            <dl class="data-rows">
+              <dt>Tributos pagados</dt><dd id="finance-tributes">0</dd>
+              <dt>Ofrendas</dt><dd id="finance-offerings">0</dd>
+              <dt>Salarios pendientes</dt><dd id="finance-wages-arrears">0</dd>
+              <dt>Mantenimiento pendiente</dt><dd id="finance-maintenance-arrears">0</dd>
+            </dl>
+            <h3>Comercio exterior realizado · oro acumulado</h3>
+            <dl class="data-rows">
+              <dt>Exportaciones</dt><dd id="finance-exports">0</dd>
+              <dt>Importaciones</dt><dd id="finance-imports">0</dd>
+              <dt>Neto comercial realizado</dt><dd id="finance-trade-net">0</dd>
+            </dl>
           </section>
           <section id="needs-panel" class="city-pane" role="tabpanel" aria-labelledby="tab-needs" tabindex="0" hidden>
             <h3>Habitantes y empleo</h3>
@@ -103,6 +124,7 @@
             <h3>Bienestar</h3>
             <dl class="data-rows">
               <dt>Atractivo migratorio</dt><dd><span id="migration-attractiveness">0</span>/100</dd>
+              <dt>Inmigración</dt><dd id="migration-mode">—</dd>
               <dt>Estado de ánimo</dt><dd id="city-wellbeing">Neutral</dd>
               <dt>Belleza residencial</dt><dd id="city-beauty" title="Promedio de las viviendas habitadas">—</dd>
             </dl>
@@ -137,8 +159,8 @@
           <section id="audit-panel" class="city-pane" role="tabpanel" aria-labelledby="tab-history" tabindex="0" hidden>
           <details id="population-events" class="population-events">
             <summary>Eventos de población</summary>
-            <p id="population-events-empty">Todavía no hay emigraciones.</p>
-            <ol id="population-events-list" aria-label="Emigraciones recientes"></ol>
+            <p id="population-events-empty">Todavía no hay salidas ni llegadas ocasionales.</p>
+            <ol id="population-events-list" aria-label="Salidas y llegadas ocasionales recientes"></ol>
           </details>
           <section id="audit-content" aria-label="Movimientos económicos recientes">
             <div class="audit-filters">
@@ -155,6 +177,68 @@
             <p id="audit-empty">Todavía no hay movimientos.</p>
             <ol id="audit-list" aria-label="Movimientos y gastos impagados"></ol>
           </section>
+          </section>
+          <section id="trade-panel" class="city-pane" role="tabpanel" aria-labelledby="tab-trade" tabindex="0" hidden>
+            <h3>Comercio exterior</h3>
+            <p id="trade-overview" class="panel-note"></p>
+            <ul id="trade-sites"></ul>
+            <h3>Últimos viajes realizados</h3>
+            <p id="trade-latest" class="panel-note" role="status"></p>
+            <ol id="trade-history"></ol>
+          </section>
+          <section id="chronicles-panel" class="city-pane" role="tabpanel" aria-labelledby="tab-chronicles" tabindex="0" hidden>
+            <h3>Crónicas del Reino · <span id="settlement-rank"></span></h3>
+            <section id="kingdom-events" aria-label="Misiones del reino">
+              <h3>Eventos activos</h3>
+              <p id="kingdom-schedule" class="panel-note"></p>
+              <div id="kingdom-current"></div>
+              <details>
+                <summary>Misiones completadas</summary>
+                <ol id="kingdom-completed"></ol>
+              </details>
+              <details>
+                <summary>Historial de acontecimientos</summary>
+                <ol id="kingdom-history"></ol>
+              </details>
+            </section>
+            <details id="crown-section">
+              <summary>La Corona</summary>
+              <dl class="data-rows">
+                <dt>Favor real</dt><dd id="crown-favor"></dd>
+                <dt>Tesorería</dt><dd id="crown-balance"></dd>
+                <dt>Deuda con el rey</dt><dd id="crown-debt"></dd>
+                <dt>Crédito disponible</dt><dd id="crown-credit"></dd>
+                <dt>Gastos operativos pendientes</dt><dd id="crown-arrears"></dd>
+                <dt>Tributo</dt><dd id="crown-tribute"></dd>
+                <dt id="crown-date-label">Fecha</dt><dd id="crown-date"></dd>
+                <dt>Tiempo restante</dt><dd id="crown-time"></dd>
+                <dt>Impagos consecutivos</dt><dd id="crown-streak"></dd>
+              </dl>
+              <p class="panel-note" id="crown-consequences"></p>
+              <div class="chapter-actions">
+                <button id="crown-pay" type="button">Pagar tributo</button>
+                <button id="crown-decree" type="button" aria-haspopup="dialog" hidden>Leer decreto</button>
+              </div>
+              <h3>Ofrenda voluntaria</h3>
+              <div class="chapter-actions">
+                <select id="crown-offering" aria-label="Monto de la ofrenda"></select>
+                <button id="crown-prepare" type="button">Preparar ofrenda</button>
+              </div>
+              <div id="crown-confirmation" hidden>
+                <p id="crown-quote" class="panel-note"></p>
+                <button id="crown-confirm" type="button">Confirmar ofrenda</button>
+                <button id="crown-cancel" type="button">Cancelar</button>
+              </div>
+              <p id="crown-feedback" class="panel-note" role="status"></p>
+              <h3>Historial de la Corona</h3>
+              <ol id="crown-history"></ol>
+            </details>
+            <p id="promotion-target"></p>
+            <dl id="promotion-goals" class="data-rows"></dl>
+            <p id="promotion-unlocks" class="panel-note"></p>
+            <button id="recognize-settlement" type="button" aria-haspopup="dialog"></button>
+            <h3>Capítulos</h3>
+            <ol id="chapter-archive"></ol>
           </section>
         </section>
       </aside>
@@ -182,6 +266,36 @@
       </nav>
     </footer>
     <p id="save-status" role="status"></p>
+    <p id="crown-notice" role="status" hidden></p>
+    <section id="royal-status" aria-label="Estado crítico de la Corona" hidden>
+      <strong id="royal-status-title" role="alert"></strong>
+      <p id="royal-status-detail"></p>
+      <div class="chapter-actions">
+        <button id="royal-recover" type="button">Recuperar favor</button>
+        <button id="royal-summary" type="button" hidden>Consultar relato final</button>
+        <button id="royal-new-or-load" type="button" hidden>Cargar o empezar otra partida</button>
+      </div>
+    </section>
+    <dialog id="chapter-dialog" aria-labelledby="chapter-title" aria-describedby="chapter-passage">
+      <p id="chapter-step" class="panel-note"></p>
+      <h2 id="chapter-title" tabindex="-1"></h2>
+      <p id="chapter-passage" aria-live="polite"></p>
+      <div id="chapter-decisions" class="chapter-actions" role="group" aria-label="Decisiones del acontecimiento"></div>
+      <p id="chapter-decision-feedback" class="panel-note" role="status"></p>
+      <div id="chapter-audio" class="chapter-actions" role="group" aria-label="Narración">
+        <button id="chapter-play" type="button">Escuchar</button>
+        <button id="chapter-pause" type="button">Pausar voz</button>
+        <button id="chapter-stop" type="button">Detener voz</button>
+        <label><input id="chapter-mute" type="checkbox"> Silenciar voz</label>
+      </div>
+      <p id="chapter-voice-status" class="panel-note" role="status"></p>
+      <div class="chapter-actions">
+        <button id="chapter-back" type="button">Atrás</button>
+        <button id="chapter-next" type="button">Continuar</button>
+        <button id="chapter-skip" type="button">Omitir capítulo</button>
+        <button id="chapter-manage" type="button" hidden>Cargar o empezar otra partida</button>
+      </div>
+    </dialog>
     <dialog id="save-dialog" aria-labelledby="save-title">
       <header>
         <h2 id="save-title">Partidas guardadas</h2>

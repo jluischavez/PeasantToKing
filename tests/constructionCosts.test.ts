@@ -1,3 +1,4 @@
+import { deliverFixtureCargo } from './fixtures/logistics.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { Economy } from '../src/economy/Economy.ts';
@@ -31,6 +32,7 @@ function staffed(initial?: Resources) {
   map.place(farm, 'farm');
   map.place(warehouse, 'warehouse');
   map.place(lumberjack, 'lumberjack');
+  assert.ok(map.terrain.plantTree(cell(3, 5)));
   map.place(market, 'market');
   map.place(home, 'house');
   map.place(cell(4, 2), 'house'); // Disconnected until a road is placed next to it.
@@ -73,9 +75,9 @@ test('new settlements build with the new reserves and record exact gold and wood
 });
 
 test.each([
-  [{ gold: 19, food: 20, wood: 10 }, /oro/],
+  [{ gold: -181, food: 20, wood: 10 }, /oro/],
   [{ gold: 20, food: 20, wood: 9 }, /madera/],
-  [{ gold: 19, food: 20, wood: 9 }, /oro.*madera/],
+  [{ gold: -181, food: 20, wood: 9 }, /oro.*madera/],
 ] as const)('insufficient resources leave the placement, reserves and audit untouched', (initial, message) => {
   const { economy, map, simulation } = setup(initial);
   assert.match(simulation.build(farm, 'farm')!, message);
@@ -102,6 +104,7 @@ test('wood is spent from the construction reserve before the operational warehou
   assert.ok(economy.storage.depositProduction(lumberjack, 'wood', 8 * U + 2 * U / 3));
   assert.ok(economy.storage.depositProduction(farm, 'food', 2 * U));
   for (let i = 0; i < 5; i++) economy.distribution.advanceSecond();
+  deliverFixtureCargo(economy);
   assert.equal(economy.distribution.bootstrapActive, false);
   assert.equal(simulation.build(cell(8, 2), 'farm'), null);
 
@@ -208,6 +211,7 @@ test('a warehouse that fills during confirmation cannot be demolished and a stoc
   assert.deepEqual(economy.history.read(), history);
 
   for (let i = 0; i < 5; i++) economy.distribution.advanceSecond();
+  deliverFixtureCargo(economy);
   const supplied = economy.resources, restocked = economy.history.read();
   assert.match(simulation.requestDemolition(market)!, /inventario/);
   assert.equal(map.getConstruction(warehouse), 'warehouse');
@@ -221,6 +225,7 @@ test('empty warehouse and market inventories are removed and rebuilt with fresh 
   economy.setWarehouseAcceptance(warehouse, 'wood', false);
   assert.ok(economy.storage.depositProduction(farm, 'food', U / 10));
   for (let i = 0; i < 5; i++) economy.distribution.advanceSecond();
+  deliverFixtureCargo(economy);
   economy.consumeHomes({ residencesSnapshot: [{ cell: home, residents: 1 }] }, 0.1);
   assert.equal(economy.perSecond.gold, 0.01);
   assert.equal(economy.distribution.marketAt(market)?.food, 0);
@@ -248,27 +253,28 @@ test('the village center and empty ground are protected without payment', () => 
 });
 
 test('confirmation rechecks gold and pausing blocks edits', () => {
-  const { map, economy, simulation } = setup({ gold: 6, food: 20, wood: 50 });
+  const { map, economy, simulation } = setup({ gold: -194, food: 20, wood: 50 });
   map.place(road, 'road');
   assert.equal(simulation.requestDemolition(road), null);
   simulation.setPaused(true);
   assert.match(simulation.confirmDemolition()!, /Reanuda/);
   assert.match(simulation.build(home, 'house')!, /Reanuda/);
-  assert.equal(economy.resources.gold, 6);
+  assert.equal(economy.resources.gold, -194);
   simulation.setPaused(false);
   assert.equal(simulation.build(cell(2, 0), 'road'), null);
   assert.match(simulation.confirmDemolition()!, /oro/);
   assert.equal(map.getConstruction(road), 'road');
-  assert.equal(economy.resources.gold, 4);
+  assert.equal(economy.resources.gold, -196);
   assert.deepEqual(economy.history.read().map(event => event.operation), ['construction']);
 });
 
 test('the default budget can build a connected village and start earning through real sales', () => {
-  const { economy, population, simulation } = setup();
+  const { map, economy, population, simulation } = setup();
   assert.equal(simulation.build(cell(0, 4), 'villageCenter'), null);
   for (let x = 1; x <= 8; x++) assert.equal(simulation.build(cell(x, 4), 'road'), null);
   assert.equal(simulation.build(cell(1, 1), 'farm'), null);
   assert.equal(simulation.build(cell(4, 2), 'warehouse'), null);
+  assert.ok(map.terrain.plantTree(cell(6, 6)));
   assert.equal(simulation.build(cell(6, 2), 'lumberjack'), null);
   assert.equal(simulation.build(cell(8, 2), 'market'), null);
   assert.equal(simulation.build(cell(7, 5), 'house'), null);
@@ -282,6 +288,9 @@ test('the default budget can build a connected village and start earning through
 
 test('isolating the city keeps time and unmet demand advancing, without consuming or selling inaccessible stock', () => {
   const { economy, roads, population, simulation } = staffed();
+  assert.ok(economy.storage.depositProduction(farm, 'food', 20 * U));
+  for (let i = 0; i < 5; i++) economy.distribution.advanceSecond();
+  deliverFixtureCargo(economy);
   simulation.advance(5000);
   assert.ok(economy.distribution.marketAt(market)!.food > 0);
   assert.ok(economy.storage.depositProduction(farm, 'food', 10 * U));
@@ -337,7 +346,7 @@ test('a draining warehouse can still restock a market, then be demolished once e
   assert.equal(economy.setWarehouseDraining(warehouse, true), true);
   assert.match(simulation.requestDemolition(warehouse)!, /inventario/);
   assert.match(economy.storage.warehouseAt(warehouse)!.drainStatus, /falta otro almacén/);
-  simulation.advance(5000);
+  simulation.advance(10000);
   assert.equal(economy.storage.warehouseAt(warehouse)?.used, 0);
   assert.ok(economy.distribution.marketAt(market)!.food > 0);
   const before = economy.resources;

@@ -1,3 +1,4 @@
+import { deliverFixtureCargo } from './fixtures/logistics.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { Economy } from '../src/economy/Economy.ts';
@@ -123,6 +124,7 @@ function chain() {
   const ledger = economy.storage.inventories;
   map.place(c(0, 0), 'villageCenter');
   for (let x = 1; x <= 16; x++) map.place(c(x, 0), 'road');
+  assert.ok(map.terrain.plantTree(c(2, 3)));
   for (const [cell, type] of [[farm, 'farm'], [camp, 'lumberjack'], [warehouse, 'warehouse'],
     [market, 'market'], [home, 'house'], [far, 'house']] as const) map.place(cell, type);
   const workforce = new Population();
@@ -135,7 +137,8 @@ function chain() {
     });
   };
   sync();
-  const restock = () => { for (let i = 0; i < 5; i++) economy.distribution.advanceSecond(); };
+  const restock = () => { for (let i = 0; i < 5; i++) economy.distribution.advanceSecond();
+  deliverFixtureCargo(economy); };
   const consume = (cell = home, residents = 1) =>
     economy.consumeHomes({ residencesSnapshot: [{ cell, residents }] }, 0.1);
   return { map, economy, ledger, sync, restock, consume, unstaff: () => { marketWorkers = 0; sync(); } };
@@ -153,10 +156,9 @@ test('restocking preserves global stock and stores both goods within the shared 
   assert.equal(stocked.food + stocked.wood, stocked.capacity);
   assert.deepEqual(economy.resources, before);
   assert.equal(economy.storage.warehouseAt(warehouse)?.wood, 20);
-  const [transfer] = economy.history.read('wood', marketId);
-  assert.equal(transfer.origin, warehouseId);
-  assert.equal(transfer.destination, marketId);
-  assert.equal(amount(transfer), 50);
+  const transfers = economy.history.read('wood', marketId);
+  assert.ok(transfers.every(transfer => transfer.origin.startsWith('cargo:') && transfer.destination === marketId));
+  assert.equal(transfers.reduce((total, transfer) => total + amount(transfer), 0), 50);
 });
 
 test('wood can enter free space in a food-filled market after households buy food', () => {
@@ -190,8 +192,10 @@ test('disabling wood freezes its market stock without blocking food replenishmen
 test('production, restocking and consumption complete the food and wood chains with distinct audited sales', () => {
   const { economy, consume } = chain();
   economy.advance(5000);
-  assert.equal(economy.distribution.marketAt(market)?.food, 2.5);
-  assert.equal(economy.distribution.marketAt(market)?.wood, 10 / 3);
+  assert.equal(economy.distribution.marketAt(market)?.food, 0);
+  deliverFixtureCargo(economy);
+  assert.equal(economy.distribution.marketAt(market)?.food, 1.28);
+  assert.equal(economy.distribution.marketAt(market)?.wood, 1.12);
   consume();
   assert.equal(economy.resources.gold, 0.014);
   assert.equal(economy.perSecond.gold, 0.014);
@@ -248,6 +252,7 @@ test('domestic wood purchases and inventory movements match at ×1 and ×3 for t
     const state = town();
     for (let x = 2; x <= 10; x++) assert.equal(state.map.remove(c(x, 1)), true);
     state.map.place(c(2, 1), 'lumberjack');
+    assert.ok(state.map.terrain.plantTree(c(2, 0)));
     state.map.place(c(3, 1), 'warehouse');
     state.map.place(c(4, 1), 'market');
     state.simulation.recalculate();

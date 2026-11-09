@@ -6,8 +6,8 @@ import { taxPolicies, taxRules } from './TaxPolicy.ts';
 import type { TaxPolicy } from './TaxPolicy';
 import { centsPerGold, maintenanceByType, salePriceCents, wagePerWorker } from './OperatingCosts.ts';
 import type { OperatingCosts } from './OperatingCosts';
-import { simulatedMsPerGameHour } from '../simulation/GameTime.ts';
-import { populationRules } from '../population/Population.ts';
+import { gameTimeRules, simulatedMsPerGameHour } from '../simulation/GameTime.ts';
+import { populationRules, recoveryMigrationRules } from '../population/Population.ts';
 import type { LaborContext } from '../population/Population';
 import { productNames } from './Products.ts';
 import type { ProductId } from './Products';
@@ -15,12 +15,15 @@ import { Distribution } from './Distribution.ts';
 import type { Residence } from './Distribution';
 import { Storage } from './Storage.ts';
 import { unitsPerResource } from './Inventories.ts';
-import type { Goods, StoredResource } from './Inventories';
+import type { Goods, StoredResource, TradeLine } from './Inventories';
 import type { Cell } from '../map/CellSelection';
 import type { ConstructionCost } from '../map/ConstructionCosts';
 import type { ConstructionMap, ConstructionType } from '../map/ConstructionMap';
 import type { RoadConnections } from '../map/RoadConnections';
 import type { Population } from '../population/Population';
+import { missingWoodlandReason } from '../map/Woodland.ts';
+import { crownRules } from '../simulation/Crown.ts';
+import type { Logistics } from './Logistics';
 
 export const resourceNames = { gold: 'Oro', ...productNames } as const;
 export type Resource = keyof typeof resourceNames;
@@ -28,28 +31,18 @@ export type Resources = Record<Resource, number>;
 
 export const economyRules = {
   initialResources: { gold: 150, food: 20, wood: 50 },
-  recovery: { populationLimit: 12, arrivalsPerEvaluation: 1 },
+  farmFoodPerSecond: 2.56,
+  lumberWoodPerHour: [0, 14, 22, 30],
+  recovery: { populationLimit: recoveryMigrationRules.populationLimit, arrivalsPerEvaluation: 1 },
 } as const;
 
 // Inventory units represent production and consumption fractions exactly.
 // Public amounts use resource units; internal balances are never rounded per tick.
 
-const productionByType: Record<ConstructionType, Readonly<Resources>> = {
-  house: { gold: 0, food: 0, wood: 0 },
-  road: { gold: 0, food: 0, wood: 0 },
-  bridge: { gold: 0, food: 0, wood: 0 },
-  farm: { gold: 0, food: 2, wood: 0 },
-  lumberjack: { gold: 0, food: 0, wood: 2 },
-  warehouse: { gold: 0, food: 0, wood: 0 },
-  market: { gold: 0, food: 0, wood: 0 },
-  well: { gold: 0, food: 0, wood: 0 },
-  villageCenter: { gold: 0, food: 0, wood: 0 },
-  garden: { gold: 0, food: 0, wood: 0 },
-  park: { gold: 0, food: 0, wood: 0 },
-  plaza: { gold: 0, food: 0, wood: 0 },
-};
-
-export type BuildingProductivity = Readonly<{ workers: number; capacity: number; ratio: number; storageBlocked: boolean }>;
+export type BuildingProductivity = Readonly<{
+  workers: number; capacity: number; ratio: number; storageBlocked: boolean; missingWoodland?: true;
+  transport: ReturnType<Logistics['at']>;
+}>;
 type Workforce = Pick<Population, 'workersAt' | 'capacityFor'>;
 const key = (cell: Cell): string => `${cell.column},${cell.row}`;
 const asResources = (units: Resources): Resources => ({
@@ -62,6 +55,7 @@ export class Economy {
   private readonly treasury: Treasury;
   private taxPolicy: TaxPolicy = taxRules.defaultPolicy;
   private maintenanceRate = 0;
+  private connectedFarms = 0;
   readonly storage: Storage;
   readonly distribution: Distribution;
   private context: { map: ConstructionMap; connections: RoadConnections; workforce: Workforce } | null = null;
@@ -73,20 +67,25 @@ export class Economy {
   readonly history: EconomicHistory;
 
   // Called once for a new settlement. Recalculation and UI never grant resources.
-  constructor(initial: Readonly<Resources> = economyRules.initialResources, historyCapacity = 200) {
+  constructor(initial: Readonly<Resources> = economyRules.initialResources, historyCapacity = 200,
+    creditLimit: number = crownRules.creditLimit) {
     this.history = new EconomicHistory(historyCapacity, () => this.completedMs);
-    this.treasury = new Treasury(initial.gold, this.history);
+    this.treasury = new Treasury(initial.gold, this.history, creditLimit);
     this.storage = new Storage({
       food: Math.round(initial.food * unitsPerResource),
       wood: Math.round(initial.wood * unitsPerResource),
     }, this.history);
     this.distribution = new Distribution(this.storage);
+    this.storage.logistics.onPurchase = (market, household, units, product) => {
+      this.distribution.recordPurchase(market, units, product);
+      this.treasury.creditSale(market, household, units, product);
+    };
   }
 
   saveState() {
     return { completedMs: this.completedMs, elapsedMs: this.elapsedMs, taxPolicy: this.taxPolicy,
       treasury: this.treasury.saveState(), inventories: this.storage.inventories.saveState(),
-      distribution: this.distribution.saveState(), history: this.history.saveState() };
+      distribution: this.distribution.saveState(), history: this.history.saveState(), logistics: this.storage.logistics.saveState() };
   }
 
   restoreState(state: ReturnType<Economy['saveState']>, map: ConstructionMap): void {
@@ -98,7 +97,10 @@ export class Economy {
     this.taxPolicy = taxPolicy;
     this.treasury.restoreState(treasury);
     this.history.restoreState(history, completedMs);
+    if (state.logistics) this.storage.logistics.prepareInventories(state.logistics);
+    this.distribution.prepareHouseholds(state.distribution.households, map);
     this.storage.inventories.restoreState(inventories);
+    this.storage.logistics.restoreState(state.logistics, completedMs);
     const ids = inventories.map(inventory => inventory.id);
     this.storage.restoreWarehouseOrder(ids);
     this.distribution.restoreState(distribution, map, ids);
@@ -139,6 +141,51 @@ export class Economy {
   }
 
   get operatingDeficits(): OperatingCosts { return this.treasury.deficits; }
+  get operatingArrears(): OperatingCosts { return this.treasury.arrears; }
+  get tradeBudgetTicks(): number { return this.treasury.tradeBudgetTicks; }
+  settleTrade(trader: string, exports: number, imports: number): boolean { return this.treasury.settleTrade(trader, exports, imports); }
+  get credit() {
+    return { balance: this.treasury.gold, debt: this.treasury.debt, limit: this.treasury.creditLimit,
+      available: this.treasury.creditAvailable };
+  }
+
+  canPayRoyalCost(gold: number): boolean { return this.treasury.shortfall(gold) === 0; }
+
+  payRoyalCost(gold: number, operation: 'tribute' | 'offering'): boolean {
+    return this.payBuildingCost({ gold, wood: 0 }, operation, 'crown');
+  }
+
+  get missionStock(): Goods {
+    const goods = { food: 0, wood: 0 };
+    for (const id of this.storage.operationalWarehouseIds()) {
+      const inventory = this.storage.inventories.snapshot(id)!;
+      if (!inventory.network) continue;
+      if (inventory.marketDispatch.food) goods.food += inventory.available.food;
+      if (inventory.marketDispatch.wood) goods.wood += inventory.available.wood;
+    }
+    return { food: goods.food / unitsPerResource, wood: goods.wood / unitsPerResource };
+  }
+
+  settleMission(id: string, cost: number, reward: number, delivery?: { product: ProductId; amount: number }): boolean {
+    const settle = () => this.treasury.settleMission(id, cost, reward);
+    if (!delivery) return settle();
+    if (!whole(delivery.amount, 1) || (delivery.product !== 'food' && delivery.product !== 'wood')) return false;
+    let remaining = delivery.amount * unitsPerResource;
+    const lines: TradeLine[] = [];
+    let network: string | null = null;
+    for (const warehouse of this.storage.operationalWarehouseIds()) {
+      const inventory = this.storage.inventories.snapshot(warehouse)!;
+      if (!inventory.network || !inventory.marketDispatch[delivery.product]
+        || (network !== null && inventory.network !== network)) continue;
+      network = inventory.network;
+      const units = Math.min(remaining, inventory.available[delivery.product]);
+      if (units > 0) lines.push({ warehouse, product: delivery.product, units, direction: 'export' });
+      remaining -= units;
+      if (remaining === 0) break;
+    }
+    return remaining === 0 && network !== null
+      && this.storage.inventories.exchange(network, id, lines, settle, 'mission');
+  }
 
   get currentTaxPolicy(): TaxPolicy { return this.taxPolicy; }
 
@@ -188,30 +235,34 @@ export class Economy {
     this.context = { map, connections, workforce };
     this.storage.sync(map, connections, workforce);
     this.distribution.sync(map, connections, workforce);
+    this.storage.logistics.reconcile();
     const spaces = this.storage.availableSpaces();
     this.batches = [];
     const total: Resources = { gold: 0, food: 0, wood: 0 };
     this.buildings.clear();
     this.maintenanceRate = 0;
+    this.connectedFarms = 0;
     for (const { cell, type } of map.occupiedCells()) {
       if (!map.isKingdomRoad(cell)) this.maintenanceRate += maintenanceByType[type];
-      const maximum = productionByType[type];
-      if (maximum.gold + maximum.food + maximum.wood === 0) continue;
+      if (type !== 'farm' && type !== 'lumberjack') continue;
       const capacity = workforce.capacityFor(type);
-      const workers = connections.isConnected(cell)
+      const connected = connections.isConnected(cell);
+      if (type === 'farm' && connected) this.connectedFarms++;
+      const workers = connected
         ? Math.min(capacity, Math.max(0, workforce.workersAt(cell))) : 0;
       const laborRatio = capacity > 0 ? workers / capacity : 0;
-      const food = Math.round(maximum.food * unitsPerResource * laborRatio);
-      const wood = Math.round(maximum.wood * unitsPerResource * laborRatio);
-      const resource = food > 0 ? 'food' : 'wood';
-      const quantity = food + wood;
-      const storageBlocked = quantity > 0 && !this.storage.planProduction(cell, quantity, spaces);
-      const ratio = storageBlocked ? 0 : laborRatio;
-      this.buildings.set(key(cell), { workers, capacity, ratio, storageBlocked });
-      total.gold += Math.round(maximum.gold * unitsPerResource * ratio);
-      if (!storageBlocked && quantity > 0) {
-        total.food += food;
-        total.wood += wood;
+      const woodPerHour = economyRules.lumberWoodPerHour[workers] ?? 0;
+      const resource = type === 'farm' ? 'food' : 'wood';
+      const rate = type === 'farm' ? economyRules.farmFoodPerSecond * laborRatio : woodPerHour / gameTimeRules.secondsPerHour;
+      const quantity = Math.round(rate * unitsPerResource);
+      const missingWoodland = type === 'lumberjack' && !this.storage.hasProductionSource(cell);
+      const storageBlocked = !missingWoodland && quantity > 0 && !this.storage.planTransport(cell, quantity, spaces);
+      const outputRatio = type === 'farm' ? laborRatio : woodPerHour / economyRules.lumberWoodPerHour[3];
+      const ratio = storageBlocked || missingWoodland ? 0 : outputRatio;
+      this.buildings.set(key(cell), { workers, capacity, ratio, storageBlocked,
+        transport: this.storage.logistics.at(cell), ...(missingWoodland && { missingWoodland }) });
+      if (ratio > 0 && quantity > 0) {
+        total[resource] += quantity;
         this.batches.push({ cell, resource, units: quantity });
       }
     }
@@ -226,12 +277,18 @@ export class Economy {
   }
 
   immigrationSupply(population: Readonly<{ residencesSnapshot: readonly Residence[] }>, maxResidents: number, seconds: number,
-    foodPerResident: number, residentialCapacity: number): ReadonlyMap<string, number> {
+    foodPerResident: number, residentialCapacity: number, foodCoverage = 0): ReadonlyMap<string, number> {
     const homes = population.residencesSnapshot;
+    const total = homes.reduce((sum, home) => sum + home.residents, 0);
+    maxResidents = Math.min(maxResidents, this.sustainableArrivals(total, foodPerResident));
+    if (maxResidents <= 0) return new Map();
     const normal = this.distribution.immigrationPlan(homes, maxResidents,
       seconds, foodPerResident, residentialCapacity);
     if (normal.size > 0) return normal;
-    const total = homes.reduce((sum, home) => sum + home.residents, 0);
+    if (maxResidents > 0 && foodCoverage >= populationRules.migration.shortReserveFoodCoverage) {
+      const shortReserve = this.distribution.immigrationPlan(homes, 1, 1, foodPerResident, residentialCapacity);
+      if (shortReserve.size > 0) return shortReserve;
+    }
     // Limited recruitment can use real logistics stocks as evidence of near-term
     // supply; it never consumes warehouse food directly or manufactures resources.
     // Existing consumption remains market-only, so shortage still has consequences.
@@ -243,7 +300,12 @@ export class Economy {
       Math.min(maxResidents, economyRules.recovery.arrivalsPerEvaluation, (candidate.capacity ?? residentialCapacity) - candidate.residents)]]) : normal;
   }
 
-  laborContext(population: Pick<Population, 'total' | 'activePopulation' | 'residencesSnapshot'>): LaborContext {
+  private sustainableArrivals(residents: number, foodPerResident: number): number {
+    if (this.distribution.bootstrapActive || this.connectedFarms === 0 || foodPerResident <= 0) return Infinity;
+    return Math.max(0, Math.floor(this.connectedFarms * economyRules.farmFoodPerSecond / foodPerResident) - residents);
+  }
+
+  laborContext(population: Pick<Population, 'total' | 'activePopulation' | 'residencesSnapshot' | 'capacityFor'>): LaborContext {
     const homes = population.residencesSnapshot;
     const markets = this.distribution.essentialMarkets(homes);
     const market = this.distribution.foodForStaffing(markets);
@@ -253,6 +315,9 @@ export class Economy {
     return {
       // Require a fuller buffer before moving a scarce worker back to sales.
       produceFoodFirst: population.activePopulation < 3 && food < buffer * (market.staffed ? 1 : 2),
+      minimumFarmWorkers: population.activePopulation >= 3 && food < buffer && markets.size > 0 && this.storage.canReceiveMarketFood()
+        ? Math.ceil(population.total * populationRules.foodPerResidentPerSecond * population.capacityFor('farm')
+          / economyRules.farmFoodPerSecond) : 0,
       unavailable: (cell, type) => this.laborIssue(cell, type) !== null,
       marketCoverage: cell => this.distribution.inhabitedCoverage(cell, homes),
       essentialEligible: (cell, type) => {
@@ -264,6 +329,9 @@ export class Economy {
   }
 
   laborIssue(cell: Cell, type: ConstructionType): string | null {
+    if (type === 'lumberjack' && !this.storage.hasProductionSource(cell)) {
+      return missingWoodlandReason;
+    }
     if (type !== 'market' && type !== 'warehouse') return null;
     const inventory = this.storage.inventories.snapshot(type + ':' + key(cell));
     if (!inventory) return null;
@@ -291,11 +359,14 @@ export class Economy {
   migrationReason(population: Population, supply: ReadonlyMap<string, number>, attractiveness: number): string {
     if (population.availableHousing === 0) return 'No hay solares conectados con espacio.';
     if (population.unemploymentRate >= populationRules.migration.stopUnemploymentRate) return 'Desempleo demasiado alto.';
+    if (this.sustainableArrivals(population.total, populationRules.foodPerResidentPerSecond) === 0) {
+      return 'La producción máxima de las granjas conectadas no cubre más llegadas.';
+    }
     if (supply.size === 0) return this.distribution.supplyBlockReason(population.residencesSnapshot);
     if (attractiveness === 0) return 'El atractivo es insuficiente para nuevas llegadas.';
     const normal = this.distribution.immigrationPlan(population.residencesSnapshot, populationRules.familySize,
       populationRules.immigrationIntervalSeconds, populationRules.foodPerResidentPerSecond, populationRules.residentsPerPlot);
-    return normal.size === 0 ? 'Recuperación limitada: hasta 1 habitante por evaluación con alimentos reales.'
+    return normal.size === 0 ? 'Llegadas limitadas: hasta 1 habitante por evaluación con alimentos reales.'
       : 'Suministro previsto suficiente para inmigración.';
   }
   setWarehouseDraining(cell: Cell, draining: boolean): boolean {
@@ -346,10 +417,12 @@ export class Economy {
     // Capacity is shared and can fill between seconds, even within one update.
     for (let second = 0; second < seconds; second++) {
       this.completedMs += 1000;
+      this.distribution.beginSecond();
+      this.storage.logistics.advance(1000, this.completedMs);
       this.refresh();
 
       for (const batch of this.batches) {
-        this.storage.depositProduction(batch.cell, batch.resource, batch.units);
+        this.storage.queueProduction(batch.cell, batch.resource, batch.units, this.completedMs);
       }
       this.distribution.advanceSecond();
       this.storage.advanceDrain();

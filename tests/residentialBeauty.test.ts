@@ -4,6 +4,7 @@ import { constructionDimensions } from '../src/map/ConstructionMap.ts';
 import { Session } from '../src/persistence/Session.ts';
 import { HousingEvolution } from '../src/population/HousingEvolution.ts';
 import { urbanVoiceTemplates } from '../src/population/VillageVoiceCatalog.ts';
+import { setFixtureRank } from './fixtures/settlementRank.ts';
 
 const c = (column: number, row: number) => ({ column, row });
 const home = c(10, 10);
@@ -39,6 +40,7 @@ test('decoration charges maintenance once, employs nobody and a fountain supplie
   snapshot.economy.treasury.units *= 4;
   const { session: game } = Session.restore(snapshot);
   const { economy, simulation, population } = game;
+  setFixtureRank(simulation, 'villa');
   assert.equal(simulation.build(c(7, 10), 'park'), null);
   assert.equal(simulation.build(c(11, 10), 'plaza'), null);
   assert.equal(simulation.build(c(10, 8), 'garden'), null);

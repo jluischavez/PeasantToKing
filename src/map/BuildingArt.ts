@@ -13,9 +13,10 @@ import stone from '../assets/buildings/road-stone.svg?url';
 import villageCenter from '../assets/buildings/village-center.svg?url';
 import warehouse from '../assets/buildings/warehouse.svg?url';
 import well from '../assets/buildings/well.svg?url';
+import tradeHouse from '../assets/buildings/trade-house.svg?url';
 
 export const buildingArt: Record<ConstructionType, string> = {
-  bridge, farm, garden, house, lumberjack, market, park, plaza, road, villageCenter, warehouse, well,
+  bridge, farm, garden, house, lumberjack, market, park, plaza, road, tradeHouse, villageCenter, warehouse, well,
 };
 
 export const buildingTexture = (type: ConstructionType): string => 'building-' + type;

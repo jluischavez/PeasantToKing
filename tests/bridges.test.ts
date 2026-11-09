@@ -7,6 +7,7 @@ import { getRoadMask, RoadDirection } from '../src/map/RoadAppearance.ts';
 import { TerrainMap, terrainCode } from '../src/map/Terrain.ts';
 import { legacyProceduralTerrain, newWorld } from '../src/map/World.ts';
 import { Session } from '../src/persistence/Session.ts';
+import { setFixtureRank } from './fixtures/settlementRank.ts';
 
 function crossing(width = 2, vertical = false, shore = terrainCode('grass')) {
   const world = newWorld(22, legacyProceduralTerrain);
@@ -58,6 +59,7 @@ test.each([false, true])('builds a complete crossing with one total charge and p
 test('upgrading the approach preserves the bridge, the river and connectivity', () => {
   const { game, from, to, water } = crossing();
   const { map, simulation, connections } = game;
+  setFixtureRank(simulation, 'villa');
   assert.equal(simulation.requestBridge(from, water), null);
   assert.equal(simulation.confirmBridge(), null);
   assert.equal(simulation.build(to, 'road'), null);
@@ -144,7 +146,7 @@ test('roads, production, storage, market and well coverage use bridge tiles, and
   assert.ok(simulation.water.suppliedAt(home) > 0);
   assert.ok(economy.storage.warehouseAt(warehouse)?.operational);
   assert.ok(economy.storage.depositProduction(farm, 'food', 30 * unitsPerResource));
-  simulation.advance(5000);
+  simulation.advance(15000);
   assert.ok(economy.distribution.marketAt(market)!.food > 0);
   const before = economy.resources;
   const terrain = map.terrain.save();

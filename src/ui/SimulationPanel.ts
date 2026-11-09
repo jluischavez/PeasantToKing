@@ -6,13 +6,17 @@ import type { AuditResource, EconomicEvent, EconomicHistory } from '../economy/E
 import { resourceNames } from '../economy/Economy';
 import { unitsPerResource } from '../economy/Inventories';
 import { constructionNames, isConstructionType } from '../map/ConstructionMap';
-import type { SettlementSimulation } from '../simulation/SettlementSimulation';
+import type { OccasionalArrival, SettlementSimulation } from '../simulation/SettlementSimulation';
 import { formatGameTime, gameTimeAt } from '../simulation/GameTime';
+import { rankRules, settlementRanks } from '../simulation/SettlementProgress';
 
 const operationNames = {
+  'mission-contribution': 'Contribución de misión', 'mission-reward': 'Recompensa de misión', 'mission-delivery': 'Entrega de misión',
   production: 'Producción', transfer: 'Transferencia', consumption: 'Consumo', sale: 'Venta',
   construction: 'Costo de construcción', 'construction-material': 'Material de construcción',
-  demolition: 'Costo de demolición', clearing: 'Limpieza de terreno',
+  demolition: 'Costo de demolición', clearing: 'Limpieza de terreno', recognition: 'Pago de reconocimiento',
+  tribute: 'Tributo real', offering: 'Ofrenda real',
+  export: 'Exportación', import: 'Importación',
   wages: 'Salarios', maintenance: 'Mantenimiento', tax: 'Impuestos',
 } as const;
 const endpointNames: Readonly<Record<string, string>> = {
@@ -20,11 +24,18 @@ const endpointNames: Readonly<Record<string, string>> = {
   'initial-reserve': 'Reserva inicial', 'food-consumption': 'Consumo',
   'construction-reserve': 'Reserva de construcción', workers: 'Trabajadores',
   'building-maintenance': 'Mantenimiento de construcciones', 'tax-base': 'Base tributaria residencial',
+  crown: 'La Corona', 'workers-arrears': 'Salarios pendientes', 'maintenance-arrears': 'Mantenimiento pendiente',
 };
 
 function endpointName(id: string): string {
   const [type, coordinates] = id.split(':');
+  if (type === 'cargo') return 'Cargamento ' + coordinates;
+  if (type === 'mission') return 'Misión del reino ' + id.slice(8);
   if (type === 'terrain' && coordinates) return 'Terreno (' + coordinates + ')';
+  if (type === 'rank') {
+    const rank = settlementRanks.find(rank => rank === coordinates);
+    if (rank) return rankRules[rank].name;
+  }
   return isConstructionType(type) && coordinates
     ? constructionNames[type] + ' (' + coordinates + ')'
     : endpointNames[id] ?? id;
@@ -45,6 +56,7 @@ export class SimulationPanel {
   private readonly populationList = document.querySelector<HTMLOListElement>('#population-events-list')!;
   private readonly populationEmpty = document.querySelector<HTMLElement>('#population-events-empty')!;
   private lastDeparture: EmigrationEvent | null = null;
+  private lastArrival: OccasionalArrival | null = null;
   private readonly events = new AbortController();
   private readonly simulation: SettlementSimulation;
   private readonly history: EconomicHistory;
@@ -81,17 +93,21 @@ export class SimulationPanel {
 
   render(building = this.building): void {
     this.building = building;
-    setText(this.pause, this.simulation.paused ? 'Reanudar' : 'Pausar');
+    const defeated = this.simulation.crown.defeated;
+    setText(this.pause, defeated ? 'Partida terminada' : this.simulation.paused ? 'Reanudar' : 'Pausar');
+    this.pause.disabled = this.speed.disabled = defeated;
     const speed = String(this.simulation.speed);
     if (this.speed.value !== speed) this.speed.value = speed;
     this.renderClock();
     if (this.audit.hidden) return;
     const departures = this.simulation.wellbeing.emigrationEvents;
+    const arrivals = this.simulation.occasionalArrivals;
 
     const target = this.selectedOnly.checked ? building : undefined;
     const resource = this.resource.value as AuditResource | '';
     const view = JSON.stringify([this.history.latestId, resource, target, this.selectedOnly.checked]);
-    if (view === this.lastView && (departures.at(-1) ?? null) === this.lastDeparture) return;
+    if (view === this.lastView && (departures.at(-1) ?? null) === this.lastDeparture
+      && (arrivals.at(-1) ?? null) === this.lastArrival) return;
     this.lastView = view;
     const events = target === null ? [] : this.history.read(resource || undefined, target);
     this.feed.render([...events].reverse(), event => event.id, event => {
@@ -118,20 +134,24 @@ export class SimulationPanel {
       row.append(title, route, balances);
       return row;
     }, () => {
-      this.renderEmigrationEvents(departures);
+      this.renderPopulationEvents(departures, arrivals);
       this.empty.hidden = events.length > 0;
       setText(this.empty, target === null ? 'Selecciona un edificio en el mapa.' : 'Todavía no hay movimientos para este filtro.');
     });
   }
 
-  private renderEmigrationEvents(departures: readonly EmigrationEvent[]): void {
-    const latest = departures.at(-1);
-    this.lastDeparture = latest ?? null;
-    this.populationEmpty.hidden = departures.length > 0;
-    this.populationList.replaceChildren(...[...departures].reverse().map(event => {
+  private renderPopulationEvents(departures: readonly EmigrationEvent[], arrivals: readonly OccasionalArrival[]): void {
+    this.lastDeparture = departures.at(-1) ?? null;
+    this.lastArrival = arrivals.at(-1) ?? null;
+    const events = [
+      ...arrivals.map(event => ({ ...event, residents: 1, label: 'Llegada ocasional' })),
+      ...departures.map(event => ({ ...event, label: event.reason === 'deterioration'
+        ? 'Emigración por deterioro de vivienda' : 'Emigración por descontento sostenido' })),
+    ].sort((a, b) => b.timeMs - a.timeMs);
+    this.populationEmpty.hidden = events.length > 0;
+    this.populationList.replaceChildren(...events.map(event => {
       const row = document.createElement('li');
-      const reason = event.reason === 'deterioration' ? 'Emigración por deterioro de vivienda' : 'Emigración por descontento sostenido';
-      row.textContent = formatGameTime(gameTimeAt(event.timeMs)) + ' · ' + reason + ' · '
+      row.textContent = formatGameTime(gameTimeAt(event.timeMs)) + ' · ' + event.label + ' · '
         + formatNumber(event.residents) + (event.residents === 1 ? ' habitante' : ' habitantes')
         + ' · Vivienda (' + event.cell.column + ',' + event.cell.row + ')';
       return row;

@@ -7,12 +7,15 @@ import type { Cell } from '../map/CellSelection';
 import type { ConstructionMap } from '../map/ConstructionMap';
 import type { RoadConnections } from '../map/RoadConnections';
 import type { Population } from '../population/Population';
+import { hasHarvestableWoodland } from '../map/Woodland.ts';
+import { Logistics } from './Logistics.ts';
 
-export const storageRules = { warehouseCapacity: 300 } as const;
+export const storageRules = { warehouseCapacity: 300, spacePerProductInMixedWarehouse: 30 } as const;
 export type WarehouseSnapshot = Readonly<{
-  food: number; wood: number; used: number; free: number; capacity: number;
+  food: number; wood: number; used: number; free: number; capacity: number; incoming: number;
   workers: number; workerCapacity: number; connected: boolean; operational: boolean;
   accepts: Readonly<ProductFlags>; marketDispatch: Readonly<ProductFlags>; draining: boolean; drainStatus: string;
+  outgoing: ReturnType<Logistics['at']>;
 }>;
 type Warehouse = { id: string; cell: Cell; workers: number; workerCapacity: number; connected: boolean };
 type Allocation = { destination: string; units: number };
@@ -22,12 +25,15 @@ const key = (cell: Cell): string => `warehouse:${cell.column},${cell.row}`;
 
 export class Storage {
   readonly inventories: Inventories;
+  readonly logistics: Logistics;
   private readonly warehouses = new Map<string, Warehouse>();
   private connections: RoadConnections | null = null;
   private readonly producers = new Map<string, StoredResource>();
+  private readonly activeWoodNetworks = new Set<string>();
 
   constructor(initial: Goods, history?: EconomicHistory) {
     this.inventories = new Inventories(history);
+    this.logistics = new Logistics(this.inventories);
     this.inventories.create('initial-reserve', {
       kind: 'reserve', capacity: Number.MAX_SAFE_INTEGER, network: null, operational: true,
     }, { food: initial.food, wood: 0 });
@@ -37,8 +43,10 @@ export class Storage {
   }
 
   sync(map: ConstructionMap, connections: RoadConnections, workforce: Workforce): void {
+    this.logistics.sync(map, connections, workforce);
     this.connections = connections;
     this.producers.clear();
+    this.activeWoodNetworks.clear();
     for (const warehouse of this.warehouses.values()) {
       if (map.getConstruction(warehouse.cell) !== 'warehouse') {
         this.inventories.removeEmptyBuilding(warehouse.id);
@@ -47,7 +55,13 @@ export class Storage {
     }
     for (const { cell, type } of map.occupiedCells()) {
       if (type === 'farm' || type === 'lumberjack') {
-        this.producers.set(key(cell), type === 'farm' ? 'food' : 'wood');
+        if (type === 'farm' || hasHarvestableWoodland(map.terrain, cell, map.constructionAt(cell)!)) {
+          this.producers.set(key(cell), type === 'farm' ? 'food' : 'wood');
+          if (type === 'lumberjack' && workforce.workersAt(cell) > 0) {
+            const network = connections.networkFor(cell);
+            if (network !== null) this.activeWoodNetworks.add(network);
+          }
+        }
       }
       if (type !== 'warehouse') continue;
       const id = key(cell);
@@ -63,6 +77,7 @@ export class Storage {
       this.warehouses.set(id, { id, cell, workers, workerCapacity, connected: network !== null });
       this.inventories.setAccess(id, network, workers > 0);
     }
+    this.logistics.reconcile(false);
   }
 
   warehouseAt(cell: Cell): WarehouseSnapshot | undefined {
@@ -72,11 +87,13 @@ export class Storage {
     return {
       food: inventory.goods.food / unitsPerResource, wood: inventory.goods.wood / unitsPerResource,
       used: inventory.used / unitsPerResource, free: inventory.free / unitsPerResource,
+      incoming: this.inventories.reserved(key(cell)) / unitsPerResource,
+      outgoing: this.logistics.at(cell),
       capacity: inventory.capacity / unitsPerResource,
       workers: warehouse.workers, workerCapacity: warehouse.workerCapacity,
       connected: warehouse.connected, operational: inventory.operational, accepts: inventory.products,
       marketDispatch: inventory.marketDispatch,
-      draining: inventory.draining, drainStatus: inventory.draining ? this.drainStatus(inventory) : '',
+      draining: inventory.draining, drainStatus: inventory.draining ? this.drainStatus(inventory, cell) : '',
     };
   }
 
@@ -99,8 +116,9 @@ export class Storage {
     });
   }
 
-  private drainStatus(source: InventorySnapshot): string {
-    if (source.used === 0) return 'Vacío. Puedes demoler este almacén.';
+  private drainStatus(source: InventorySnapshot, cell: Cell): string {
+    if (source.used === 0) return this.logistics.demolitionIssue(cell)
+      ? 'Mercancías en tránsito: espera a que terminen las entregas.' : 'Vacío. Puedes demoler este almacén.';
     if (source.network === null) return 'Vaciado bloqueado: conecta este almacén por caminos.';
     if (!source.operational) return 'Vaciado bloqueado: este almacén necesita empleados.';
     const destinations = this.drainDestinations(source.network);
@@ -129,10 +147,22 @@ export class Storage {
           if (remaining === 0) break;
           if (!this.inventories.acceptsIncoming(destination, product)) continue;
           const quantity = Math.min(remaining, this.inventories.snapshot(destination)!.free);
-          if (quantity > 0 && this.inventories.transfer(id, destination, product, quantity)) remaining -= quantity;
+          if (quantity > 0) remaining -= this.dispatch(id, this.warehouses.get(destination)!.cell, product, quantity, false);
         }
       }
     }
+  }
+
+  dispatch(source: string, destination: Cell, product: ProductId, units: number, market: boolean): number {
+    const warehouse = this.warehouses.get(source);
+    if (!warehouse) return 0;
+    let remaining = units;
+    while (remaining > 0) {
+      const sent = this.logistics.queueTransfer(warehouse.cell, destination, product, remaining, market);
+      if (sent === 0) break;
+      remaining -= sent;
+    }
+    return units - remaining;
   }
 
   get initialFoodReserve(): number {
@@ -145,6 +175,8 @@ export class Storage {
 
   get totalsUnits(): Goods {
     const total = { ...this.inventories.snapshot('initial-reserve')!.goods };
+    const cargo = this.logistics.goods();
+    total.food += cargo.food; total.wood += cargo.wood;
     total.wood += this.inventories.snapshot('construction-reserve')!.goods.wood;
     for (const warehouse of this.warehouses.values()) {
       const goods = this.inventories.snapshot(warehouse.id)!.goods;
@@ -195,6 +227,15 @@ export class Storage {
     return spaces;
   }
 
+  hasProductionSource(cell: Cell): boolean { return this.producers.has(key(cell)); }
+
+  canReceiveMarketFood(): boolean {
+    return [...this.warehouses.values()].some(warehouse => {
+      const stock = this.inventories.snapshot(warehouse.id)!;
+      return warehouse.connected && !stock.draining && stock.products.food && stock.marketDispatch.food;
+    });
+  }
+
   // Plan a whole batch, possibly across multiple warehouses. Failed plans
   // neither reserve capacity nor create goods.
   planProduction(cell: Cell, units: number, spaces = this.availableSpaces()): Allocation[] | undefined {
@@ -208,7 +249,11 @@ export class Storage {
       const inventory = this.inventories.snapshot(id);
       if (!inventory?.operational || inventory.network !== network
         || !this.inventories.acceptsIncoming(id, product)) continue;
-      const quantity = Math.min(free, remaining);
+      const other = product === 'food' ? 'wood' : 'food';
+      const reserveOther = inventory.products[other] && (other === 'food' || this.activeWoodNetworks.has(network));
+      const protectedSpace = reserveOther
+        ? Math.max(0, storageRules.spacePerProductInMixedWarehouse * unitsPerResource - inventory.goods[other]) : 0;
+      const quantity = Math.min(Math.max(0, free - protectedSpace), remaining);
       if (quantity > 0) plan.push({ destination: id, units: quantity });
       remaining -= quantity;
       if (remaining === 0) break;
@@ -237,6 +282,31 @@ export class Storage {
     return true;
   }
 
+  planTransport(cell: Cell, units: number, spaces = this.availableSpaces()): Allocation[] | undefined {
+    if (!this.logistics.canProduce(cell)) return undefined;
+    // Keep the existing mixed-product space policy; exclude destinations with no physical road route.
+    const reachable = new Map([...spaces].filter(([id]) => {
+      const warehouse = this.warehouses.get(id);
+      return warehouse && this.logistics.acceptsDestination(warehouse.cell) && this.logistics.route(cell, warehouse.cell) !== null;
+    }));
+    const plan = this.planProduction(cell, units, reachable);
+    if (plan && plan.length > this.logistics.slotsAt(cell)) return undefined;
+    if (plan) for (const allocation of plan) spaces.set(allocation.destination, spaces.get(allocation.destination)! - allocation.units);
+    return plan;
+  }
+
+  queueProduction(cell: Cell, resource: StoredResource, units: number, time: number): boolean {
+    if (this.producers.get(key(cell)) !== resource) return false;
+    const plan = this.planTransport(cell, units);
+    if (!plan) return false;
+    for (const allocation of plan) {
+      if (!this.logistics.queue(cell, this.warehouses.get(allocation.destination)!.cell, resource, allocation.units, time)) {
+        throw new Error('A validated logistics dispatch failed');
+      }
+    }
+    return true;
+  }
+
   restoreWarehouseOrder(ids: readonly string[]): void {
     const warehouses = new Map(this.warehouses);
     this.warehouses.clear();
@@ -258,12 +328,19 @@ export class Storage {
     return [...this.warehouses.keys()].filter(id => this.inventories.snapshot(id)!.operational);
   }
 
+  commercialWarehouseIds(network: string, reachesExterior: (cell: Cell) => boolean): string[] {
+    return this.operationalWarehouseIds().filter(id => {
+      const warehouse = this.warehouses.get(id)!;
+      return this.inventories.snapshot(id)!.network === network && reachesExterior(warehouse.cell);
+    });
+  }
+
   // Only markets can supply both products. The initial reserve supplies only food.
   consumeInventory(id: string, product: ProductId, units: number, destination = 'food-consumption'): number {
     if (!Number.isSafeInteger(units) || units <= 0) return 0;
     const source = this.inventories.snapshot(id);
-    if (!source?.operational || (source.kind !== 'market' && (source.kind !== 'reserve' || product !== 'food'))) return 0;
-    const quantity = Math.min(units, source.goods[product]);
+    if (!source?.operational || (source.kind !== 'household' && source.kind !== 'market' && (source.kind !== 'reserve' || product !== 'food'))) return 0;
+    const quantity = Math.min(units, source.available[product]);
     if (quantity === 0) return 0;
     this.inventories.create('food-consumption', {
       kind: 'consumer', capacity: quantity, network: null, operational: true,

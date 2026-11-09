@@ -4,6 +4,7 @@ import type { Population } from '../population/Population';
 import type { CityWellbeing } from '../population/Wellbeing';
 import { needIds } from '../population/HouseholdNeeds';
 import type { HouseholdNeeds } from '../population/HouseholdNeeds';
+import type { MigrationOutlook } from '../simulation/SettlementSimulation';
 import { perGameHour } from '../simulation/GameTime';
 import { setText } from './domText';
 
@@ -23,6 +24,7 @@ export class PopulationPanel {
   private readonly wellbeingCounts = document.querySelector<HTMLElement>('#housing-wellbeing-counts')!;
   private readonly concerns = document.querySelector<HTMLElement>('#wellbeing-concerns')!;
   private readonly reason = document.querySelector<HTMLElement>('#migration-reason')!;
+  private readonly migrationMode = document.getElementById('migration-mode')!;
   private readonly capacity = document.querySelector<HTMLElement>('#residential-capacity')!;
   private readonly connected = document.querySelector<HTMLElement>('#connected-capacity')!;
   private readonly jobs = document.querySelector<HTMLElement>('#job-capacity')!;
@@ -45,7 +47,7 @@ export class PopulationPanel {
     this.attractiveness.title = 'Interés por vivir en la ciudad según el abastecimiento, el bienestar, el empleo y los impuestos.';
   }
 
-  render(population: Population, attraction: number, city: CityWellbeing, reason: string, shortage: number,
+  render(population: Population, migration: MigrationOutlook, city: CityWellbeing, shortage: number,
     needs: ReturnType<HouseholdNeeds['summarize']>, beauty?: number): void {
     for (const need of needIds) {
       const percent = needs.percentages?.[need];
@@ -58,14 +60,17 @@ export class PopulationPanel {
     setText(this.priorityNeed, needs.mainNeed
       ? 'Falta principalmente ' + needNames[needs.mainNeed] + ' · ' + formatNumber(needs.affected) + ' hab. afectados (est.)'
       : needs.percentages ? 'Necesidades cubiertas' : 'Sin datos de suministro');
-    setText(this.reason, reason);
+    setText(this.migrationMode, migration.mode === 'normal' ? 'Admisiones normales abiertas'
+      : migration.mode === 'occasional' ? `Llegadas ocasionales · oportunidad en ${migration.recoveryHours} h del juego`
+      : 'Admisiones cerradas');
+    setText(this.reason, migration.reason);
     setText(this.shortage, formatNumber(shortage));
     const total = formatNumber(population.total);
     setText(this.total, total);
     setText(this.totalInNeeds, total);
     setText(this.active, formatNumber(population.activePopulation));
     setText(this.unemploymentRate, formatNumber(population.unemploymentRate * 100));
-    setText(this.attractiveness, formatNumber(attraction));
+    setText(this.attractiveness, formatNumber(migration.attraction));
     setText(this.housing, formatNumber(population.availableHousing));
     setText(this.waiting, formatNumber(population.waitingImmigrants));
     this.waiting.title = 'Límite de la lista de espera: ' + population.waitingCapacity;

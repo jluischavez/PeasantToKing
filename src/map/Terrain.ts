@@ -50,8 +50,22 @@ export class TerrainMap {
     return true;
   }
 
+  plantTree(cell: Cell): boolean {
+    if (!this.canBuild(cell)) return false;
+    this.codes[this.index(cell)] = terrainCode(this.at(cell)!.ground, 'tree');
+    return true;
+  }
+
   save(): string {
     return Array.from(this.codes, code => String.fromCharCode(encodingStart + code)).join('');
+  }
+
+  expanded(columns: number, rows: number): TerrainMap {
+    const codes = new Uint8Array(columns * rows);
+    for (let row = 0; row < this.rows; row++) {
+      codes.set(this.codes.subarray(row * this.columns, (row + 1) * this.columns), row * columns);
+    }
+    return new TerrainMap(columns, rows, codes);
   }
 
   static restore(columns: number, rows: number, data: unknown): TerrainMap {

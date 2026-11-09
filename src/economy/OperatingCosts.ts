@@ -14,6 +14,7 @@ export const maintenanceByType: Readonly<Record<ConstructionType, number>> = {
   lumberjack: 20,
   warehouse: 35,
   market: 30,
+  tradeHouse: 45,
   well: 15,
   villageCenter: 0,
   garden: 50,

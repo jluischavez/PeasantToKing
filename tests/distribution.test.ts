@@ -1,3 +1,4 @@
+import { deliverFixtureCargo } from './fixtures/logistics.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { Economy } from '../src/economy/Economy.ts';
@@ -35,6 +36,7 @@ function setup(marketWorkers = 1) {
   const food = (amount: number) => assert.equal(economy.storage.depositProduction(farm, 'food', Math.round(amount * U)), true);
   const restock = () => {
     for (let i = 0; i < distributionRules.restockIntervalSeconds; i++) economy.distribution.advanceSecond();
+    deliverFixtureCargo(economy);
   };
   const consume = (homes: { cell: { column: number; row: number }; residents: number }[]) =>
     economy.consumeHomes({ residencesSnapshot: homes }, populationRules.foodPerResidentPerSecond);
@@ -51,6 +53,8 @@ test('restocking occurs at the configured interval, preserves totals and respect
     assert.equal(economy.distribution.marketAt(market)!.food, 0);
   }
   economy.distribution.advanceSecond();
+  assert.equal(economy.distribution.marketAt(market)!.food, 0);
+  deliverFixtureCargo(economy);
   assert.equal(economy.distribution.marketAt(market)!.food, 100);
   assert.equal(economy.storage.warehouseAt(warehouse)!.food, 50);
   assert.equal(economy.resources.food, before);
@@ -181,7 +185,7 @@ test('sales pay exactly for delivered food, including partial demand, with no pa
   const before = economy.resources.food;
   consume([{ cell: near, residents: 4 }, { cell: boundary, residents: 4 }]);
   assert.equal(economy.resources.gold, marketFood / 10);
-  assert.equal(economy.resources.food, before - marketFood);
+  assert.equal(Math.round(economy.resources.food * U), Math.round(before * U) - Math.round(marketFood * U));
   assert.equal(economy.distribution.marketAt(market)!.food, 0);
   assert.equal(economy.storage.initialFoodReserve, 20);
   consume([{ cell: near, residents: 4 }]);
@@ -266,7 +270,8 @@ test('an unfed house does not prevent immigration into another house with adequa
   assert.equal(population.residentsAt(outside), 2);
   assert.equal(population.residentsAt(near), 4);
   assert.equal(population.total, 8);
-  assert.equal(economy.resources.gold, 0.04);
+  assert.equal(economy.resources.gold, 0);
+  assert.ok(economy.storage.logistics.incoming(market, 'food', true) > 0);
 });
 
 test('central transfers reject unavailable wood, direct warehouse consumption and market production deposits', () => {
@@ -329,6 +334,7 @@ test('multiple markets share finite warehouse stock only on scheduled replenishm
   assert.equal(economy.distribution.marketAt(second)!.food, 50);
   assert.equal(economy.storage.warehouseAt(warehouse)!.food, 1);
   for (let i = 1; i < distributionRules.restockIntervalSeconds; i++) economy.distribution.advanceSecond();
+  deliverFixtureCargo(economy);
   assert.equal(economy.distribution.marketAt(market)!.food, 100);
   assert.equal(economy.distribution.marketAt(second)!.food, 50.6);
   assert.equal(economy.storage.warehouseAt(warehouse)!.food, 0);
@@ -373,15 +379,19 @@ test('simulation moves farm food through the warehouse and market before househo
   assert.equal(population.workersAt(market), 1);
 
   simulation.advance(4999);
-  assert.equal(economy.storage.warehouseAt(warehouse)!.food, 2);
+  assert.equal(economy.storage.warehouseAt(warehouse)!.food, 0);
+  assert.equal(economy.storage.logistics.goods().food, 2.56 * U);
   assert.equal(economy.distribution.marketAt(market)!.food, 0);
   assert.equal(economy.storage.initialFoodReserve, 17.6);
   assert.equal(economy.resources.gold, 0);
 
   simulation.advance(1);
-  assert.equal(economy.storage.warehouseAt(warehouse)!.food, 0);
-  assert.equal(economy.distribution.marketAt(market)!.food, 1.9);
-  assert.equal(economy.storage.initialFoodReserve, 17.6);
-  assert.equal(economy.resources.food, 19.5);
-  assert.equal(economy.resources.gold, 0.06);
+  assert.equal(economy.storage.warehouseAt(warehouse)!.food, 1.28);
+  assert.equal(economy.distribution.marketAt(market)!.food, 0);
+  assert.equal(economy.storage.initialFoodReserve, 17);
+  assert.equal(economy.resources.food, 20.2);
+  assert.equal(economy.resources.gold, 0);
+  simulation.advance(5000);
+  assert.ok(economy.resources.gold > 0);
+  assert.ok(economy.distribution.marketAt(market)!.food + economy.distribution.marketAt(market)!.incomingFood > 0);
 });

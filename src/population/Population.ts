@@ -21,26 +21,32 @@ export const populationRules = {
     foodWeight: 40,
     jobsWeight: 25,
     stopUnemploymentRate: 0.6,
+    crisisFoodCoverage: 0.5,
+    shortReserveFoodCoverage: 0.9,
   },
 } as const;
+
+export const recoveryMigrationRules = { populationLimit: 12, intervalHours: 8, historyLimit: 100 } as const;
 
 export const employmentRules = {
   minimumServices: ['market', 'warehouse', 'farm', 'well'],
   productionRecoveryServices: ['farm', 'warehouse', 'market', 'well'],
   singleWorkerRecoveryServices: ['warehouse', 'market', 'farm', 'well'],
-  fillPriority: { farm: 0, warehouse: 1, market: 2, well: 3, lumberjack: 10, house: 20, road: 20, bridge: 20,
+  fillPriority: { farm: 0, warehouse: 1, market: 2, well: 3, lumberjack: 10, tradeHouse: 11, house: 20, road: 20, bridge: 20,
     villageCenter: 20, garden: 20, park: 20, plaza: 20 },
 } as const;
 
 type MigrationConditions = {
   modifier?: number;
   happiness?: number;
+  foodCoverage?: number;
   seconds?: number;
   admissionsOpen?: boolean;
 };
 
 export type LaborContext = {
   produceFoodFirst?: boolean;
+  minimumFarmWorkers?: number;
   unavailable?: (cell: Cell, type: ConstructionType) => boolean;
   essentialEligible?: (cell: Cell, type: ConstructionType) => boolean;
   marketCoverage?: (cell: Cell) => readonly string[];
@@ -49,7 +55,7 @@ export type LaborContext = {
 const jobsByType: Record<ConstructionType, number> = {
   house: 0, road: 0, bridge: 0, villageCenter: 0,
   garden: 0, park: 0, plaza: 0,
-  farm: 4, lumberjack: 3, market: 3, warehouse: 2, well: 1,
+  farm: 4, lumberjack: 3, market: 3, warehouse: 2, well: 1, tradeHouse: 2,
 };
 
 type Residence = { cell: Cell; residents: number; connected: boolean; level: HousingLevel };
@@ -123,6 +129,10 @@ export class Population {
   }
 
   get waitingImmigrants(): number { return this.waiting; }
+
+  get canAdmitOccasional(): boolean {
+    return this.total < recoveryMigrationRules.populationLimit && this.availableHousing > 0;
+  }
 
   get availableHousing(): number {
     return [...this.residences.values()]
@@ -216,10 +226,13 @@ export class Population {
     return Math.max(0, Math.floor(food / foodPerResident) - this.total);
   }
 
-  migrationAttractiveness(food: number, modifier = 0, happiness: number = populationRules.migration.neutralHappiness): number {
+  migrationAttractiveness(food: number, modifier = 0, happiness: number = populationRules.migration.neutralHappiness,
+    foodCoverage = 0): number {
     const supported = this.foodSupportedArrivals(food);
     const rules = populationRules.migration;
-    if (supported === 0 || this.unemploymentRate >= rules.stopUnemploymentRate) return 0;
+    if (this.unemploymentRate >= rules.stopUnemploymentRate) return 0;
+    const continuity = supported > 0 ? 1 : Math.max(0, (foodCoverage - rules.crisisFoodCoverage) / (1 - rules.crisisFoodCoverage));
+    if (continuity === 0) return 0;
     const foodAvailability = Math.min(1, supported / populationRules.familySize);
     const opportunities = Math.min(1, this.availableJobs / Math.max(1, this.activePopulation));
     const employmentFactor = 1 - this.unemploymentRate / rules.stopUnemploymentRate;
@@ -227,11 +240,11 @@ export class Population {
     const weights = rules.wellbeingWeight + rules.foodWeight + rules.jobsWeight;
     const base = (rules.wellbeingWeight * wellbeing + rules.foodWeight * foodAvailability
       + rules.jobsWeight * opportunities) / weights;
-    return Math.max(0, Math.min(100, Math.round(100 * base * employmentFactor) + modifier));
+    return Math.max(0, Math.min(100, Math.round((100 * base * employmentFactor + modifier) * continuity)));
   }
 
   immigrate(food: number, supply?: ReadonlyMap<string, number>, conditions: MigrationConditions = {}): number {
-    const attractiveness = this.migrationAttractiveness(food, conditions.modifier, conditions.happiness);
+    const attractiveness = this.migrationAttractiveness(food, conditions.modifier, conditions.happiness, conditions.foodCoverage);
     if (attractiveness === 0) {
       this.migrationCredit = 0;
       const patience = populationRules.migration.patienceHours * gameTimeRules.secondsPerHour;
@@ -261,12 +274,8 @@ export class Population {
       supply ? [...supply.values()].reduce((sum, count) => sum + count, 0)
         : this.foodSupportedArrivals(food), this.availableHousing);
     if (remaining <= 0) return 0;
-    const plots = [...this.residences.values()]
-      .filter(plot => plot.connected && plot.residents < housingLevels[plot.level].capacity
-        && (!supply || (supply.get(key(plot.cell)) ?? 0) > 0))
-      .sort((a, b) => a.residents - b.residents);
     let arrived = 0;
-    for (const plot of plots) {
+    for (const plot of this.admissionPlots(supply)) {
       const count = Math.min(remaining, housingLevels[plot.level].capacity - plot.residents,
         supply?.get(key(plot.cell)) ?? populationRules.familySize);
       plot.residents += count;
@@ -277,6 +286,22 @@ export class Population {
     this.waiting -= arrived;
     this.assignWorkers();
     return arrived;
+  }
+
+  admitOccasional(): Cell | null {
+    if (!this.canAdmitOccasional) return null;
+    const [home] = this.admissionPlots();
+    if (!home) return null;
+    home.residents++;
+    this.assignWorkers();
+    return { ...home.cell };
+  }
+
+  private admissionPlots(supply?: ReadonlyMap<string, number>): Residence[] {
+    return [...this.residences.values()]
+      .filter(plot => plot.connected && plot.residents < housingLevels[plot.level].capacity
+        && (!supply || (supply.get(key(plot.cell)) ?? 0) > 0))
+      .sort((a, b) => a.residents - b.residents);
   }
 
   removeResident(cell: Cell): boolean {
@@ -357,6 +382,20 @@ export class Population {
       const assigned = Math.min(available, workplace.capacity - workplace.workers);
       workplace.workers += assigned;
       available -= assigned;
+    }
+    // During a food deficit, cover the missing farm work without vacating essential services.
+    const minimum = this.laborContext.minimumFarmWorkers ?? 0;
+    if (minimum === 0) return;
+    const farms = priority.filter(workplace => workplace.type === 'farm');
+    let farmers = farms.reduce((total, farm) => total + farm.workers, 0);
+    while (farmers < minimum) {
+      const farm = farms.find(entry => entry.workers < entry.capacity);
+      const donor = donors.filter(entry => entry.type !== 'farm' && entry.workers > 1)
+        .sort((a, b) => b.workers - a.workers)[0] ?? donors.find(entry => entry.type === 'lumberjack' && entry.workers > 0);
+      if (!farm || !donor) break;
+      farm.workers++;
+      donor.workers--;
+      farmers++;
     }
   }
 }

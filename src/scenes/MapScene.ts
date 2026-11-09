@@ -3,6 +3,7 @@ import { VillageVoicesPanel } from '../ui/VillageVoicesPanel';
 import { ProductConfigurationPanel } from '../ui/ProductConfigurationPanel';
 import Phaser from 'phaser';
 import { GridMap } from '../map/GridMap';
+import { TransportRenderer } from '../map/TransportRenderer';
 import { MapCamera, cellSize } from '../map/MapCamera';
 import type { CameraView } from '../map/MapCamera';
 import { startingCell } from '../map/World';
@@ -24,7 +25,12 @@ import type { RoadLevel } from '../map/RoadMaterials';
 import { ResourceBar } from '../ui/ResourceBar';
 import { CityAlerts } from '../ui/CityAlerts';
 import { CityTabs } from '../ui/CityTabs';
-import { populationRules } from '../population/Population';
+import { ChapterDialog } from '../ui/ChapterDialog';
+import { ChroniclesPanel } from '../ui/ChroniclesPanel';
+import { CrownPanel } from '../ui/CrownPanel';
+import { TradePanel } from '../ui/TradePanel';
+import { KingdomEventsPanel } from '../ui/KingdomEventsPanel';
+import { royalDecree, royalDefeat, royalLastWarning } from '../story/RoyalScenes';
 import { PopulationPanel } from '../ui/PopulationPanel';
 import { Session } from '../persistence/Session';
 import { SaveSlots } from '../persistence/SaveSlots';
@@ -58,6 +64,7 @@ export class MapScene extends Phaser.Scene {
     const session = this.session;
     const { map: constructions, world, connections, economy, population, simulation } = session;
     const map = new GridMap(this, constructions.terrain);
+    const transports = new TransportRenderer(this, economy.storage.logistics);
     const view = new MapCamera(world, constructions.villageCenter ?? this.selectedCell ?? startingCell(world), this.cameraView);
     const camera = this.cameras.main.setBounds(0, 0, world.columns * cellSize, world.rows * cellSize);
     const centerButton = document.querySelector<HTMLButtonElement>('#center-camera')!;
@@ -75,6 +82,7 @@ export class MapScene extends Phaser.Scene {
       map.renderSelection(cell, cell ? constructions.constructionAt(cell) ?? undefined : undefined);
     };
     const resourceBar = new ResourceBar(economy.currentTaxPolicy, policy => {
+      if (simulation.crown.defeated) return;
       economy.setTaxPolicy(policy);
       renderSummary();
     });
@@ -86,21 +94,21 @@ export class MapScene extends Phaser.Scene {
         sales: economy.salesRevenuePerSecond, bootstrap: economy.distribution.bootstrapActive,
         constructionReserve: economy.storage.constructionWoodReserve, constructionWood: economy.availableConstructionWood,
         costs: economy.operatingCostsPerHour(population.employed), taxes: economy.taxIncomePerHour(population.total),
+        tributes: simulation.crown.tributeTotal, offerings: simulation.crown.offeringTotal,
+        arrears: economy.operatingArrears, defeated: simulation.crown.defeated,
+        trade: simulation.trade.totals,
       });
-      const supply = economy.immigrationSupply(population, populationRules.familySize,
-        populationRules.immigrationIntervalSeconds, populationRules.foodPerResidentPerSecond,
-        populationRules.residentsPerPlot);
       const city = simulation.wellbeing.summarize(population.residencesSnapshot);
-      const attraction = simulation.migrationAttractiveness(city.happiness);
-      const reason = population.availableHousing > 0
-        && !simulation.wellbeing.admissionsOpen(simulation.simulatedTimeMs, city.happiness)
-        ? 'Admisiones en pausa hasta que se recupere el bienestar.'
-        : economy.migrationReason(population, supply, attraction);
+      const migration = simulation.migrationOutlook(city.happiness);
       const needs = simulation.needs.summarize(population.residencesSnapshot);
-      populationPanel.render(population, attraction, city, reason, economy.distribution.cumulativeFoodShortage, needs,
+      populationPanel.render(population, migration, city, economy.distribution.cumulativeFoodShortage, needs,
         simulation.beauty.average(population.residencesSnapshot));
       alerts.render(constructions, connections, needs, economy.storage.fullWarehouseCount, economy.blockedProducers, net);
-      menu.renderCosts(cost => simulation.costIssue(cost));
+      menu.renderCosts(cost => simulation.costIssue(cost), type => simulation.progress.buildingLock(type));
+      chronicles.render();
+      crownPanel.render();
+      tradePanel.render(!!constructions.kingdomRoad);
+      kingdomPanel.render();
     };
     const renderSelected = (): void => {
       const cell = selection.selected;
@@ -122,7 +130,8 @@ export class MapScene extends Phaser.Scene {
       const employment = cell && type && capacity > 0 ? { workers, capacity, issue: !connected
         ? 'Sin conexión vial al Centro de Aldea.'
         : economy.laborIssue(cell, type) ?? (workers === 0 ? 'Sin empleados asignados.'
-          : productivity?.storageBlocked ? 'Falta un almacén operativo, compatible y con espacio.' : null) } : undefined;
+          : productivity?.transport.dispatchStopped ? 'Despachos detenidos para completar la demolición.'
+          : productivity?.storageBlocked ? 'Esperando transporte: comprueba rutas, personal, permisos y capacidad de almacén.' : null) } : undefined;
       panel.render(cell, tile, type,
         connected, home ? population.residentsAt(home) : 0,
         productivity, warehouse, market,
@@ -131,8 +140,17 @@ export class MapScene extends Phaser.Scene {
         home ? simulation.wellbeing.at(home) : undefined, home ? simulation.water.suppliedAt(home) : 0,
         cell && type === 'well' ? simulation.water.wellAt(cell) : undefined,
         home ? { level: population.housingLevelAt(home), progress: simulation.housing.at(home), beauty: simulation.beauty.at(home),
-          needs: simulation.needs.currentAt(home), unemployment: population.unemploymentRate } : undefined,
-        royal, employment, building ?? undefined, roadLevel);
+          needs: simulation.needs.currentAt(home), unemployment: population.unemploymentRate,
+          waterIssue: simulation.water.suppliedAt(home) < population.residentsAt(home)
+            ? simulation.water.shortageReason(home) : undefined } : undefined,
+        royal, employment, building ?? undefined, roadLevel, home ? {
+          food: economy.storage.inventories.snapshot(`home-stock:${home.column},${home.row}`)?.goods.food ?? 0,
+          wood: economy.storage.inventories.snapshot(`home-stock:${home.column},${home.row}`)?.goods.wood ?? 0,
+          purchases: economy.storage.logistics.operations.filter(op => op.kind === 'household-purchase'
+            && op.destination.column === home.column && op.destination.row === home.row).length,
+          arrivals: economy.storage.logistics.journeys.filter(j => j.kind === 'immigration'
+            && j.destination.column === home.column && j.destination.row === home.row).reduce((n, j) => n + j.units, 0),
+        } : undefined);
       const demolition = simulation.demolitionTarget;
       const clearing = demolition?.kind === 'obstacle';
       const departing = demolition?.kind === 'building' && demolition.type === 'house'
@@ -155,10 +173,13 @@ export class MapScene extends Phaser.Scene {
       } else panel.renderConfirmation(target, demolition ? simulation.demolitionIssue(demolition.cell) : null,
         clearing ? 'clearing' : 'demolition');
       panel.renderClearing(!!tile?.obstacle && !demolition && !bridge);
+      const roadLock = upgrade ? simulation.progress.roadLock(upgrade.next) : null;
       panel.renderRoadUpgrade(upgrade && pendingUpgrade === null
-        ? 'Mejorar a ' + roadMaterials[upgrade.next].toLowerCase() + ' · ' + formatCost(upgrade.cost) : null, simulation.paused);
+        ? 'Mejorar a ' + roadMaterials[upgrade.next].toLowerCase() + ' · ' + (roadLock ?? formatCost(upgrade.cost)) : null,
+      simulation.paused || !!roadLock);
       simulationPanel.render(cell ? (type ? type + ':' + cell.column + ',' + cell.row : terrainAuditId(cell)) : null);
       configuration.render(cell, warehouse, market, simulation.paused);
+      tradePanel.renderSelected(type === 'tradeHouse' ? cell : null, population.total, simulation.crown.defeated);
       voicesPanel.render();
     };
     const sceneEvents = new AbortController();
@@ -183,6 +204,8 @@ export class MapScene extends Phaser.Scene {
       } else {
         simulationPanel.renderClock();
       }
+      renderRoyalScene();
+      transports.update(simulation.renderTimeMs, simulation.simulatedTimeMs);
     };
     let mode: ConstructionMode = null;
     let bridgeOrigin: Cell | null = null;
@@ -293,7 +316,7 @@ export class MapScene extends Phaser.Scene {
     }, () => {
       const cell = selection.selected;
       const upgrade = cell && mode === null ? simulation.roadUpgradeAt(cell) : null;
-      if (!upgrade || simulation.paused) return;
+      if (!upgrade || simulation.paused || simulation.progress.roadLock(upgrade.next)) return;
       pendingUpgrade = upgrade.level;
       renderSelected();
     });
@@ -308,8 +331,7 @@ export class MapScene extends Phaser.Scene {
       updatePointerFeedback();
       renderSelected();
     });
-    const voicesPanel = new VillageVoicesPanel(simulation.voices, cell => {
-      if (constructions.getConstruction(cell) !== 'house') return;
+    const selectExisting = (cell: Cell) => {
       simulation.cancelDemolition();
       simulation.cancelBridge();
       pendingUpgrade = null;
@@ -318,8 +340,20 @@ export class MapScene extends Phaser.Scene {
       renderMapSelection();
       renderSelected();
       updatePointerFeedback();
+    };
+    const voicesPanel = new VillageVoicesPanel(simulation.voices, cell => {
+      if (constructions.getConstruction(cell) === 'house') selectExisting(cell);
+    });
+    const tradePanel = new TradePanel(simulation.trade, cell => {
+      selectExisting(cell);
+      view.focus(cell);
+      syncCamera();
+    }, () => {
+      renderSelected();
+      tradePanel.render(!!constructions.kingdomRoad);
     });
     const configuration = new ProductConfigurationPanel((cell, setting, product, enabled) => {
+      if (simulation.crown.defeated) return;
       if (constructions.getConstruction(cell) !== (setting === 'sells' ? 'market' : 'warehouse')) return;
       if (setting === 'accepts') economy.setWarehouseAcceptance(cell, product, enabled);
       else if (setting === 'marketDispatch') economy.setWarehouseMarketDispatch(cell, product, enabled);
@@ -350,7 +384,31 @@ export class MapScene extends Phaser.Scene {
       updatePointerFeedback();
     });
 
-    const tabs = new CityTabs(renderSelected);
+    const chapterDialog = new ChapterDialog(simulation, () => {
+      this.game.loop.resetDelta();
+      chronicles.render();
+      kingdomPanel.render();
+    });
+    const chronicles = new ChroniclesPanel(simulation, rank => {
+      renderSummary();
+      renderSelected();
+      chapterDialog.open(rank, 'story', true);
+    }, (rank, track) => chapterDialog.open(rank, track));
+    const kingdomPanel = new KingdomEventsPanel(simulation, chapterDialog, () => {
+      renderSummary();
+      renderSelected();
+      updatePointerFeedback();
+    });
+    const openDecree = () => {
+      simulation.crown.takeDecree();
+      chapterDialog.openRoyal(royalDecree, status => simulation.crown.markDecree(status));
+    };
+    const crownPanel = new CrownPanel(simulation, economy, () => {
+      renderSummary();
+      renderSelected();
+      updatePointerFeedback();
+    }, openDecree);
+    const tabs = new CityTabs(() => { renderSelected(); tradePanel.render(!!constructions.kingdomRoad); });
     const saves = new SavePanel(this.saveSlots, session, () => selection.selected, () => view.view, (next, cell, savedCamera) => {
       this.session = next;
       this.selectedCell = cell;
@@ -358,6 +416,32 @@ export class MapScene extends Phaser.Scene {
       this.game.loop.resetDelta();
       this.scene.restart();
     });
+    let defeatShown = false;
+    const openDefeat = () => chapterDialog.openRoyal({
+      ...royalDefeat, text: royalDefeat.text + '\n\n' + simulation.crown.defeatReason,
+    }, () => {}, () => saves.open());
+    document.getElementById('royal-summary')!.addEventListener('click', openDefeat, visibilityOptions);
+    document.getElementById('royal-new-or-load')!.addEventListener('click', () => saves.open(), visibilityOptions);
+    document.getElementById('royal-recover')!.addEventListener('click', () => {
+      document.getElementById('tab-chronicles')!.click();
+      document.querySelector<HTMLDetailsElement>('#crown-section')!.open = true;
+      document.getElementById('crown-section')!.scrollIntoView({ block: 'nearest' });
+    }, visibilityOptions);
+    const renderRoyalScene = (): void => {
+      if (document.querySelector('dialog[open]')) return;
+      if (simulation.crown.defeated) {
+        if (defeatShown) return;
+        defeatShown = true;
+        updatePauseControls();
+        openDefeat();
+      } else if (simulation.crown.takeConfidenceDecree()) {
+        chapterDialog.openRoyal(royalLastWarning, status => simulation.crown.markConfidenceDecree(status));
+      } else if (simulation.crown.takeDecree()) openDecree();
+      else {
+        const mission = simulation.kingdomEvents.takeNotice();
+        if (mission) kingdomPanel.open(mission);
+      }
+    };
     window.addEventListener('pagehide', () => this.saveSlots.checkpointTab(session, selection.selected, view.view), visibilityOptions);
     if (constructions.villageCenter) menu.disableVillageCenter();
     centerButton.disabled = !constructions.villageCenter;
@@ -425,6 +509,7 @@ export class MapScene extends Phaser.Scene {
     }, visibilityOptions);
     layout();
     renderMapSelection();
+    if (session.takeIntroduction()) chapterDialog.open('aldea', 'story', true);
     this.events.on(Phaser.Scenes.Events.UPDATE, updateSimulation);
     this.scale.on(Phaser.Scale.Events.RESIZE, layout);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -432,8 +517,14 @@ export class MapScene extends Phaser.Scene {
       this.events.off(Phaser.Scenes.Events.UPDATE, updateSimulation);
       sceneEvents.abort();
       map.destroy();
+      transports.destroy();
       resourceBar.destroy();
       tabs.destroy();
+      chapterDialog.destroy();
+      chronicles.destroy();
+      crownPanel.destroy();
+      tradePanel.destroy();
+      kingdomPanel.destroy();
       simulationPanel.destroy();
       voicesPanel.destroy();
       configuration.destroy();

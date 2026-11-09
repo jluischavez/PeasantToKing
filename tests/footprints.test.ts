@@ -70,7 +70,7 @@ test('one large farm provides one roster, one output rate and no shortcut throug
   const workers = population.workersAt(c(3, 1));
   assert.ok(workers > 0);
   assert.equal(population.jobCapacity, 6);
-  assert.equal(economy.perSecond.food, workers * 0.5);
+  assert.equal(economy.perSecond.food, workers * 0.64);
   assert.equal(economy.storage.inventories.saveState().filter(item => item.id.startsWith('warehouse:')).length, 1);
 });
 
@@ -104,7 +104,7 @@ test('a loaded 1×1 farm keeps its neighbors and a new large market keeps its ex
   assert.equal(old.map.getConstruction(c(2, 1)), 'house');
   assert.equal(old.simulation.build(c(4, 4), 'market'), null);
   slots.save(2, null, old, c(5, 5));
-  assert.equal(JSON.parse(items.get(saveKey(2))!).version, 2);
+  assert.equal(JSON.parse(items.get(saveKey(2))!).version, 10);
   const { session: loaded, selection } = slots.load(2);
   assert.deepEqual(selection, c(4, 4));
   assert.equal(loaded.map.constructionAt(c(5, 5)), loaded.map.constructionAt(c(4, 4)));

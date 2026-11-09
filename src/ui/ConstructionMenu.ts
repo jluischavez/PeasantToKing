@@ -4,6 +4,7 @@ import { buildingArt } from '../map/BuildingArt';
 import type { ConstructionType } from '../map/ConstructionMap';
 import { constructionCosts, demolitionCost } from '../map/ConstructionCosts';
 import type { ConstructionCost } from '../map/ConstructionCosts';
+import { woodlandRules } from '../map/Woodland';
 
 const categories = {
   housing: { label: 'Viviendas', icon: '⌂' },
@@ -19,7 +20,7 @@ type Category = keyof typeof categories;
 
 const categoryFor: Readonly<Record<ConstructionType, Category>> = {
   house: 'housing', road: 'roads', bridge: 'roads', farm: 'agriculture', lumberjack: 'resources',
-  warehouse: 'storage', market: 'economy', villageCenter: 'services', well: 'services',
+  warehouse: 'storage', market: 'economy', tradeHouse: 'economy', villageCenter: 'services', well: 'services',
   garden: 'decoration', park: 'decoration', plaza: 'decoration',
 };
 
@@ -129,6 +130,7 @@ export class ConstructionMenu {
     }
     this.showStatus(mode === 'demolish' ? 'Selecciona una construcción o un obstáculo y confirma en el inspector.'
       : mode === 'bridge' ? 'Selecciona un camino conectado en la orilla y luego agua en línea recta.'
+      : mode === 'lumberjack' ? 'El campamento requiere árboles o bosque a un máximo de ' + woodlandRules.harvestRange + ' casillas de su huella.'
       : mode ? constructionNames[mode] + ' · Verde: puedes construir. Rojo: casilla no disponible o recursos insuficientes.'
         : 'Selecciona un tipo de construcción.');
   }
@@ -137,10 +139,16 @@ export class ConstructionMenu {
     if (this.status.textContent !== message) this.status.textContent = message;
   }
 
-  renderCosts(costIssue: (cost: ConstructionCost) => string | null): void {
+  renderCosts(costIssue: (cost: ConstructionCost) => string | null, lock: (type: ConstructionType) => string | null): void {
     for (const [type, button] of this.choices) {
-      const issue = type === 'demolish' ? null : costIssue(constructionCosts[type]);
-      button.toggleAttribute('data-unaffordable', issue !== null);
+      if (type === 'demolish') continue;
+      const locked = lock(type);
+      if (type !== 'villageCenter') button.disabled = !!locked;
+      const issue = locked ?? costIssue(constructionCosts[type]);
+      const price = button.querySelector('.construction-cost')!;
+      const caption = locked ? '🔒 ' + locked : formatCost(constructionCosts[type]) + (type === 'bridge' ? ' / casilla' : '');
+      if (price.textContent !== caption) price.textContent = caption;
+      button.toggleAttribute('data-unaffordable', !locked && issue !== null);
       button.title = issue ?? '';
       if (issue) button.setAttribute('aria-label', button.textContent + '. ' + issue);
       else button.removeAttribute('aria-label');

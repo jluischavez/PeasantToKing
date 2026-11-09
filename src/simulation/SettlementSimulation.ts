@@ -1,8 +1,9 @@
-import { check, range, whole } from '../persistence/validation.ts';
+import { check, list, range, whole } from '../persistence/validation.ts';
 import { formatNumber } from '../formatNumber.ts';
-import { populationRules } from '../population/Population.ts';
-import { gameTimeAt, gameTimeRules } from './GameTime.ts';
+import { populationRules, recoveryMigrationRules } from '../population/Population.ts';
+import { gameTimeAt, gameTimeRules, simulatedMsPerGameHour } from './GameTime.ts';
 import { distributionRules } from '../economy/Distribution.ts';
+import { ExternalTrade } from '../economy/ExternalTrade.ts';
 import { Wellbeing } from '../population/Wellbeing.ts';
 import { HousingEvolution, housingRules } from '../population/HousingEvolution.ts';
 import { ResidentialBeauty } from '../population/ResidentialBeauty.ts';
@@ -18,13 +19,23 @@ import { groundNames, isProtectedGround, obstacleNames } from '../map/Terrain.ts
 import type { Obstacle } from '../map/Terrain';
 import type { ConstructionMap, ConstructionType } from '../map/ConstructionMap';
 import { constructionDimensions, footprint } from '../map/ConstructionMap.ts';
+import { hasHarvestableWoodland, missingWoodlandReason } from '../map/Woodland.ts';
 import { bridgeCells, bridgeRules } from '../map/Bridge.ts';
 import type { BridgeSpan } from '../map/Bridge';
 import type { RoadConnections } from '../map/RoadConnections';
 import type { Economy } from '../economy/Economy';
 import type { Population } from '../population/Population';
+import { SettlementProgress } from './SettlementProgress.ts';
+import { Crown } from './Crown.ts';
+import type { Offering } from './Crown';
+import type { SettlementRank, SettlementStats } from './SettlementProgress';
+import { KingdomEvents } from './KingdomEvents.ts';
+import type { MissionChoice, RealmContext } from './KingdomEvents';
 
 export type SimulationSpeed = 1 | 2 | 3;
+export type OccasionalArrival = Readonly<{ timeMs: number; cell: Readonly<Cell> }>;
+export type MigrationOutlook = Readonly<{ attraction: number; mode: 'normal' | 'occasional' | 'closed'; reason: string; recoveryHours: number }>;
+const recoveryIntervalMs = recoveryMigrationRules.intervalHours * simulatedMsPerGameHour;
 type DemolitionTarget = Readonly<{ cell: Cell } & (
   { kind: 'building'; type: ConstructionType } | { kind: 'obstacle'; type: Obstacle }
 )>;
@@ -41,6 +52,10 @@ export function terrainAuditId(cell: Cell): string {
 }
 
 export class SettlementSimulation {
+  readonly progress = new SettlementProgress();
+  readonly crown = new Crown();
+  readonly trade: ExternalTrade;
+  readonly kingdomEvents: KingdomEvents;
   readonly wellbeing = new Wellbeing();
   readonly housing = new HousingEvolution();
   readonly beauty = new ResidentialBeauty();
@@ -50,9 +65,11 @@ export class SettlementSimulation {
   private elapsedMs = 0;
   private isPaused = false;
   private suspended = false;
+  private readingChapter = false;
   private discardResumingFrame = false;
   private multiplier: SimulationSpeed = 1;
   private immigrationSeconds = 0;
+  private readonly arrivals: OccasionalArrival[] = [];
   private demolition: DemolitionTarget | null = null;
   private pendingBridge: BridgeSpan | null = null;
   private readonly economy: Economy;
@@ -62,21 +79,38 @@ export class SettlementSimulation {
   private readonly connections: RoadConnections;
 
   constructor(economy: Economy, population: Population, immigrationIntervalSeconds: number,
-    map: ConstructionMap, connections: RoadConnections) {
+    map: ConstructionMap, connections: RoadConnections, seed = 0) {
     this.map = map;
     this.connections = connections;
     this.economy = economy;
     this.population = population;
     this.immigrationIntervalSeconds = immigrationIntervalSeconds;
+    const logistics = this.economy.storage.logistics;
+    logistics.arrivalResidents = cell => this.population.residentsAt(cell);
+    logistics.activityValid = journey => this.map.getConstruction(journey.destination) === 'house'
+      && this.population.residentsAt(journey.destination) > 0
+      && (journey.kind === 'immigration' || (this.connections.isConnected(journey.source)
+        && this.population.workersAt(journey.source) > 0 && this.water.assignments.some(assignment =>
+          assignment.well.column === journey.source.column && assignment.well.row === journey.source.row
+          && assignment.home.column === journey.destination.column && assignment.home.row === journey.destination.row
+          && assignment.residents >= journey.units)));
+    this.trade = new ExternalTrade(map, connections, population, economy, () => this.crown.defeated);
+    this.kingdomEvents = new KingdomEvents(seed, () => this.realmContext(), (id, effect) => {
+      if (this.crown.defeated || !this.economy.settleMission('mission:' + id, effect.goldCost, effect.goldReward, effect.delivery)) return false;
+      return this.crown.applyMissionFavor(effect.favor, this.simulatedTimeMs);
+    }, () => this.crown.defeated);
   }
 
   saveState() {
-    return { elapsedMs: this.elapsedMs, paused: this.paused, speed: this.speed, immigrationSeconds: this.immigrationSeconds,
-      wellbeing: this.wellbeing.saveState(), housing: this.housing.saveState(), needs: this.needs.saveState(), voices: this.voices.saveState() };
+    return { elapsedMs: this.elapsedMs, paused: this.isPaused, speed: this.speed, immigrationSeconds: this.immigrationSeconds,
+      wellbeing: this.wellbeing.saveState(), housing: this.housing.saveState(), needs: this.needs.saveState(), voices: this.voices.saveState(),
+      trade: this.trade.saveState(),
+      kingdomEvents: this.kingdomEvents.saveState(),
+      ...(this.arrivals.length > 0 && { occasionalArrivals: [...this.arrivals] }) };
   }
 
   restoreState(state: ReturnType<SettlementSimulation['saveState']>): void {
-    const { elapsedMs, paused, speed, immigrationSeconds, wellbeing, housing, needs, voices } = state;
+    const { elapsedMs, paused, speed, immigrationSeconds, wellbeing, housing, needs, voices, trade, occasionalArrivals = [] } = state;
     check(range(elapsedMs, 0, 1000) && elapsedMs < 1000 && typeof paused === 'boolean' && whole(speed, 1, 3)
       && whole(immigrationSeconds, 0, this.immigrationIntervalSeconds - 1));
     this.elapsedMs = elapsedMs;
@@ -87,21 +121,103 @@ export class SettlementSimulation {
     this.housing.restoreState(housing, this.map);
     this.needs.restoreState(needs, this.map);
     this.voices.restoreState(voices, this.map, this.simulatedTimeMs);
+    this.trade.restoreState(trade, this.simulatedTimeMs, this.crown.defeated);
+    this.kingdomEvents.restoreState(state.kingdomEvents, this.simulatedTimeMs);
+    list(occasionalArrivals, recoveryMigrationRules.historyLimit);
+    let previousArrival = 0;
+    for (const event of occasionalArrivals) {
+      check(this.map.contains(event.cell) && whole(event.timeMs, previousArrival + 1, this.simulatedTimeMs));
+      previousArrival = event.timeMs;
+    }
+    this.arrivals.splice(0, this.arrivals.length, ...occasionalArrivals);
     // Restore inventories and the previous roster before applying current eligibility rules.
     this.economy.recalculate(this.map, this.connections, this.population);
     this.refreshWorkforce();
   }
 
-  get paused(): boolean { return this.isPaused; }
+  get paused(): boolean { return this.isPaused || this.crown.defeated; }
   get speed(): SimulationSpeed { return this.multiplier; }
+  get renderTimeMs(): number { return this.simulatedTimeMs + this.elapsedMs; }
   get simulatedTimeMs(): number { return this.economy.simulatedTimeMs; }
+  get occasionalArrivals(): readonly OccasionalArrival[] { return this.arrivals; }
+
+  settlementStats(): SettlementStats {
+    const homes = this.population.residencesSnapshot;
+    return { population: this.population.total, gold: this.economy.resources.gold,
+      happiness: this.wellbeing.summarize(homes).happiness, beauty: this.beauty.average(homes) ?? 0 };
+  }
+
+  realmContext(): RealmContext {
+    const stats = this.settlementStats();
+    const stock = this.economy.missionStock;
+    const buildings: RealmContext['buildings'] = {};
+    const sites: RealmContext['sites'] = {};
+    let improvedRoads = 0, stoneRoads = 0, gravelRoads = 0, upgradableRoads = 0;
+    const connectedRoads: Cell[] = [];
+    for (const { cell, type } of this.map.occupiedCells()) {
+      const connected = this.connections.isConnected(cell);
+      if (['road', 'garden', 'park', 'plaza'].includes(type)) {
+        sites[cell.column + ',' + cell.row] = { type, connected, level: this.map.roadLevelAt(cell) ?? 0 };
+      }
+      if (!connected) continue;
+      buildings[type] = (buildings[type] ?? 0) + 1;
+      if (type === 'road') {
+        connectedRoads.push(cell);
+        const level = this.map.roadLevelAt(cell);
+        if (level && level >= 2) improvedRoads++;
+        if (level === 3) stoneRoads++;
+        if (level === 2) gravelRoads++;
+        if (level === 1) upgradableRoads++;
+      }
+    }
+    const decorationSpace = { garden: false, park: false, plaza: false };
+    for (const type of ['garden', 'park', 'plaza'] as const) {
+      if (this.progress.buildingLock(type)) continue;
+      const size = constructionDimensions[type];
+      decorationSpace[type] = connectedRoads.some(road => [
+        { column: road.column + 1, row: road.row }, { column: road.column - size.width, row: road.row },
+        { column: road.column, row: road.row + 1 }, { column: road.column, row: road.row - size.height },
+      ].some(cell => this.map.canPlace(cell, type, size)));
+    }
+    const coverage = this.needs.summarize(this.population.residencesSnapshot).percentages;
+    return { ...stats, hasCenter: !!this.map.villageCenter, rank: this.progress.rank, food: stock.food, wood: stock.wood,
+      capacity: this.population.connectedCapacity, foodCoverage: coverage?.food ?? 0, waterCoverage: coverage?.water ?? 0,
+      favor: this.crown.favor, confidenceWarning: !!this.crown.confidence, tribute: this.crown.obligation,
+      nextTributeAt: this.crown.nextAt, recentTribute: this.crown.history.some(event => event.kind === 'paid'
+        && this.simulatedTimeMs - event.timeMs <= 3 * 24 * simulatedMsPerGameHour),
+      buildings, sites, improvedRoads, stoneRoads, gravelRoads, upgradableRoads, decorationSpace,
+      exteriorTrade: this.trade.sites.some(cell => {
+        const house = this.trade.at(cell)!;
+        return !house.issue && (house.products.food.stock + house.products.wood.stock
+          + house.products.food.space + house.products.wood.space > 0);
+      }), exports: { ...this.trade.exportedUnits } };
+  }
+
+  decideMission(id: string, choice: MissionChoice): boolean {
+    return this.kingdomEvents.decide(id, choice, this.simulatedTimeMs);
+  }
+
+  recognize(rank: SettlementRank): boolean {
+    if (this.crown.defeated) return false;
+    return this.progress.recognize(rank, this.settlementStats(), this.simulatedTimeMs,
+      gold => this.economy.payBuildingCost({ gold, wood: 0 }, 'recognition', 'rank:' + rank));
+  }
+
+  payTribute(dueAt: number): boolean {
+    return this.crown.pay(dueAt, this.simulatedTimeMs, gold => this.economy.payRoyalCost(gold, 'tribute'));
+  }
+
+  makeOffering(gold: Offering, expectedFavor: number): boolean {
+    return this.crown.offer(gold, expectedFavor, this.simulatedTimeMs, amount => this.economy.payRoyalCost(amount, 'offering'));
+  }
 
   roadUpgradeAt(cell: Cell) {
     const level = this.map.roadLevelAt(cell);
     if (level === undefined || level === 3) return null;
     const next = level === 1 ? 2 : 3;
     const cost = roadUpgradeCosts[next];
-    const issue = this.paused ? 'Reanuda la simulación para mejorar el camino.' : this.costIssue(cost);
+    const issue = this.progress.roadLock(next)
+      ?? (this.paused ? 'Reanuda la simulación para mejorar el camino.' : this.costIssue(cost));
     return { level, next, cost, issue } as const;
   }
 
@@ -122,6 +238,7 @@ export class SettlementSimulation {
   }
 
   setPaused(paused: boolean): void { this.isPaused = paused; }
+  setReadingChapter(reading: boolean): void { this.readingChapter = reading; }
 
   setSuspended(suspended: boolean): void {
     if (this.suspended && !suspended) this.discardResumingFrame = true;
@@ -140,6 +257,8 @@ export class SettlementSimulation {
   }
 
   constructionIssue(cell: Cell, type: ConstructionType): string | null {
+    const locked = this.progress.buildingLock(type);
+    if (locked) return locked;
     if (this.paused) return 'Reanuda la simulación para construir.';
     if (type === 'bridge') return 'Selecciona un camino conectado en la orilla para iniciar el puente.';
     for (const part of footprint(cell, constructionDimensions[type])) {
@@ -151,6 +270,9 @@ export class SettlementSimulation {
       if (this.map.getConstruction(part)) return 'Una casilla de la construcción ya está ocupada.';
     }
     if (type === 'villageCenter' && this.map.villageCenter) return 'Ya existe un Centro de Aldea.';
+    if (type === 'lumberjack' && !hasHarvestableWoodland(this.map.terrain, cell, constructionDimensions[type])) {
+      return missingWoodlandReason;
+    }
     return this.costIssue(constructionCosts[type]);
   }
 
@@ -252,6 +374,10 @@ export class SettlementSimulation {
     if (target.kind === 'obstacle') return this.costIssue(clearingCosts[target.type]);
     const { type } = target;
     cell = target.cell;
+    const homeStock = type === 'house' && this.economy.storage.inventories.snapshot(`home-stock:${cell.column},${cell.row}`);
+    if (homeStock && homeStock.used > 0) return 'La vivienda conserva productos. Nuevas compras detenidas: espera a consumir la reserva antes de demoler; cancelar modo reactiva las compras.';
+    const logisticsIssue = this.economy.storage.logistics.demolitionIssue(cell);
+    if (logisticsIssue) return logisticsIssue;
     if (this.map.isKingdomRoad(cell)) return 'Este camino pertenece al reino y no puede demolerse.';
     if (this.map.isProtectedConstruction(cell)) {
       return type === 'villageCenter' ? 'El Centro de Aldea está protegido.' : 'La construcción está protegida.';
@@ -284,13 +410,14 @@ export class SettlementSimulation {
   requestDemolition(cell: Cell): string | null {
     this.cancelBridge();
     this.cancelDemolition();
+    if (!this.paused) this.economy.storage.logistics.stopForDemolition(this.map.constructionAt(cell)?.cell ?? cell);
     const issue = this.demolitionIssue(cell);
     if (issue) return issue;
     this.demolition = this.removalTargetAt(cell);
     return null;
   }
 
-  cancelDemolition(): void { this.demolition = null; }
+  cancelDemolition(): void { this.demolition = null; this.economy.storage.logistics.cancelDemolition(); }
 
   confirmDemolition(): string | null {
     const target = this.demolition;
@@ -327,6 +454,7 @@ export class SettlementSimulation {
 
   recalculate(): void {
     this.connections.recalculate(this.map);
+    this.trade.sync(this.simulatedTimeMs);
     this.beauty.recalculate(this.map, this.connections);
     this.economy.recalculate(this.map, this.connections, this.population);
     this.refreshWorkforce();
@@ -336,18 +464,89 @@ export class SettlementSimulation {
     this.population.recalculate(this.map, this.connections, this.economy.laborContext(this.population));
     this.economy.recalculate(this.map, this.connections, this.population);
     this.water.refresh(this.map, this.connections, this.population);
+    this.economy.storage.logistics.reconcileJourneys();
   }
 
   migrationAttractiveness(happiness: number): number {
     if (!this.map.villageCenter) return 0;
     return this.population.migrationAttractiveness(this.economy.migrationFood(this.population),
-      this.economy.taxMigrationModifier, happiness);
+      this.economy.taxMigrationModifier, happiness, this.migrationFoodCoverage());
+  }
+
+  private migrationFoodCoverage(): number {
+    return (this.needs.summarize(this.population.residencesSnapshot).percentages?.food ?? 0) / 100;
+  }
+
+  immigrationSupply(foodCoverage = this.migrationFoodCoverage()): ReadonlyMap<string, number> {
+    return this.economy.immigrationSupply(this.population, populationRules.familySize,
+      this.immigrationIntervalSeconds, populationRules.foodPerResidentPerSecond, populationRules.residentsPerPlot, foodCoverage);
+  }
+
+  private normalMigration(happiness: number) {
+    const foodCoverage = this.migrationFoodCoverage();
+    const hasCenter = !!this.map.villageCenter;
+    const food = hasCenter ? this.economy.migrationFood(this.population) : 0;
+    const modifier = this.economy.taxMigrationModifier;
+    const supply = this.immigrationSupply(foodCoverage);
+    const attraction = hasCenter ? this.population.migrationAttractiveness(food, modifier, happiness, foodCoverage) : 0;
+    const admissionsOpen = hasCenter && this.wellbeing.admissionsOpen(this.simulatedTimeMs, happiness);
+    const normal = admissionsOpen && attraction > 0 && supply.size > 0 && this.population.availableHousing > 0;
+    return { foodCoverage, food, modifier, supply, attraction, admissionsOpen, normal };
+  }
+
+  private get recoveryEligible(): boolean {
+    return !this.crown.defeated && !!this.map.villageCenter && this.progress.rank === 'aldea' && this.population.canAdmitOccasional;
+  }
+
+  migrationOutlook(happiness: number): MigrationOutlook {
+    const { attraction, normal, admissionsOpen, supply } = this.normalMigration(happiness);
+    const mode = this.crown.defeated ? 'closed' : normal ? 'normal' : this.recoveryEligible ? 'occasional' : 'closed';
+    const reason = this.crown.defeated ? 'La partida ha terminado.'
+      : !this.map.villageCenter ? 'Hace falta el Centro de Aldea.'
+      : this.population.availableHousing > 0 && supply.size > 0 && !admissionsOpen
+        ? 'Las admisiones normales esperan a que se recupere el bienestar.'
+      : this.economy.migrationReason(this.population, supply, attraction);
+    const recoveryHours = Math.ceil((recoveryIntervalMs - this.simulatedTimeMs % recoveryIntervalMs) / simulatedMsPerGameHour);
+    return { attraction, mode, reason, recoveryHours };
+  }
+
+  private updateMigration(): void {
+    this.immigrationSeconds++;
+    const normalDue = this.immigrationSeconds === this.immigrationIntervalSeconds;
+    // Absolute calendar boundaries are consumed as they pass, with no backlog on reload or reconnection.
+    const recoveryDue = this.simulatedTimeMs % recoveryIntervalMs === 0 && this.recoveryEligible
+      && this.simulatedTimeMs - (this.arrivals.at(-1)?.timeMs ?? 0) >= recoveryIntervalMs;
+    if (!normalDue && !recoveryDue) return;
+    if (normalDue) this.immigrationSeconds = 0;
+    const previousResidents = new Map(this.population.residencesSnapshot.map(home => [`${home.cell.column},${home.cell.row}`, home.residents]));
+    const { happiness } = this.wellbeing.summarize(this.population.residencesSnapshot);
+    const { foodCoverage, food, modifier, supply, admissionsOpen, normal } = this.normalMigration(happiness);
+    if (normalDue && this.population.immigrate(food, supply, {
+      happiness, foodCoverage, modifier, seconds: this.immigrationIntervalSeconds, admissionsOpen,
+    }) > 0) {
+      this.refreshWorkforce();
+    } else if (recoveryDue && !normal) {
+      const cell = this.population.admitOccasional();
+      if (!cell) return;
+      this.arrivals.push({ timeMs: this.simulatedTimeMs, cell });
+      if (this.arrivals.length > recoveryMigrationRules.historyLimit) this.arrivals.shift();
+      this.wellbeing.restartDistressWindow(cell);
+      this.housing.restartDeteriorationWindow(cell);
+      this.voices.reportOccasionalArrival(cell);
+      this.refreshWorkforce();
+    }
+    for (const home of this.population.residencesSnapshot) {
+      const count = home.residents - (previousResidents.get(`${home.cell.column},${home.cell.row}`) ?? 0);
+      if (count > 0) this.economy.storage.logistics.queueArrival(home.cell, count);
+    }
   }
 
   private updateWellbeing(): void {
     const distribution = this.economy.distribution;
     const homes = this.population.residencesSnapshot;
     this.water.refresh(this.map, this.connections, this.population);
+    this.economy.storage.logistics.reconcileJourneys();
+    this.economy.storage.logistics.requestWater(this.water.assignments);
     this.needs.recordSecond(homes, home => ({
       food: Math.max(0, 1 - distribution.foodShortageAt(home.cell)
         / (home.residents * populationRules.foodPerResidentPerSecond)),
@@ -385,7 +584,7 @@ export class SettlementSimulation {
 
   // One shared clock processes production, consumption, wellbeing and migration in order.
   advance(deltaMs: number): boolean {
-    if (this.suspended) return false;
+    if (this.suspended || this.readingChapter) return false;
     if (this.discardResumingFrame) {
       this.discardResumingFrame = false;
       return false;
@@ -401,22 +600,15 @@ export class SettlementSimulation {
       this.economy.advance(1000);
       this.economy.consumeHomes(this.population, populationRules.foodPerResidentPerSecond);
       this.economy.accountOperatingSecond(this.population.employed, this.population.total);
-      this.updateWellbeing();
-      this.immigrationSeconds++;
-      if (this.immigrationSeconds === this.immigrationIntervalSeconds) {
-        this.immigrationSeconds = 0;
-        const supply = this.economy.immigrationSupply(this.population, populationRules.familySize,
-          this.immigrationIntervalSeconds, populationRules.foodPerResidentPerSecond,
-          populationRules.residentsPerPlot);
-        const { happiness } = this.wellbeing.summarize(this.population.residencesSnapshot);
-        const food = this.map.villageCenter ? this.economy.migrationFood(this.population) : 0;
-        if (this.population.immigrate(food, supply, {
-          happiness, modifier: this.economy.taxMigrationModifier, seconds: this.immigrationIntervalSeconds,
-          admissionsOpen: this.wellbeing.admissionsOpen(this.simulatedTimeMs, happiness),
-        }) > 0) {
-          this.refreshWorkforce();
-        }
+      this.crown.advance(this.simulatedTimeMs, this.progress.rank);
+      if (this.crown.defeated) {
+        this.elapsedMs = 0;
+        return true;
       }
+      this.updateWellbeing();
+      this.trade.advance(this.simulatedTimeMs);
+      this.updateMigration();
+      this.kingdomEvents.advance(this.simulatedTimeMs);
       this.voices.advance(this.simulatedTimeMs, () => this.needs.observations(this.population.residencesSnapshot), () => {
         const buildings = this.map.occupiedCells();
         return {

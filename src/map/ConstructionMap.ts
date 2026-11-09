@@ -15,6 +15,7 @@ export const constructionNames = {
   lumberjack: 'Campamento maderero',
   warehouse: 'Almacén',
   market: 'Mercado',
+  tradeHouse: 'Casa de Comercio',
   well: 'Pozo',
   villageCenter: 'Centro de Aldea',
   garden: 'Jardín',
@@ -30,6 +31,7 @@ export const constructionDimensions: Readonly<Record<ConstructionType, Dimension
   house: singleTile, road: singleTile, bridge: singleTile, well: singleTile, villageCenter: singleTile,
   farm: { width: 3, height: 3 },
   lumberjack: { width: 2, height: 2 }, warehouse: { width: 2, height: 2 }, market: { width: 2, height: 2 },
+  tradeHouse: { width: 2, height: 2 },
   garden: singleTile, park: { width: 3, height: 3 }, plaza: { width: 2, height: 2 },
 };
 

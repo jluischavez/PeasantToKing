@@ -1,3 +1,4 @@
+import { deliverFixtureCargo } from './fixtures/logistics.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { productIds, marketProductIds, productNames, isProductId } from '../src/economy/Products.ts';
@@ -19,6 +20,7 @@ function setup() {
   const map = new ConstructionMap(20, 20);
   map.place(cell(0, 0), 'villageCenter');
   for (let x = 1; x <= 12; x++) map.place(cell(x, 0), 'road');
+  assert.ok(map.terrain.plantTree(cell(2, 3)));
   for (const [position, type] of [
     [farm, 'farm'], [camp, 'lumberjack'], [firstWarehouse, 'warehouse'],
     [secondWarehouse, 'warehouse'], [firstMarket, 'market'], [secondMarket, 'market'], [home, 'house'],
@@ -38,6 +40,7 @@ function setup() {
   const consume = () => economy.consumeHomes({ residencesSnapshot: [{ cell: home, residents: 4 }] }, 0.1);
   const restock = () => {
     for (let i = 0; i < distributionRules.restockIntervalSeconds; i++) economy.distribution.advanceSecond();
+    deliverFixtureCargo(economy);
   };
   return { map, economy, roads, counts, sync, consume, restock, ledger: economy.storage.inventories };
 }
@@ -96,19 +99,20 @@ test('production searches another accepting warehouse and blocks only the reject
   economy.setWarehouseAcceptance(firstWarehouse, 'food', false);
   economy.advance(1000);
   assert.equal(economy.storage.warehouseAt(firstWarehouse)!.food, 0);
-  assert.equal(economy.storage.warehouseAt(secondWarehouse)!.food, 0.5);
-  assert.equal(economy.storage.warehouseAt(firstWarehouse)!.wood, 2 / 3);
+  assert.equal(economy.storage.warehouseAt(secondWarehouse)!.food, 0);
+  assert.equal(economy.storage.warehouseAt(firstWarehouse)!.wood, 0);
+  assert.deepEqual(economy.storage.logistics.goods(), { food: Math.round(0.64 * U), wood: Math.round(0.56 * U) });
   economy.setWarehouseAcceptance(secondWarehouse, 'food', false);
   assert.equal(economy.perSecond.food, 0);
-  assert.equal(economy.perSecond.wood, 2 / 3);
+  assert.equal(economy.perSecond.wood, 0.56);
   assert.equal(economy.productivityAt(farm)!.storageBlocked, true);
   assert.equal(economy.productivityAt(camp)!.storageBlocked, false);
   const before = economy.resources;
   economy.advance(1000);
   assert.equal(economy.resources.food, before.food);
-  assert.equal(economy.resources.wood, before.wood + 2 / 3);
+  assert.equal(economy.resources.wood, before.wood + 0.56);
   economy.setWarehouseAcceptance(firstWarehouse, 'food', true);
-  assert.equal(economy.perSecond.food, 0.5);
+  assert.equal(economy.perSecond.food, 0.64);
   assert.equal(economy.productivityAt(farm)!.storageBlocked, false);
 });
 
@@ -160,8 +164,8 @@ test('a warehouse receives reserved wood, sends food, and resumes wood shipments
   economy.setWarehouseAcceptance(firstWarehouse, 'wood', false);
   economy.setWarehouseMarketDispatch(firstWarehouse, 'wood', true);
   restock();
-  assert.equal(economy.distribution.marketAt(secondMarket)!.wood, 55);
-  assert.equal(economy.storage.warehouseAt(firstWarehouse)!.wood, 0);
+  assert.equal(economy.distribution.marketAt(secondMarket)!.wood, 50);
+  assert.equal(economy.storage.warehouseAt(firstWarehouse)!.wood, 5);
   assert.deepEqual(economy.resources, afterConstruction);
 });
 
@@ -275,6 +279,8 @@ test('permission changes do not restart replenishment clocks or cause immediate 
   for (let i = 2; i < distributionRules.restockIntervalSeconds - 1; i++) economy.distribution.advanceSecond();
   assert.equal(economy.distribution.marketAt(firstMarket)!.food, 0);
   economy.distribution.advanceSecond();
+  assert.equal(economy.distribution.marketAt(firstMarket)!.food, 0);
+  deliverFixtureCargo(economy);
   assert.equal(economy.distribution.marketAt(firstMarket)!.food, 1);
 });
 

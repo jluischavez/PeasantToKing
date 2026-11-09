@@ -19,7 +19,7 @@ export class SavePanel {
   private readonly events = new AbortController();
   private readonly timer: number;
 
-  constructor(private readonly slots: SaveSlots, session: Session, selection: () => Cell | null, camera: () => CameraView,
+  constructor(private readonly slots: SaveSlots, private readonly session: Session, selection: () => Cell | null, camera: () => CameraView,
     replace: (session: Session, selection: Cell | null, camera?: CameraView) => void) {
     setText(document.getElementById('current-seed')!, String(session.world.seed));
     this.seedInput.value = '';
@@ -27,11 +27,9 @@ export class SavePanel {
     const onClick = (id: string, action: () => void) => {
       document.getElementById(id)!.addEventListener('click', action, options);
     };
-    onClick('open-save-dialog', () => {
-      this.dialog.showModal();
-      this.run(() => this.refresh(this.slots.activeSlot ?? this.slot()));
-    });
+    onClick('open-save-dialog', () => this.open());
     onClick('save-game', () => this.run(() => {
+      if (session.simulation.crown.defeated) return;
       const slot = this.slot();
       const { raw } = this.slots.inspect(slot);
       if (this.slots.needsConfirmation(slot, raw) && !window.confirm('¿Sobrescribir la partida de la ranura ' + slot + '?')) return;
@@ -42,7 +40,7 @@ export class SavePanel {
     onClick('load-game', () => this.run(() => {
       const slot = this.slot();
       if (!window.confirm('¿Cargar la ranura ' + slot + '? Se perderá el progreso sin guardar de la partida activa.')) return;
-      const game = this.slots.load(slot);
+      const game = this.slots.load(slot, true);
       this.dialog.close();
       this.report('Partida cargada de la ranura ' + slot + '.');
       replace(game.session, game.selection, game.camera);
@@ -61,6 +59,7 @@ export class SavePanel {
     }));
 
     this.timer = window.setInterval(() => this.run(() => {
+      if (session.simulation.crown.defeated) return;
       const slot = this.slots.autosave(session, selection(), camera());
       this.report(slot === null ? 'Autoguardado pendiente. Elige una ranura para guardar.'
         : 'Autoguardado completado en la ranura ' + slot + '.');
@@ -70,11 +69,17 @@ export class SavePanel {
     if (this.status.textContent) this.hideNotice();
   }
 
+  open(): void {
+    if (!this.dialog.open) this.dialog.showModal();
+    this.run(() => this.refresh(this.slots.activeSlot ?? this.slot()));
+  }
+
   private slot(): SaveSlot {
     return saveSlots.find(slot => String(slot) === this.select.value) ?? 1;
   }
 
   private refresh(selected: SaveSlot): void {
+    document.querySelector<HTMLButtonElement>('#save-game')!.disabled = this.session.simulation.crown.defeated;
     this.select.replaceChildren(...saveSlots.map(slot => {
       const { savedAt, corrupt } = this.slots.inspect(slot);
       const description = corrupt ? 'datos inválidos' : savedAt === null ? 'vacía' : dates.format(savedAt);

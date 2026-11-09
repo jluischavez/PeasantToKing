@@ -20,6 +20,7 @@ function village(decorated = false) {
   const economy = new Economy();
   const simulation = new SettlementSimulation(economy, population, 1000, map, roads);
   map.place(c(0, 1), 'villageCenter');
+  assert.ok(map.terrain.plantTree(c(2, 4)));
   for (let x = 1; x <= 6; x++) map.place(c(x, 1), 'road');
   for (const [cell, type] of [[farm, 'farm'], [camp, 'lumberjack'], [c(3, 2), 'warehouse'], [c(4, 2), 'market'],
     [well, 'well'], [house, 'house'], [other, 'house']] as const) map.place(cell, type);

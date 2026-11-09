@@ -50,7 +50,7 @@ export class ProductConfigurationPanel {
       this.title.textContent = kind === 'warehouse' ? 'Configuración del almacén' : 'Mercado: autorizar ventas';
       if (kind === 'warehouse') {
         this.addOptions('accepts', productIds, 'Recepción', 'Aceptar');
-        this.addOptions('marketDispatch', productIds, 'Distribución a mercados', 'Enviar');
+        this.addOptions('marketDispatch', productIds, 'Envíos a mercados y comercio exterior', 'Enviar');
       } else this.addOptions('sells', marketProductIds);
     }
     this.cell = { ...cell };

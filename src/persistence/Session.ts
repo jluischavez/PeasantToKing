@@ -8,7 +8,8 @@ import { RoadConnections } from '../map/RoadConnections.ts';
 import { legacyProceduralTerrain, legacyWorldSize, maxSeed, newWorld, proceduralTerrain, startingCell, worldRules } from '../map/World.ts';
 import type { World } from '../map/World';
 import { TerrainMap } from '../map/Terrain.ts';
-import { generateTerrain } from '../map/generateTerrain.ts';
+import { generateTerrain, starterRules } from '../map/generateTerrain.ts';
+import { ensureStarterWoodland, restoreLegacyWoodland } from '../map/Woodland.ts';
 import { bridgeCells } from '../map/Bridge.ts';
 import { kingdomEntryId, kingdomRoadId, planKingdomRoad } from '../map/KingdomRoad.ts';
 import { Population, populationRules } from '../population/Population.ts';
@@ -21,12 +22,14 @@ export class Session {
   readonly population = new Population();
   readonly connections = new RoadConnections();
   readonly simulation: SettlementSimulation;
+  private introductionPending = false;
 
   constructor(readonly world: World = newWorld(), terrain?: TerrainMap) {
     check(world.terrain === worldRules.terrain || terrain);
     this.map = new ConstructionMap(world.columns, world.rows, terrain);
+    this.economy.distribution.enableHouseholds();
     this.simulation = new SettlementSimulation(this.economy, this.population,
-      populationRules.immigrationIntervalSeconds, this.map, this.connections);
+      populationRules.immigrationIntervalSeconds, this.map, this.connections, world.seed);
     this.simulation.recalculate();
   }
 
@@ -51,25 +54,35 @@ export class Session {
       check(session.map.place(cell, 'road'));
     }
     check(session.map.protectKingdomRoad(route));
+    ensureStarterWoodland(session.map, startingCell(world), starterRules.radius + 1);
     session.simulation.recalculate();
+    session.introductionPending = true;
     return session;
   }
 
+  takeIntroduction(): boolean {
+    const pending = this.introductionPending;
+    this.introductionPending = false;
+    return pending;
+  }
+
   saveState(selection: Cell | null, camera?: CameraView) {
-    const terrainData = this.world.terrain !== worldRules.terrain ? this.map.terrain.save() : undefined;
     const bridgeSpans = this.map.bridgeSpans();
     const footprints = this.map.saveFootprints();
     const roadLevels = this.map.saveRoadLevels();
     return { world: this.world, cells: this.map.saveCells(), selection, ...(camera && { camera }),
-      ...(terrainData !== undefined && { terrainData }),
+      terrainData: this.map.terrain.save(),
       ...(this.map.kingdomRoad && { kingdomRoad: this.map.kingdomRoad }),
       ...(bridgeSpans.length > 0 && { bridgeSpans }),
       ...(footprints.length > 0 && { footprints }),
       ...(roadLevels.length > 0 && { roadLevels }),
-      economy: this.economy.saveState(), population: this.population.saveState(), simulation: this.simulation.saveState() };
+      economy: this.economy.saveState(), population: this.population.saveState(), simulation: this.simulation.saveState(),
+      progression: this.simulation.progress.saveState(), crown: this.simulation.crown.saveState() };
   }
 
-  static restore(state: ReturnType<Session['saveState']>): { session: Session; selection: Cell | null; camera?: CameraView } {
+  static restore(state: Omit<ReturnType<Session['saveState']>, 'progression' | 'terrainData' | 'crown'>
+    & Partial<Pick<ReturnType<Session['saveState']>, 'progression' | 'terrainData' | 'crown'>>)
+    : { session: Session; selection: Cell | null; camera?: CameraView } {
     const { world, cells, selection, economy, population, simulation, camera, terrainData,
       kingdomRoad, bridgeSpans, footprints, roadLevels } = state;
     const legacy = world.columns === legacyWorldSize && world.rows === legacyWorldSize;
@@ -84,10 +97,10 @@ export class Session {
     check(camera === undefined || (camera && range(camera.x, 0, world.columns * cellSize)
       && range(camera.y, 0, world.rows * cellSize) && range(camera.zoom, cameraRules.minZoom, cameraRules.maxZoom)));
     // Read each index using the saved stride, even when restoring into a wider map.
-    const terrain = world.terrain !== worldRules.terrain
+    const terrain = terrainData !== undefined || world.terrain !== worldRules.terrain
       ? TerrainMap.restore(world.columns, world.rows, terrainData) : undefined;
-    check(terrain || terrainData === undefined);
-    const session = new Session({ ...world, columns: worldRules.columns, rows: worldRules.rows }, terrain);
+    const session = new Session({ ...world, columns: worldRules.columns, rows: worldRules.rows },
+      legacy ? terrain?.expanded(worldRules.columns, worldRules.rows) : terrain);
     const savedBridges = new Set<number>();
     const sizes = new Map<number, Dimensions>();
     if (footprints !== undefined) {
@@ -136,11 +149,14 @@ export class Session {
       }
     }
 
+    if (!terrain) restoreLegacyWoodland(session.map, startingCell(world));
     // Set up derived slots and inventories before importing exact state. No ticks or charges occur.
     session.simulation.recalculate();
     session.population.restoreState(population);
     session.economy.restoreState(economy, session.map);
+    session.simulation.crown.restoreState(state.crown, session.simulation.simulatedTimeMs);
     session.simulation.restoreState(simulation);
+    session.simulation.progress.restoreState(state.progression, session.simulation.simulatedTimeMs);
     return { session, selection: selection ? session.map.constructionAt(selection)?.cell ?? selection : null, camera };
   }
 }

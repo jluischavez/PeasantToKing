@@ -48,6 +48,10 @@ export class HousingEvolution {
 
   forget(cell: Cell): void { this.progress.delete(key(cell)); }
 
+  restartDeteriorationWindow(cell: Cell): void {
+    if (this.at(cell).deterioration > 0) this.forget(cell);
+  }
+
   advanceSecond(cell: Cell, level: HousingLevel, happiness: number, supply: NeedCoverage,
     unemployment: number, beauty: number = beautyRules.base): HousingLevel | undefined {
     const adequatelySupplied = supply.food >= 1 && supply.wood >= 1 && supply.water >= 1;

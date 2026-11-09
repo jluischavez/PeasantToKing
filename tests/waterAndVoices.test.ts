@@ -30,19 +30,22 @@ function network() {
   return { map, homes, water, refresh };
 }
 
-test('water travels at most six connected road tiles from a staffed well and each well serves up to 20 people', () => {
+test('water travels at most six connected road tiles from a staffed well and each well serves up to 30 people', () => {
   const { water, homes, refresh } = network();
+  for (const home of homes) home.residents = 6;
   refresh(1);
-  assert.deepEqual(water.wellAt(firstWell), { connected: true, workers: 1, served: 20 });
-  assert.equal(water.suppliedAt(servedHome), 4);
-  assert.equal(homes.reduce((sum, home) => sum + water.suppliedAt(home.cell), 0), 20);
+  assert.deepEqual(water.wellAt(firstWell), { connected: true, workers: 1, served: 30 });
+  assert.equal(water.suppliedAt(servedHome), 6);
+  assert.equal(homes.reduce((sum, home) => sum + water.suppliedAt(home.cell), 0), 30);
+  assert.match(water.shortageReason(c(6, 0)), /agotaron sus cupos/);
   assert.equal(water.suppliedAt(c(7, 0)), 0);
 
   // Make only the farthest two houses eligible for capacity, to check the range independently.
   for (const home of homes.slice(0, 5)) home.residents = 0;
   refresh(1);
-  assert.equal(water.suppliedAt(c(6, 0)), 4);
+  assert.equal(water.suppliedAt(c(6, 0)), 6);
   assert.equal(water.suppliedAt(c(7, 0)), 0);
+  assert.match(water.shortageReason(c(7, 0)), /Sin pozo conectado/);
 });
 
 test('an unstaffed well or a well isolated from the center supplies nobody', () => {
@@ -50,6 +53,7 @@ test('an unstaffed well or a well isolated from the center supplies nobody', () 
   refresh(0);
   assert.equal(water.wellAt(firstWell)?.connected, true);
   assert.equal(water.suppliedAt(servedHome), 0);
+  assert.match(water.shortageReason(servedHome), /sin aguador/);
   map.remove(c(1, 1));
   refresh(1);
   assert.deepEqual(water.wellAt(firstWell), { connected: false, workers: 0, served: 0 });
@@ -64,7 +68,7 @@ test('overlapping wells allocate at most one unit of service per resident', () =
   assert.ok(homes.every(home => water.suppliedAt(home.cell) === home.residents));
   const supplied = [firstWell, secondWell].map(well => water.wellAt(well)!.served);
   assert.equal(supplied[0] + supplied[1], 28);
-  assert.ok(supplied.every(count => count <= 20));
+  assert.ok(supplied.every(count => count <= 30));
 });
 
 function village() {

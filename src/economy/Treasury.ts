@@ -8,6 +8,7 @@ import { gameTimeRules } from '../simulation/GameTime.ts';
 
 const unitsPerGold = unitsPerResource * centsPerGold ** 2 * gameTimeRules.secondsPerHour;
 const unitsPerInventoryUnit = unitsPerGold / unitsPerResource;
+const unitsPerTradeTick = unitsPerInventoryUnit / centsPerGold;
 const unitsPerCentSecond = unitsPerGold / (centsPerGold * gameTimeRules.secondsPerHour);
 type Movement = Omit<Parameters<EconomicHistory['record']>[0], 'resource' | 'unitScale'>;
 
@@ -18,39 +19,86 @@ export class Treasury {
   private accruedMaintenance = 0;
   private unpaidWages = 0;
   private unpaidMaintenance = 0;
+  private pendingWages = 0;
+  private pendingMaintenance = 0;
+  private readonly floor: number;
 
-  constructor(initialGold: number, private readonly history: EconomicHistory) {
+  constructor(initialGold: number, private readonly history: EconomicHistory, readonly creditLimit = 0) {
     this.units = Math.round(initialGold * unitsPerGold);
+    this.floor = -Math.round(creditLimit * unitsPerGold);
+    check(whole(this.floor, -Number.MAX_SAFE_INTEGER, 0) && whole(this.units, this.floor));
   }
 
   saveState() {
     return { units: this.units, accruedTaxes: this.accruedTaxes, accruedWages: this.accruedWages,
-      accruedMaintenance: this.accruedMaintenance, unpaidWages: this.unpaidWages, unpaidMaintenance: this.unpaidMaintenance };
+      accruedMaintenance: this.accruedMaintenance, unpaidWages: this.unpaidWages, unpaidMaintenance: this.unpaidMaintenance,
+      pendingWages: this.pendingWages, pendingMaintenance: this.pendingMaintenance };
   }
 
   restoreState(state: ReturnType<Treasury['saveState']>): void {
-    const { units, accruedTaxes, accruedWages, accruedMaintenance, unpaidWages, unpaidMaintenance } = state;
-    check([units, accruedTaxes, accruedWages, accruedMaintenance, unpaidWages, unpaidMaintenance].every(value => whole(value)));
+    const { units, accruedTaxes, accruedWages, accruedMaintenance, unpaidWages, unpaidMaintenance,
+      pendingWages = 0, pendingMaintenance = 0 } = state;
+    check(whole(units, this.floor) && [accruedTaxes, accruedWages, accruedMaintenance, unpaidWages, unpaidMaintenance].every(value => whole(value))
+      && whole(pendingWages, 0, unpaidWages) && whole(pendingMaintenance, 0, unpaidMaintenance));
     this.units = units;
     this.accruedTaxes = accruedTaxes;
     this.accruedWages = accruedWages;
     this.accruedMaintenance = accruedMaintenance;
     this.unpaidWages = unpaidWages;
     this.unpaidMaintenance = unpaidMaintenance;
+    this.pendingWages = pendingWages;
+    this.pendingMaintenance = pendingMaintenance;
   }
 
   get gold(): number { return this.units / unitsPerGold; }
+  get debt(): number { return Math.max(0, -this.units) / unitsPerGold; }
+  get creditAvailable(): number { return this.creditLimit - this.debt; }
+  get arrears(): OperatingCosts {
+    return { wages: this.pendingWages / unitsPerGold, maintenance: this.pendingMaintenance / unitsPerGold };
+  }
 
   get deficits(): OperatingCosts {
     return { wages: this.unpaidWages / unitsPerGold, maintenance: this.unpaidMaintenance / unitsPerGold };
   }
 
   shortfall(gold: number): number {
-    return Math.max(0, Math.round(gold * unitsPerGold) - this.units) / unitsPerGold;
+    return Math.max(0, Math.round(gold * unitsPerGold) - (this.units - this.floor)) / unitsPerGold;
   }
 
   payBuilding(gold: number, operation: SiteCharge, destination: string): void {
     this.debit(Math.round(gold * unitsPerGold), operation, destination);
+  }
+
+  get tradeBudgetTicks(): number { return Math.floor((this.units - this.floor) / unitsPerTradeTick); }
+
+  settleTrade(trader: string, exports: number, imports: number): boolean {
+    const earned = exports * unitsPerTradeTick;
+    const cost = imports * unitsPerTradeTick;
+    if (!whole(earned) || !whole(cost) || !whole(this.units + earned, this.floor)
+      || cost > this.units + earned - this.floor) return false;
+    if (earned > 0) {
+      const before = this.units;
+      this.units += earned;
+      this.record({ operation: 'export', units: earned, origin: trader, destination: 'treasury',
+        destinationBalance: { before, after: this.units } });
+    }
+    this.debit(cost, 'import', trader);
+    return true;
+  }
+
+  settleMission(id: string, cost: number, reward: number): boolean {
+    if (!whole(cost) || !whole(reward)) return false;
+    const debit = cost * unitsPerGold, credit = reward * unitsPerGold;
+    if (!whole(debit) || !whole(credit) || (debit > 0 && this.units < debit)
+      || !whole(this.units - debit + credit, this.floor)) return false;
+    this.debit(debit, 'mission-contribution', id);
+    if (credit > 0) {
+      const before = this.units;
+      this.units += credit;
+      this.record({ operation: 'mission-reward', units: credit, origin: id, destination: 'treasury',
+        destinationBalance: { before, after: this.units } });
+    }
+    return true;
   }
 
   creditSale(market: string, household: string, inventoryUnits: number, soldProduct: ProductId): void {
@@ -81,14 +129,20 @@ export class Treasury {
       });
       this.accruedTaxes = 0;
     }
-    this.unpaidWages += this.settle(this.accruedWages, 'wages', 'workers');
-    this.unpaidMaintenance += this.settle(this.accruedMaintenance, 'maintenance', 'building-maintenance');
+    this.pendingWages = this.repay(this.pendingWages, 'wages', 'workers-arrears');
+    const wages = this.settle(this.accruedWages, 'wages', 'workers');
+    this.unpaidWages += wages;
+    this.pendingWages += wages;
+    this.pendingMaintenance = this.repay(this.pendingMaintenance, 'maintenance', 'maintenance-arrears');
+    const maintenance = this.settle(this.accruedMaintenance, 'maintenance', 'building-maintenance');
+    this.unpaidMaintenance += maintenance;
+    this.pendingMaintenance += maintenance;
     this.accruedWages = 0;
     this.accruedMaintenance = 0;
   }
 
   private settle(due: number, operation: 'wages' | 'maintenance', destination: string): number {
-    const paid = Math.min(due, this.units);
+    const paid = Math.min(due, this.units - this.floor);
     this.debit(paid, operation, destination);
     const unpaid = due - paid;
     if (unpaid > 0) this.record({
@@ -98,9 +152,15 @@ export class Treasury {
     return unpaid;
   }
 
-  private debit(units: number, operation: SiteCharge | 'wages' | 'maintenance', destination: string): void {
+  private repay(due: number, operation: 'wages' | 'maintenance', destination: string): number {
+    const paid = Math.min(due, Math.max(0, this.units));
+    this.debit(paid, operation, destination);
+    return due - paid;
+  }
+
+  private debit(units: number, operation: SiteCharge | 'wages' | 'maintenance' | 'import' | 'mission-contribution', destination: string): void {
     if (units === 0) return;
-    check(whole(units, 1, this.units));
+    check(whole(units, 1, this.units - this.floor));
     const before = this.units;
     this.units -= units;
     this.record({

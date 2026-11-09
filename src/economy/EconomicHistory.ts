@@ -2,8 +2,9 @@ import { check, label, list, whole } from '../persistence/validation.ts';
 import type { ProductId } from './Products';
 
 export type AuditResource = ProductId | 'gold';
-export type SiteCharge = 'construction' | 'demolition' | 'clearing';
-export type AuditOperation = SiteCharge | 'production' | 'transfer' | 'consumption' | 'sale' | 'construction-material' | 'wages' | 'maintenance' | 'tax';
+export type SiteCharge = 'construction' | 'demolition' | 'clearing' | 'recognition' | 'tribute' | 'offering';
+export type AuditOperation = SiteCharge | 'production' | 'transfer' | 'consumption' | 'sale' | 'construction-material' | 'wages' | 'maintenance' | 'tax' | 'export' | 'import'
+  | 'mission-contribution' | 'mission-reward' | 'mission-delivery';
 type Balance = Readonly<{ before: number; after: number }>;
 type Movement = Readonly<{
   resource: AuditResource;
@@ -41,8 +42,9 @@ export class EconomicHistory {
     check(whole(sequence) && events.length === Math.min(sequence, this.capacity) && (events.at(-1)?.id ?? 0) === sequence);
     let previousId = sequence - events.length;
     let previousTime = 0;
-    const balance = (value?: Balance) => value === undefined || (whole(value.before) && whole(value.after));
     for (const event of events) {
+      const minimum = event.resource === 'gold' ? -Number.MAX_SAFE_INTEGER : 0;
+      const balance = (value?: Balance) => value === undefined || (whole(value.before, minimum) && whole(value.after, minimum));
       check(whole(event.id, 1) && event.id === ++previousId && whole(event.timeMs, previousTime, time)
         && ['food', 'wood', 'gold'].includes(event.resource) && whole(event.units, 1)
         && (event.unitScale === undefined || whole(event.unitScale, 1))
@@ -51,7 +53,8 @@ export class EconomicHistory {
         && (event.soldProduct === undefined || ['food', 'wood'].includes(event.soldProduct))
         && ['completed', 'unpaid'].includes(event.result) && balance(event.originBalance) && balance(event.destinationBalance)
         && ['production', 'transfer', 'consumption', 'sale', 'construction', 'construction-material',
-          'demolition', 'clearing', 'wages', 'maintenance', 'tax'].includes(event.operation));
+          'demolition', 'clearing', 'recognition', 'tribute', 'offering', 'wages', 'maintenance', 'tax', 'export', 'import',
+          'mission-contribution', 'mission-reward', 'mission-delivery'].includes(event.operation));
       previousTime = event.timeMs;
     }
     this.sequence = sequence;

@@ -6,7 +6,7 @@ import type { CameraView } from '../map/MapCamera';
 export const saveSlots = [1, 2, 3] as const;
 export type SaveSlot = typeof saveSlots[number];
 export const autosaveMs = 60_000;
-const version = 2;
+const version = 10;
 const maxSaveLength = 2_000_000;
 const tabKey = 'peasant-to-king:tab-session';
 export const saveKey = (slot: SaveSlot) => 'peasant-to-king:save:' + slot;
@@ -18,8 +18,18 @@ type TabCheckpoint = Envelope & { active: ActiveSave | null };
 function parse(raw: string): Envelope {
   check(raw.length <= maxSaveLength);
   const save = JSON.parse(raw) as Envelope;
-  if (save?.version !== 1 && save?.version !== version) throw new Error('La versión del guardado no es compatible.');
+  if (save?.version !== 1 && save?.version !== 2 && save?.version !== 3 && save?.version !== 4
+    && save?.version !== 5 && save?.version !== 6 && save?.version !== 7 && save?.version !== 8 && save?.version !== 9 && save?.version !== version) {
+    throw new Error('La versión del guardado no es compatible.');
+  }
   check(whole(save.savedAt, 1, 8.64e15) && save.state && typeof save.state === 'object');
+  check(save.version < 3 || save.state.progression !== undefined);
+  check(save.version < 4 || save.state.crown !== undefined);
+  check(save.version < 5 || save.state.simulation?.trade !== undefined);
+  check(save.version < 6 || (save.state.crown?.confidence !== undefined && save.state.crown?.defeat !== undefined));
+  check(save.version < 7 || (save.state.simulation?.kingdomEvents !== undefined
+    && save.state.simulation.trade?.exported !== undefined));
+  check(save.version < 8 || save.state.economy?.logistics !== undefined);
   return save;
 }
 
@@ -80,7 +90,7 @@ export class SaveSlots {
     this.active = { slot, raw };
   }
 
-  load(slot: SaveSlot): ReturnType<typeof Session.restore> {
+  load(slot: SaveSlot, requirePlayable = false): ReturnType<typeof Session.restore> {
     const raw = this.backend().getItem(saveKey(slot));
     if (raw === null) throw new Error('La ranura está vacía.');
     let save: Envelope;
@@ -95,6 +105,9 @@ export class SaveSlots {
       game = Session.restore(save.state);
     } catch {
       throw new Error('La partida está incompleta o dañada.');
+    }
+    if (requirePlayable && game.session.simulation.crown.defeated) {
+      throw new Error('Esta partida ya terminó. Elige un guardado anterior o empieza una nueva partida.');
     }
     this.active = { slot, raw };
     return game;

@@ -78,6 +78,11 @@ export class Wellbeing {
 
   forget(cell: Cell): void { this.homes.delete(key(cell)); }
 
+  restartDistressWindow(cell: Cell): void {
+    const state = this.homes.get(key(cell));
+    if (state) state.distressedSeconds = 0;
+  }
+
   admissionsOpen(timeMs: number, happiness: number): boolean {
     return timeMs - this.lastDeparture >= wellbeingRules.readmissionDelayHours * simulatedMsPerGameHour
       && happiness >= wellbeingRules.readmissionHappiness;

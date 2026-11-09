@@ -1,4 +1,5 @@
 import { formatNumber } from '../formatNumber';
+import { unitsPerResource } from '../economy/Inventories';
 import { setText } from './domText';
 import { distributionRules } from '../economy/Distribution';
 import type { MarketSnapshot, HousingSupply } from '../economy/Distribution';
@@ -81,9 +82,9 @@ export class SelectionPanel {
     supply?: HousingSupply, foodShortage = 0, woodSupply?: HousingSupply, woodShortage = 0,
     wellbeing?: Readonly<{ happiness: number; concerns: readonly string[] }>, waterSupplied = 0, well?: WellSnapshot,
     housing?: { level: HousingLevel; progress: ReturnType<HousingEvolution['at']>; beauty: Beauty;
-      needs?: NeedCoverage; unemployment: number },
+      needs?: NeedCoverage; unemployment: number; waterIssue?: string },
     royal?: 'segment' | 'entry', employment?: { workers: number; capacity: number; issue: string | null },
-    dimensions?: Dimensions, road?: RoadLevel): void {
+    dimensions?: Dimensions, road?: RoadLevel, domestic?: { food: number; wood: number; purchases: number; arrivals: number }): void {
     const fields: [string, string, string][] = [];
     const add = (id: string, label: string, value: string) => fields.push([id, label, value]);
     const fraction = (value: number, total: number) => formatNumber(value) + ' / ' + formatNumber(total);
@@ -115,14 +116,27 @@ export class SelectionPanel {
       add('operation-reason', 'Motivo de inactividad', employment.issue ?? '—');
     }
     if (productivity) add('productivity', 'Productividad', formatNumber(productivity.ratio * 100) + ' %');
+      if (productivity) {
+        add('pending-cargo', 'Pendiente de recogida', formatNumber(productivity.transport.pending));
+        add('transit-cargo', 'En tránsito', formatNumber(productivity.transport.inTransit));
+        if (productivity.transport.blocked > 0) add('blocked-cargo', 'Transportes bloqueados', formatNumber(productivity.transport.blocked));
+        if (productivity.transport.dispatchStopped) add('dispatch-stopped', 'Despachos', 'Detenidos para demoler. Cancelar modo los reactiva.');
+      }
     if (warehouse || market) {
       const inventory = warehouse ?? market!;
       add('food-stock', 'Comida', formatNumber(inventory.food));
       add('wood-stock', 'Madera', formatNumber(inventory.wood));
       add('used', 'Capacidad usada', fraction(warehouse?.used ?? inventory.food + inventory.wood, inventory.capacity));
-      if (warehouse) add('free', 'Disponible', formatNumber(warehouse.free));
+      if (warehouse) {
+        add('incoming-cargo', 'Reservado para entregas', formatNumber(warehouse.incoming));
+        add('outgoing-pending', 'Reservado para recogida', formatNumber(warehouse.outgoing.pending));
+        add('outgoing-transit', 'En reparto', formatNumber(warehouse.outgoing.inTransit));
+        add('free', 'Disponible', formatNumber(warehouse.free));
+      }
     }
     if (market) {
+        add('market-incoming-food', 'Comida en camino', formatNumber(market.incomingFood));
+        add('market-incoming-wood', 'Madera en camino', formatNumber(market.incomingWood));
       add('coverage', 'Cobertura', formatNumber(market.coveredHomes) + ' solares · hasta ' + formatNumber(market.range) + ' tramos');
       add('restock', 'Reposición', 'Cada ' + formatNumber(gameMinutesForSeconds(distributionRules.restockIntervalSeconds)) + ' min del juego');
       add('market-reason', 'Abastecimiento', market.reason);
@@ -155,11 +169,18 @@ export class SelectionPanel {
       add('housing-level', 'Nivel de vivienda', formatNumber(housing.level));
       add('residents', 'Habitantes', fraction(residents, homeLevel.capacity));
       if (supply) add('food-supply', 'Comida', supply.status === 'reserve' ? 'Reserva inicial'
-        : supply.status === 'market' ? 'Mercado a ' + formatNumber(supply.distance ?? 0) + ' tramos' : 'Sin abastecimiento');
+        : supply.status === 'household' ? 'Reserva doméstica' : supply.status === 'market' ? 'Mercado a ' + formatNumber(supply.distance ?? 0) + ' tramos' : 'Sin abastecimiento');
       if (residents > 0) {
-        add('wood-supply', 'Madera', woodSupply?.status === 'market'
+        if (domestic) {
+          add('home-food', 'Comida en casa', formatNumber(domestic.food / unitsPerResource));
+          add('home-wood', 'Madera en casa', formatNumber(domestic.wood / unitsPerResource));
+          add('home-shopping', 'Compras en curso', formatNumber(domestic.purchases));
+          add('home-arrivals', 'Vecinos admitidos en camino', formatNumber(domestic.arrivals));
+        }
+        add('wood-supply', 'Madera', woodSupply?.status === 'household' ? 'Reserva doméstica' : woodSupply?.status === 'market'
           ? 'Mercado a ' + formatNumber(woodSupply.distance ?? 0) + ' tramos' : 'Sin abastecimiento');
         add('water-supply', 'Agua', fraction(waterSupplied, residents) + ' hab. abastecidos');
+        if (housing.waterIssue) add('water-issue', 'Motivo de falta de agua', housing.waterIssue);
         add('happiness', 'Felicidad', fraction(happiness, 100) + ' · ' + wellbeingState(happiness));
         add('concerns', 'Bienestar', wellbeing?.concerns.join(' · ') ||
           (wellbeing ? 'Suministros cubiertos y empleo estable' : 'Bienestar inicial'));
@@ -174,8 +195,11 @@ export class SelectionPanel {
       add('remaining', 'Tiempo restante', progress > 0 ? formatNumber(housingRules.seconds - progress) + ' s simulados' : '—');
     }
     if (well) {
-      add('well-served', 'Habitantes abastecidos', fraction(well.served, waterRules.capacity));
+      add('well-capacity', 'Capacidad', formatNumber(waterRules.capacity) + ' habitantes');
+      add('well-served', 'Habitantes abastecidos', formatNumber(well.served));
       add('coverage', 'Cobertura', 'Hasta ' + formatNumber(waterRules.roadRange) + ' tramos');
+      add('water-issue', 'Estado del servicio', !well.connected ? 'Pozo sin conexión vial.' : well.workers === 0 ? 'Pozo sin aguador.'
+        : well.served >= waterRules.capacity ? 'Todos los cupos ocupados.' : 'Quedan cupos en la zona de cobertura.');
     }
     this.renderRows(fields);
     this.cancel.disabled = cell === null;

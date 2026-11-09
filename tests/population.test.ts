@@ -59,6 +59,7 @@ test('immigration still requires a food reserve, while connected jobs improve at
 test('each connected building offers configured jobs but produces nothing without workers', () => {
   const { map, economy, population, simulation, recalculate } = village();
   const types = ['farm', 'lumberjack', 'market', 'warehouse'] as const;
+  assert.ok(map.terrain.plantTree(cell(2, 3)));
   types.forEach((type, i) => map.place(cell(i + 1, 1), type));
   map.place(cell(15, 15), 'farm');
   recalculate();
@@ -287,7 +288,7 @@ test('the initial food reserve bootstraps worker-based production while unemploy
   assert.ok(population.migrationAttractiveness(economy.availableFood) <= 100);
   assert.ok(economy.resources.food > 0);
   assert.ok(economy.perSecond.food > 0);
-  assert.equal(economy.perSecond.food, population.workersAt(cell(8, 1)) / 2);
+  assert.equal(economy.perSecond.food, population.workersAt(cell(8, 1)) * 0.64);
   assert.ok(economy.storage.warehouseAt(cell(9, 0))!.operational);
   simulation.advance(600000);
   assert.ok(economy.resources.food >= 0);
@@ -387,6 +388,7 @@ test('a new producer receives a worker from a surplus post without removing the 
   assert.equal(economy.perSecond.food, 0);
   const before = economy.resources;
   map.place(cell(9, 0), 'lumberjack');
+  assert.ok(map.terrain.plantTree(cell(10, 2)));
   recalculate();
   assert.equal(population.workersAt(cell(9, 0)), 1);
   assert.equal(population.workersAt(cell(8, 1)), 1);

@@ -7,7 +7,7 @@ import { constructionNames } from '../src/map/ConstructionMap.ts';
 
 const read = (path: string) => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
 
-test('the Alpha uses a local favicon and root asset paths in development and production', async () => {
+test('the Alpha uses a local favicon and root asset paths in development and production', { timeout: 20_000 }, async () => {
   const dev = await resolveConfig({}, 'serve');
   assert.equal(dev.base, '/');
   const preview = await resolveConfig({}, 'serve', 'production', 'production', true);

@@ -132,17 +132,17 @@ test('canceling a clearing, losing affordability before confirming, and a stale 
   assert.equal(economy.resources.gold, 150);
   assert.equal(map.terrain.at(cell)?.obstacle, 'forest');
   assert.equal(simulation.requestDemolition(cell), null);
-  assert.ok(economy.payBuildingCost({ gold: 147, wood: 0 }, 'construction', 'test'));
+  assert.ok(economy.payBuildingCost({ gold: 347, wood: 0 }, 'construction', 'test'));
   assert.match(simulation.confirmDemolition()!, /Faltan 5 oro/);
   assert.match(simulation.requestDemolition(cell)!, /insuficientes/);
-  assert.equal(economy.resources.gold, 3);
+  assert.equal(economy.resources.gold, -197);
   assert.equal(map.terrain.at(cell)?.obstacle, 'forest');
 
   const tree = matching(map.terrain, tile => tile.obstacle === 'tree')[0]!;
   assert.equal(simulation.requestDemolition(tree), null);
   assert.equal(map.terrain.clear(tree, 'tree'), true);
   assert.ok(simulation.confirmDemolition());
-  assert.equal(economy.resources.gold, clearingCosts.tree.gold);
+  assert.equal(economy.resources.gold, -200 + clearingCosts.tree.gold);
   assert.ok(economy.history.read().every(event => event.operation !== 'clearing'));
 });
 

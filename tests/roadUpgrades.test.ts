@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { Session } from '../src/persistence/Session.ts';
 import { getRoadMask, RoadDirection } from '../src/map/RoadAppearance.ts';
+import { setFixtureRank } from './fixtures/settlementRank.ts';
 
 const c = (column: number, row: number) => ({ column, row });
 const road = c(2, 1), adjacent = c(3, 1), home = c(2, 2);
@@ -12,6 +13,7 @@ function village() {
   for (let x = 1; x <= 4; x++) assert.ok(game.map.place(c(x, 1), 'road'));
   assert.ok(game.map.place(home, 'house'));
   game.simulation.recalculate();
+  setFixtureRank(game.simulation, 'villa');
   return game;
 }
 

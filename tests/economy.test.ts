@@ -9,6 +9,7 @@ import { Population } from '../src/population/Population.ts';
 const cell = (column: number, row: number) => ({ column, row });
 function setup() {
   const map = new ConstructionMap(20, 20);
+  assert.ok(map.terrain.plantTree(cell(16, 3)));
   const connections = new RoadConnections();
   const economy = new Economy({ gold: 0, food: 20, wood: 0 });
   const population = new Population();
@@ -61,22 +62,24 @@ test('connected producers without assigned workers produce nothing', () => {
   assert.deepEqual(economy.resources, { gold: 0, food: 20, wood: 0 });
 });
 
-for (const [type, resource, capacity, maximum] of [
-  ['farm', 'food', 4, 2], ['lumberjack', 'wood', 3, 2],
+for (const [type, resource, rates] of [
+  ['farm', 'food', [0, 0.64, 1.28, 1.92, 2.56]], ['lumberjack', 'wood', [0, 0.56, 0.88, 1.2]],
 ] as const) {
   test(type + ' scales production at every workforce level, including full capacity', () => {
-    for (let workers = 0; workers <= capacity; workers++) {
+    const capacity = rates.length - 1;
+    const maximum = rates[capacity]!;
+    for (const [workers, rate] of rates.entries()) {
       const { map, economy, population, recalculate, fillWorkers } = setup();
       map.place(cell(13, 1), type);
       recalculate();
       fillWorkers(workers);
       assert.equal(population.workersAt(cell(13, 1)), workers);
-      assert.equal(economy.perSecond[resource], maximum * workers / capacity);
+      assert.equal(economy.perSecond[resource], rate);
       assert.deepEqual(economy.productivityAt(cell(13, 1)),
-        { workers, capacity, ratio: workers / capacity, storageBlocked: false });
+        { workers, capacity, ratio: type === 'farm' ? workers / capacity : [0, 14 / 30, 22 / 30, 1][workers], storageBlocked: false, transport: economy.storage.logistics.at(cell(13, 1)) });
       const before = economy.resources[resource];
       economy.advance(3000);
-      assert.equal(economy.resources[resource], before + maximum * workers / capacity * 3);
+      assert.ok(Math.abs(economy.resources[resource] - (before + rate * 3)) < 1e-12);
       assert.ok(economy.perSecond[resource] <= maximum);
     }
   });
@@ -88,10 +91,10 @@ test('multiple fully staffed buildings accumulate production and nonproducers co
   types.forEach((type, i) => map.place(cell(i + 13, 1), type));
   recalculate();
   fillWorkers(20);
-  assert.deepEqual(economy.perSecond, { gold: 0, food: 4, wood: 4 });
+  assert.deepEqual(economy.perSecond, { gold: 0, food: 5.12, wood: 2.4 });
   assert.equal(economy.productivityAt(cell(19, 1)), undefined);
   economy.advance(3000);
-  assert.deepEqual(economy.resources, { gold: 0, food: 32, wood: 12 });
+  assert.deepEqual(economy.resources, { gold: 0, food: 35.36, wood: 7.2 });
 });
 
 test('disconnected production is zero even if an old workforce snapshot still has employees', () => {
@@ -104,7 +107,7 @@ test('disconnected production is zero even if an old workforce snapshot still ha
   connections.recalculate(disconnected);
   economy.recalculate(disconnected, connections, population);
   assert.deepEqual(economy.perSecond, { gold: 0, food: 0, wood: 0 });
-  assert.deepEqual(economy.productivityAt(cell(13, 1)), { workers: 0, capacity: 4, ratio: 0, storageBlocked: false });
+  assert.deepEqual(economy.productivityAt(cell(13, 1)), { workers: 0, capacity: 4, ratio: 0, storageBlocked: false, transport: economy.storage.logistics.at(cell(13, 1)) });
   economy.advance(1000);
   assert.equal(economy.resources.food, 20);
 });
@@ -119,13 +122,13 @@ test('closing a road gap starts staffed production without paying for disconnect
   assert.equal(economy.resources.wood, 0);
   map.place(cell(15, 1), 'road');
   recalculate();
-  assert.equal(economy.perSecond.wood, 2 / 3);
+  assert.equal(economy.perSecond.wood, 0.56);
   assert.equal(economy.resources.wood, 0);
   economy.advance(3000);
-  assert.equal(economy.resources.wood, 2);
+  assert.equal(economy.resources.wood, 1.68);
 });
 
-test('shared clock preserves fractions and long-running thirds stop exactly at warehouse capacity', () => {
+test('shared clock preserves fractions and wood production leaves food space in mixed storage', () => {
   const { map, economy, recalculate, fillWorkers } = setup();
   map.place(cell(13, 1), 'lumberjack');
   recalculate();
@@ -135,11 +138,11 @@ test('shared clock preserves fractions and long-running thirds stop exactly at w
   assert.equal(economy.advance(999), false);
   assert.equal(economy.resources.wood, 0);
   assert.equal(economy.advance(1), true);
-  assert.equal(economy.resources.wood, 2 / 3);
+  assert.equal(economy.resources.wood, 0.56);
   economy.advance(2000);
-  assert.equal(economy.resources.wood, 2);
+  assert.equal(economy.resources.wood, 1.68);
   for (let i = 0; i < 30000; i++) economy.advance(1000);
-  assert.equal(economy.resources.wood, 300);
+  assert.equal(economy.resources.wood, 269.92);
   assert.equal(economy.perSecond.wood, 0);
   assert.equal(economy.productivityAt(cell(13, 1))!.storageBlocked, true);
   for (const delta of [0, -1, NaN, Infinity]) assert.equal(economy.advance(delta), false);
@@ -165,6 +168,6 @@ test('production never exceeds maximum even if a workforce provider reports too 
     capacityFor: type => population.capacityFor(type),
     workersAt: () => 100,
   });
-  assert.equal(economy.perSecond.food, 2);
-  assert.deepEqual(economy.productivityAt(cell(13, 1)), { workers: 4, capacity: 4, ratio: 1, storageBlocked: false });
+  assert.equal(economy.perSecond.food, 2.56);
+  assert.deepEqual(economy.productivityAt(cell(13, 1)), { workers: 4, capacity: 4, ratio: 1, storageBlocked: false, transport: economy.storage.logistics.at(cell(13, 1)) });
 });
