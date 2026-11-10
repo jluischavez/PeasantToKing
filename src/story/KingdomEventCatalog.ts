@@ -1,8 +1,8 @@
 import type { ConstructionType } from '../map/ConstructionMap';
-import type { Objective, RealmContext } from '../simulation/KingdomEvents';
+import type { MissionReward, Objective, RealmContext } from '../simulation/KingdomEvents';
 import { simulatedMsPerGameHour as hour } from '../simulation/GameTime.ts';
 
-type Terms = { objective: Objective; reward: { gold: number; favor: number }; rejectFavor: number; expireFavor: number; hours: number };
+type Terms = { objective: Objective; reward: MissionReward; rejectFavor: number; expireFavor: number; hours: number };
 export type KingdomEventDefinition = {
   key: string; title: string; type: 'petition' | 'development' | 'recognition';
   requirements: string; stories: readonly string[]; demanding: boolean; cooldownHours: number;
@@ -14,9 +14,20 @@ const has = (context: RealmContext, building: ConstructionType) => (context.buil
 const stable = (context: RealmContext) => context.foodCoverage >= 90 && context.waterCoverage >= 90;
 const reward = (favor: number, gold = 0) => ({ gold, favor });
 const request = (objective: Objective, favor: number, gold = 0): Terms =>
-  ({ objective, reward: reward(favor, gold), rejectFavor: -2, expireFavor: -3, hours: 48 });
+  ({ objective, reward: objective.kind === 'gold'
+    ? { ...reward(favor, gold), wood: Math.max(10, Math.min(30, Math.floor(objective.target / 2))), food: 10 }
+    : objective.kind === 'delivery' && objective.product === 'food'
+      ? { ...reward(favor, Math.ceil(objective.target * 0.4)), wood: 10 }
+      : { ...reward(favor, objective.kind === 'delivery' ? Math.ceil(objective.target * 0.7) : gold), food: 10 },
+    rejectFavor: -2, expireFavor: -3, hours: 48 });
 const development = (objective: Objective, favor: number, gold = 0): Terms =>
-  ({ objective, reward: reward(favor, gold), rejectFavor: 0, expireFavor: 0, hours: 48 });
+  ({ objective, reward: objective.kind === 'building'
+    ? { ...reward(favor, objective.building === 'plaza' ? 75 : objective.building === 'park' ? 45 : 15), wood: 10 }
+    : objective.kind === 'roads' ? { ...reward(favor, objective.target * (objective.level === 3 ? 9 : 4)), wood: 10 }
+    : objective.kind === 'growth' ? { ...reward(favor, 10), food: objective.target * 5, wood: 10 }
+    : objective.kind === 'wellbeing' ? { ...reward(favor, favor === 7 ? 25 : favor === 5 ? 18 : 8),
+      food: favor === 2 ? 10 : 0 }
+    : reward(favor, gold), rejectFavor: 0, expireFavor: 0, hours: 48 });
 
 export const kingdomEventCatalog: readonly KingdomEventDefinition[] = [
   {
@@ -139,7 +150,7 @@ export const kingdomEventCatalog: readonly KingdomEventDefinition[] = [
     ],
     eligible: context => context.favor >= 70 && context.recentTribute && context.happiness >= 65 && stable(context),
     terms: (_context, variant) => ({ objective: { kind: 'reward', target: 1 },
-      reward: reward(2, variant ? 20 : 15), rejectFavor: 0, expireFavor: 0, hours: 48 }),
+      reward: { ...reward(2, variant ? 20 : 15), wood: 10 }, rejectFavor: 0, expireFavor: 0, hours: 48 }),
   },
   {
     key: 'village-festival', title: 'La fiesta de la cosecha', type: 'development', demanding: false, cooldownHours: 96,

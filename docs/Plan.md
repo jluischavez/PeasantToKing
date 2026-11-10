@@ -1,5 +1,39 @@
 # Peasant to King — Plan incremental para Codex
 
+## Etapa 15A-4 — NPCs, profesiones y recompensas (2026-11-10)
+
+Se partió del estado local limpio y de 437 pruebas aprobadas. Se conserva la arquitectura de 15A-1/2/3.
+
+Diagnóstico reproducible: cada cambio de topología reiniciaba Loading a cero y convertía Unloading en Carrying, aunque el acceso siguiera siendo válido. Una sucesión de obras podía mantener un personaje en la entrada. También se omitía reconciliar inmediatamente la elegibilidad cuando cambiaban empleados/permisos sin cambiar la topología. Ahora se conserva el tiempo de trabajo en accesos válidos y la fracción del tramo si el siguiente paso no cambia; se buscan desvíos desde la posición confirmada y se bloquea sin perder mercancías/reservas. Agua e inmigración conservan igualmente la descarga. Los bloqueados siguen excluidos del renderizado, las operaciones terminadas liberan inventario transitorio y el pool sigue acotado. Las rutas de una casilla son válidas: completan carga/descarga dentro de los edificios sin representación estacionaria en la calle. El ensayo de cien segundos sin camino confirma que no aparecen operaciones nuevas; se conserva el cupo anterior de ocho por origen y la búsqueda de otro almacén autorizado.
+
+`TransportAppearance` clasifica por tipo de viaje y edificio de origen, sin usar la carga como profesión. Paleta: almacén rojo #d33c36, maderería café #86502e, granja verde #36a34a, aguador azul #318cde, desempleado blanco #ffffff, forastero/inmigrante ocre #c99a30, comprador beige #d9c39d y mercado burdeos #85344f. Solo aparecen los roles respaldados por operaciones reales. El renderizador genera de forma diferida las combinaciones oficio/carga/frame y reasigna la textura al reutilizar una imagen.
+
+| Misión | Recompensa nueva, además del favor vigente |
+| --- | --- |
+| Guerra del rey | 10 comida y 10–30 madera según la contribución |
+| Hambruna en el norte | Oro equivalente al 40 % de la comida entregada, redondeado arriba, y 10 madera |
+| El invierno se acerca | Oro equivalente al 70 % de la madera, redondeado arriba, y 10 comida |
+| Visita del monarca | 25 oro |
+| Pueblo digno de admiración | 4 oro por tramo de grava o 9 por piedra, y 10 madera |
+| Capricho de la Corona | 15/45/75 oro por jardín/parque/plaza y 10 madera |
+| Nueva oportunidad | 10 oro, 5 comida por habitante solicitado y 10 madera |
+| Orgullo de los campesinos | 18 oro |
+| Mercaderes del reino | Conserva la prima de 12/18 oro |
+| Reconocimiento de lealtad | Conserva 15/20 oro y añade 10 madera |
+| Fiesta de la cosecha | 8 oro y 10 comida |
+
+La liquidación existente paga oro/costos y favor una vez. Al resolver se registra el derecho a materiales; se intenta recibirlos en almacenes reales mediante `Inventories.exchange`, sin reabrir reservas iniciales. Solo se descuenta del derecho lo ingresado, en enteros de 1/150. La consulta y recepción del remanente están en Crónicas, incluso cuando su misión abandona el historial de sesenta entradas. Cada ingreso registra `mission-reward` con ID de misión, almacén y balances. El resultado conserva oro recibido, saldo neto, favor efectivo y materiales recibidos; los pendientes se muestran separados. Rechazos y vencimientos no conceden premios de éxito.
+
+El guardado 10 admite estos campos opcionales; cargar términos antiguos no consulta el catálogo nuevo. Se rechazan IDs pendientes duplicados, cantidades fuera de precisión y discrepancias entre premio, recibido y pendiente cuando la misión está en el historial. La compatibilidad de esquemas 1–10 continúa cubierta por las regresiones. No se modifican tarifas, producción, consumo, salarios, crédito, tributos ni derrota; no se introducen transportistas exteriores ni beneficios estratégicos nuevos del favor.
+
+Validación original, antes del hotfix siguiente: 454 pruebas/41 archivos (17 nuevas), build y diff --check correctos; permanece el aviso conocido de tamaño de Phaser. Las simulaciones de crecimiento, economía pequeña, reconocimientos, Corona, diez días de misiones, selección determinista y enfriamientos pasan. La comprobación visual pendiente se realizó durante el hotfix. Sin ramas, commits, push ni publicación.
+
+Hotfix posterior de accesos: antes de cambiar producción se registraron ID, actividad, origen/destino, fase, milisegundos y casilla durante tres ciclos completos. IDs 1/2/3 terminaban a los 6/12/18 s: cada uno pasaba 2 s visible en Loading y 1 s en Unloading. El pool se liberaba; no había operación infinita en esa reproducción. Dibujar sucesivos trabajos interiores sobre la misma calle producía la ilusión, y la interpolación retenía al caminante en el extremo hasta el tick lógico siguiente. `TransportRenderer` ahora solo muestra WalkingToSource/Carrying antes de alcanzar el último punto. No se cambia ningún reloj, fase ni transferencia económica; el mismo filtro sirve a productores, repartidores, compradores, agua e inmigración. Los accesos compartidos sin tramo quedan siempre interiores; la descarga y las reservas terminan por las reglas anteriores. Se elimina el balanceo exterior de manipulación. Las pruebas de pooling y de texturas ahora preparan operaciones caminando para comprobar imágenes realmente necesarias.
+
+Comprobación real con Chrome headless y MapScene/Phaser: granja 3×3, campamento, almacén y mercado 2×2, ocho viviendas y pozo. Se muestrearon 120 s cada 100 ms: 544 IDs, cinco tipos de actividad, máximo 16 sprites visibles, ninguna muestra consecutiva con el mismo ID visible en la misma posición y 47 visitas/llegadas completadas. Cortar el camino ocultó operaciones Blocked; abrir desvío recuperó las cargas sin alterar los totales durante la edición. Pausa estable, escritorio 1280×900, móvil 390×844 y cero excepciones en la ejecución final. La ciudad usa perfil temporal y existencias iniciales de prueba en el libro central; no demuestra el balance de arranque ni constituye una medición de FPS. Harness y trazas permanecen fuera del repositorio; no hay logs nuevos en producción.
+
+Validación final del hotfix: 464 pruebas/41 archivos (10 nuevas) con `npm test -- --maxWorkers=1`, `npm run build` y `git diff --check` correctos. Los timeouts paralelos se reprodujeron antes de modificar el renderizador; las simulaciones largas pasan en serie sin ampliar sus límites. Solo cambian `TransportRenderer`, `tests/{npcLifecycle,citizens,logistics}.test.ts` y estos tres documentos, conservando los cambios locales anteriores. La economía y las recompensas no reciben modificaciones durante este hotfix.
+
 ## Etapa 15A-3 — Ciudadanos y ciclo de vida de NPCs (2026-11-09)
 
 Implementada sobre los cambios locales sin confirmar de las etapas anteriores. La revisión inicial ejecutó las 416 pruebas existentes antes de ampliar el modelo. No se crearon ramas, commits, dependencias ni publicaciones.

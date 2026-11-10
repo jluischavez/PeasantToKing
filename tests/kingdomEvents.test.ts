@@ -11,9 +11,169 @@ import { newWorld, proceduralTerrain } from '../src/map/World.ts';
 import { TerrainMap } from '../src/map/Terrain.ts';
 import { constructionDimensions } from '../src/map/ConstructionMap.ts';
 import { setFixtureRank } from './fixtures/settlementRank.ts';
+import { missionReward, missionResult } from '../src/story/KingdomMissionText.ts';
 
 const day = 24 * hour;
 const c = (column: number, row: number) => ({ column, row });
+
+function rewardScenario() {
+  const game = town(23);
+  installOffer(game, 'royal-war');
+  const state = game.simulation.kingdomEvents.saveState();
+  state.current!.reward = { gold: 18, favor: 4, food: 20, wood: 15 };
+  game.simulation.kingdomEvents.restoreState(state, game.simulation.simulatedTimeMs);
+  return { game, engine: game.simulation.kingdomEvents, mission: game.simulation.kingdomEvents.current! };
+}
+
+test('combined gold, food, wood and favor settle exactly once through real inventories and audit', () => {
+  const { game, engine, mission } = rewardScenario();
+  const before = game.economy.resources, favor = game.simulation.crown.favor;
+  assert.ok(game.simulation.decideMission(mission.id, 'fulfill'));
+  assert.deepEqual(game.economy.resources, { gold: before.gold - mission.objective.target + 18,
+    food: before.food + 20, wood: before.wood + 15 });
+  assert.equal(game.simulation.crown.favor, favor + 4);
+  assert.deepEqual(engine.history.at(-1)!.result!.materials, { food: 20, wood: 15 });
+  assert.equal(engine.pendingRewards.length, 0);
+  for (let repeat = 0; repeat < 100; repeat++) {
+    assert.equal(game.simulation.decideMission(mission.id, 'fulfill'), false);
+    assert.equal(engine.claimRewards(mission.id), false);
+  }
+  for (const product of ['food', 'wood'] as const) {
+    const events = game.economy.history.read(product).filter(event => event.operation === 'mission-reward');
+    assert.equal(events.reduce((sum, event) => sum + event.units, 0), mission.reward[product]! * U);
+    assert.ok(events.every(event => event.origin === 'mission:' + mission.id && event.destination.startsWith('warehouse:')));
+  }
+  const loaded = Session.restore(JSON.parse(JSON.stringify(game.saveState(null)))).session;
+  assert.deepEqual(loaded.economy.resources, game.economy.resources);
+  assert.equal(loaded.simulation.kingdomEvents.claimRewards(mission.id), false);
+  assert.match(missionResult(engine.history.at(-1)!), /Recibido: 20 comida/);
+  assert.match(missionReward(mission), /15 madera/);
+});
+
+test('full warehouses keep persistent claims; partial fractional reception respects reserved space', () => {
+  const { game, engine, mission } = rewardScenario();
+  const ledger = game.economy.storage.inventories;
+  const stock = ledger.saveState();
+  for (const entry of stock) if (ledger.snapshot(entry.id)?.kind === 'warehouse') entry.goods = { food: 300 * U, wood: 0 };
+  ledger.restoreState(stock);
+  const reserve = game.economy.distribution.bootstrapActive;
+  assert.ok(game.simulation.decideMission(mission.id, 'fulfill'));
+  assert.deepEqual(engine.pendingRewards[0].remaining, { food: 20, wood: 15 });
+  assert.match(missionResult(engine.history.at(-1)!), /Pendiente de almacenar: 20 comida/);
+  assert.doesNotMatch(missionResult(engine.history.at(-1)!), /Recibido:/);
+  assert.equal(engine.claimRewards(mission.id), false);
+  const loaded = Session.restore(JSON.parse(JSON.stringify(game.saveState(null)))).session;
+  assert.deepEqual(loaded.simulation.kingdomEvents.pendingRewards, engine.pendingRewards);
+  const inventories = loaded.economy.storage.inventories;
+  const warehouse = loaded.economy.storage.operationalWarehouseIds()[0];
+  assert.equal(inventories.exchange(inventories.snapshot(warehouse)!.network!, 'fixture',
+    [{ warehouse, product: 'food', units: 1, direction: 'export' }], () => true), true);
+  assert.equal(loaded.simulation.kingdomEvents.claimRewards(mission.id), true);
+  assert.equal(inventories.snapshot(warehouse)!.used, 300 * U);
+  const state = loaded.saveState(null);
+  const twice = Session.restore(JSON.parse(JSON.stringify(state))).session;
+  assert.deepEqual(twice.simulation.kingdomEvents.pendingRewards, loaded.simulation.kingdomEvents.pendingRewards);
+  assert.equal(twice.simulation.kingdomEvents.claimRewards(mission.id), false);
+  assert.equal(twice.economy.distribution.bootstrapActive, reserve);
+});
+
+test.each(['reject', 'expire'] as const)('%s never grants success materials or gold', outcome => {
+  const { game, engine, mission } = rewardScenario();
+  const before = game.economy.resources;
+  if (outcome === 'reject') assert.ok(game.simulation.decideMission(mission.id, 'reject'));
+  else engine.advance(mission.deadline);
+  assert.deepEqual(game.economy.resources, before);
+  assert.equal(engine.pendingRewards.length, 0);
+  assert.deepEqual(engine.history.at(-1)!.result!.materials, { food: 0, wood: 0 });
+});
+
+test('loading an older resolved mission grants no retroactive materials', () => {
+  const { game, engine, mission } = rewardScenario();
+  assert.ok(game.simulation.decideMission(mission.id, 'fulfill'));
+  const state = game.saveState(null), history = state.simulation.kingdomEvents.history[0];
+  delete history.reward.food; delete history.reward.wood;
+  delete history.result!.materials; delete history.result!.goldReceived;
+  delete state.simulation.kingdomEvents.pendingRewards;
+  const loaded = Session.restore(JSON.parse(JSON.stringify(state))).session;
+  assert.equal(loaded.simulation.kingdomEvents.pendingRewards.length, 0);
+  assert.equal(loaded.simulation.kingdomEvents.claimRewards(mission.id), false);
+  assert.deepEqual(loaded.economy.resources, game.economy.resources);
+  assert.equal(engine.history.length, 1);
+});
+
+test('all eleven missions and both variants offer moderate material rewards', () => {
+  for (const event of kingdomEventCatalog) for (const variant of [0, 1]) {
+    const terms = event.terms(context(), variant), prize = terms.reward;
+    assert.ok(prize.gold + (prize.food ?? 0) + (prize.wood ?? 0) > 0, event.key);
+    assert.ok(prize.gold <= 75 && (prize.food ?? 0) <= 30 && (prize.wood ?? 0) <= 30);
+  }
+});
+
+test('saving before completion then after completion cannot repeat a combined reward', () => {
+  const { game, mission } = rewardScenario();
+  const before = game.saveState(null), restored = Session.restore(JSON.parse(JSON.stringify(before))).session;
+  assert.ok(restored.simulation.decideMission(mission.id, 'fulfill'));
+  const completed = restored.saveState(null);
+  for (let reload = 0; reload < 3; reload++) {
+    const loaded = Session.restore(JSON.parse(JSON.stringify(completed))).session;
+    assert.equal(loaded.simulation.decideMission(mission.id, 'fulfill'), false);
+    assert.equal(loaded.simulation.kingdomEvents.claimRewards(mission.id), false);
+    assert.deepEqual(loaded.economy.resources, restored.economy.resources);
+  }
+});
+
+test('reward reception honors incoming reservations, permissions, draining and shared capacity', () => {
+  const { game, engine, mission } = rewardScenario();
+  const ledger = game.economy.storage.inventories, ids = game.economy.storage.operationalWarehouseIds();
+  for (const id of ids) {
+    ledger.setProductEnabled(id, 'food', false); ledger.setProductEnabled(id, 'wood', false);
+  }
+  assert.ok(game.simulation.decideMission(mission.id, 'fulfill'));
+  const id = ids[0], stock = ledger.snapshot(id)!;
+  ledger.setProductEnabled(id, 'food', true); ledger.setProductEnabled(id, 'wood', true);
+  ledger.reserveIncoming(id, stock.capacity - stock.used - 1);
+  ledger.setDraining(id, true);
+  assert.equal(engine.claimRewards(mission.id), false);
+  ledger.setDraining(id, false);
+  assert.ok(engine.claimRewards(mission.id));
+  assert.equal(ledger.snapshot(id)!.free, 0);
+  assert.deepEqual(engine.pendingRewards[0].remaining, { food: (20 * U - 1) / U, wood: 15 });
+  assert.equal(engine.claimRewards(mission.id), false);
+  ledger.reserveIncoming(id, 0);
+  assert.ok(engine.claimRewards(mission.id));
+  assert.equal(engine.pendingRewards.length, 0);
+  assert.deepEqual(engine.history.at(-1)!.result!.materials, { food: 20, wood: 15 });
+});
+
+test('pending supplies remain claimable after their mission leaves the bounded history', () => {
+  const { game, engine, mission } = rewardScenario();
+  const ledger = game.economy.storage.inventories;
+  for (const id of game.economy.storage.operationalWarehouseIds()) ledger.setDraining(id, true);
+  assert.ok(game.simulation.decideMission(mission.id, 'fulfill'));
+  const state = game.saveState(null);
+  state.simulation.kingdomEvents.history = [];
+  const loaded = Session.restore(JSON.parse(JSON.stringify(state))).session;
+  for (const entry of loaded.economy.storage.inventories.saveState()) {
+    if (loaded.economy.storage.inventories.snapshot(entry.id)?.kind === 'warehouse')
+      loaded.economy.storage.inventories.setDraining(entry.id, false);
+  }
+  loaded.simulation.refreshWorkforce();
+  assert.ok(loaded.simulation.kingdomEvents.claimRewards(mission.id));
+  assert.equal(loaded.simulation.kingdomEvents.pendingRewards.length, 0);
+  assert.equal(loaded.simulation.kingdomEvents.claimRewards(mission.id), false);
+});
+
+test('a save with duplicated or inflated pending rewards is rejected', () => {
+  const { game, engine, mission } = rewardScenario();
+  for (const id of game.economy.storage.operationalWarehouseIds()) game.economy.storage.inventories.setDraining(id, true);
+  assert.ok(game.simulation.decideMission(mission.id, 'fulfill'));
+  const state = game.saveState(null);
+  state.simulation.kingdomEvents.pendingRewards!.push(structuredClone(engine.pendingRewards[0]));
+  assert.throws(() => Session.restore(state));
+  state.simulation.kingdomEvents.pendingRewards!.pop();
+  state.simulation.kingdomEvents.pendingRewards![0].remaining.food++;
+  assert.throws(() => Session.restore(state));
+});
 
 function context(overrides: Partial<RealmContext> = {}): RealmContext {
   return { hasCenter: true, rank: 'villa', population: 30, capacity: 48, happiness: 80, beauty: 45,
@@ -322,7 +482,7 @@ test('real warehouse deliveries are atomic, skip markets and reserves, and rewar
   assert.equal(game.economy.credit.balance, gold + mission.reward.gold);
   assert.equal(game.economy.storage.constructionWoodReserve, reserve);
   assert.ok(game.economy.storage.inventories.snapshot(warehouse)!.goods.wood >= 0);
-  assert.equal(game.economy.history.read().filter(event => event.operation === 'mission-reward').length, 1);
+  assert.equal(game.economy.history.read('gold').filter(event => event.operation === 'mission-reward').length, 1);
   const restored = Session.restore(JSON.parse(JSON.stringify(game.saveState(null)))).session;
   const balance = JSON.stringify(restored.economy.saveState());
   assert.equal(restored.simulation.decideMission(mission.id, 'fulfill'), false);
@@ -355,7 +515,7 @@ test('food aid removes exactly the promised food from warehouses and leaves mark
   const food = game.economy.missionStock.food, gold = game.economy.credit.balance;
   assert.ok(game.simulation.decideMission(mission.id, 'fulfill'));
   assert.equal(game.economy.missionStock.food, food - mission.objective.target);
-  assert.equal(game.economy.credit.balance, gold);
+  assert.equal(game.economy.credit.balance, gold + mission.reward.gold);
   assert.deepEqual(ledger.saveState().filter(entry => ledger.snapshot(entry.id)?.kind !== 'warehouse'), special);
 });
 
@@ -558,7 +718,7 @@ test('ten-day settlements get distinct achievable missions, modest rewards and c
   for (const run of runs) {
     assert.ok(run.sequence.length >= 3);
     assert.ok(run.population >= 30);
-    assert.ok(run.rewards <= 100);
+    assert.ok(run.rewards <= 250);
     assert.ok(run.first800 > 24 && run.first800 <= 240);
   }
   assert.ok(runs.slice(0, 3).every(run => run.completed >= 2));

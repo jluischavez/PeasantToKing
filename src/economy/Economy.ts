@@ -187,6 +187,27 @@ export class Economy {
       && this.storage.inventories.exchange(network, id, lines, settle, 'mission');
   }
 
+  receiveMissionReward(id: string, product: ProductId, amount: number): number {
+    let remaining = Math.round(amount * unitsPerResource);
+    if (!whole(remaining, 0) || remaining / unitsPerResource !== amount) return 0;
+    const requested = remaining;
+    const lines: TradeLine[] = [];
+    let network: string | null = null;
+    for (const warehouse of this.storage.operationalWarehouseIds()) {
+      const stock = this.storage.inventories.snapshot(warehouse)!;
+      if (!stock.network || (network !== null && network !== stock.network)
+        || !this.storage.inventories.acceptsIncoming(warehouse, product)
+        || !this.storage.logistics.acceptsDestination(this.context!.map.cellAtKey(warehouse.split(':')[1])!)) continue;
+      network = stock.network;
+      const units = Math.min(remaining, stock.free);
+      if (units > 0) lines.push({ warehouse, product, units, direction: 'import' });
+      remaining -= units;
+      if (remaining === 0) break;
+    }
+    return network && lines.length && this.storage.inventories.exchange(network, id, lines, () => true, 'mission')
+      ? (requested - remaining) / unitsPerResource : 0;
+  }
+
   get currentTaxPolicy(): TaxPolicy { return this.taxPolicy; }
 
   setTaxPolicy(policy: TaxPolicy): void { this.taxPolicy = policy; }

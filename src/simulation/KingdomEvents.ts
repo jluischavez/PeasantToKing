@@ -1,5 +1,6 @@
 import type { ConstructionType } from '../map/ConstructionMap';
 import type { ProductId } from '../economy/Products';
+import type { Goods } from '../economy/Inventories';
 import { unitsPerResource } from '../economy/Inventories.ts';
 import { check, label, list, range, whole } from '../persistence/validation.ts';
 import { kingdomEventCatalog } from '../story/KingdomEventCatalog.ts';
@@ -29,19 +30,22 @@ export type Objective =
   | { kind: 'reward'; target: number };
 export type MissionChoice = 'accept' | 'fulfill' | 'reject' | 'defer';
 export type MissionStatus = 'available' | 'active' | 'completed' | 'rejected' | 'expired';
+export type MissionReward = { gold: number; favor: number; food?: number; wood?: number };
+type PendingReward = { id: string; title: string; remaining: Goods };
 export type KingdomMission = {
   id: string; sequence: number; key: string; variant: number; type: string; title: string; story: string; requirements: string;
-  objective: Objective; reward: { gold: number; favor: number }; rejectFavor: number; expireFavor: number;
+  objective: Objective; reward: MissionReward; rejectFavor: number; expireFavor: number;
   status: MissionStatus; offeredAt: number; deadline: number; acceptedAt: number | null; resolvedAt: number | null;
   baseline: number; baselineSites: Record<string, number>; progress: number; sustainedMs: number; presented: boolean; rewarded: boolean;
   decisions: { choice: MissionChoice; timeMs: number }[];
-  result: { gold: number; favor: number; delivery: { product: ProductId; amount: number } | null } | null;
+  result: { gold: number; favor: number; goldReceived?: number; materials?: Goods; delivery: { product: ProductId; amount: number } | null } | null;
 };
 export type MissionEffect = { goldCost: number; goldReward: number; favor: number;
   delivery?: { product: ProductId; amount: number } };
 type EventState = {
   seed: number; random: number; sequence: number; nextAt: number; lastAt: number; lastKey: string | null;
   lastSeen: Record<string, number>; current: KingdomMission | null; history: KingdomMission[];
+  pendingRewards?: PendingReward[];
 };
 const pending = (mission: KingdomMission) => mission.status === 'available' || mission.status === 'active';
 const product = (value: string) => value === 'food' || value === 'wood';
@@ -51,7 +55,8 @@ export class KingdomEvents {
 
   constructor(seed: number, private readonly observe: () => RealmContext,
     private readonly settle: (id: string, effect: MissionEffect) => boolean,
-    private readonly halted: () => boolean) {
+    private readonly halted: () => boolean,
+    private readonly receive: (id: string, product: ProductId, amount: number) => number = () => 0) {
     this.state = { seed, random: Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b) >>> 0, sequence: 0, nextAt: kingdomEventRules.firstMs, lastAt: 0,
       lastKey: null, lastSeen: {}, current: null, history: [] };
   }
@@ -59,6 +64,27 @@ export class KingdomEvents {
   get current(): Readonly<KingdomMission> | null { return this.state.current; }
   get history(): readonly Readonly<KingdomMission>[] { return this.state.history; }
   get nextAt(): number { return this.state.nextAt; }
+  get pendingRewards(): readonly Readonly<PendingReward>[] { return this.state.pendingRewards ?? []; }
+
+  claimRewards(id: string): boolean {
+    if (this.halted()) return false;
+    const pending = this.state.pendingRewards?.find(entry => entry.id === id);
+    if (!pending) return false;
+    let received = false;
+    for (const product of ['food', 'wood'] as const) {
+      const amount = pending.remaining[product];
+      if (amount === 0) continue;
+      const delivered = this.receive('mission:' + id, product, amount);
+      check(range(delivered, 0, amount) && whole(Math.round(delivered * unitsPerResource)));
+      pending.remaining[product] = (Math.round(amount * unitsPerResource) - Math.round(delivered * unitsPerResource)) / unitsPerResource;
+      const mission = this.state.history.find(mission => mission.id === id);
+      if (mission?.result?.materials) mission.result.materials[product] =
+        (Math.round(mission.result.materials[product] * unitsPerResource) + Math.round(delivered * unitsPerResource)) / unitsPerResource;
+      received ||= delivered > 0;
+    }
+    this.state.pendingRewards = this.state.pendingRewards!.filter(entry => entry.remaining.food + entry.remaining.wood > 0);
+    return received;
+  }
 
   private random(): number {
     this.state.random = (Math.imul(this.state.random, 1664525) + 1013904223) >>> 0;
@@ -225,6 +251,7 @@ export class KingdomEvents {
     const beforeFavor = this.observe().favor;
     if (!this.settle(mission.id, effect)) return false;
     mission.result = { gold: effect.goldReward - effect.goldCost, favor: this.observe().favor - beforeFavor,
+      goldReceived: effect.goldReward, materials: { food: 0, wood: 0 },
       delivery: effect.delivery ? { ...effect.delivery } : null };
     mission.status = status;
     mission.resolvedAt = timeMs;
@@ -235,6 +262,11 @@ export class KingdomEvents {
       mission.acceptedAt ??= timeMs;
     }
     this.state.history.push(mission);
+    if (status === 'completed' && ((mission.reward.food ?? 0) + (mission.reward.wood ?? 0) > 0)) {
+      (this.state.pendingRewards ??= []).push({ id: mission.id, title: mission.title,
+        remaining: { food: mission.reward.food ?? 0, wood: mission.reward.wood ?? 0 } });
+      this.claimRewards(mission.id);
+    }
     if (this.state.history.length > kingdomEventRules.historyLimit) this.state.history.shift();
     this.state.current = null;
     this.state.nextAt = Math.max(this.nextAt, timeMs + kingdomEventRules.retryMs);
@@ -271,10 +303,19 @@ export class KingdomEvents {
         && whole(mission.deadline, mission.offeredAt + hour, mission.offeredAt + 72 * hour)
         && typeof mission.presented === 'boolean' && typeof mission.rewarded === 'boolean'
         && whole(mission.reward?.gold, 0, 100) && whole(mission.reward.favor, 0, 10)
+        && whole(mission.reward.food ?? 0, 0, 100) && whole(mission.reward.wood ?? 0, 0, 100)
         && whole(mission.rejectFavor, -5, 0) && whole(mission.expireFavor, -5, 0)
         && whole(mission.baseline) && range(mission.progress, 0, mission.objective.target)
         && whole(mission.sustainedMs, 0, 12 * hour));
       this.validateObjective(mission.objective);
+      if (mission.result?.materials) {
+        for (const product of ['food', 'wood'] as const) {
+          const amount = mission.result.materials[product];
+          check(range(amount, 0, mission.status === 'completed' ? mission.reward[product] ?? 0 : 0)
+            && Math.abs(amount * unitsPerResource - Math.round(amount * unitsPerResource)) < 1e-9);
+        }
+      }
+      if (mission.result?.goldReceived !== undefined) check(mission.result.goldReceived === (mission.status === 'completed' ? mission.reward.gold : 0));
       check(mission.baselineSites && Object.keys(mission.baselineSites).length <= 10_000);
       for (const [site, level] of Object.entries(mission.baselineSites)) {
         check(/^\d+,\d+$/.test(site) && whole(level, 0, 3));
@@ -300,6 +341,24 @@ export class KingdomEvents {
       previous = mission.offeredAt;
     }
     check(state.current === null || pending(state.current));
+    check(state.pendingRewards === undefined || Array.isArray(state.pendingRewards));
+    const rewards = new Set<string>();
+    for (const entry of state.pendingRewards ?? []) {
+      const sequence = Number(entry.id.split(':')[1]);
+      check(entry.id === state.seed + ':' + sequence && whole(sequence, 1, state.sequence)
+        && !rewards.has(entry.id) && label(entry.title));
+      for (const product of ['food', 'wood'] as const) check(range(entry.remaining[product], 0, 100)
+        && Math.abs(entry.remaining[product] * unitsPerResource - Math.round(entry.remaining[product] * unitsPerResource)) < 1e-9);
+      check(entry.remaining.food + entry.remaining.wood > 0);
+      const mission = missions.find(mission => mission.id === entry.id);
+      if (mission) check(mission.status === 'completed' && mission.result?.materials
+        && (['food', 'wood'] as const).every(product => Math.abs(mission.result!.materials![product]
+          + entry.remaining[product] - (mission.reward[product] ?? 0)) < 1e-9));
+      rewards.add(entry.id);
+    }
+    for (const mission of missions) if (mission.status === 'completed' && mission.result?.materials) {
+      if ((['food', 'wood'] as const).some(product => mission.result!.materials![product] < (mission.reward[product] ?? 0))) check(rewards.has(mission.id));
+    }
     this.state = structuredClone(state);
   }
 

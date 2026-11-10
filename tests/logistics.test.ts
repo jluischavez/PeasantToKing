@@ -224,6 +224,7 @@ test('100×100 stress: many producers and trips conserve integer goods beyond th
 test('visual pooling, culling and pause never mutate economics or allocate extra sprites each frame', () => {
   const { logistics, storage } = fixture();
   storage.queueProduction(farm, 'food', U, 0);
+  logistics.advance(logisticsRules.loadingMs, logisticsRules.loadingMs);
   const operation = logistics.operations[0];
   for (let i = 1; i < logisticsRules.maxSprites + 10; i++) logistics.operations.push({ ...structuredClone(operation), id: i + 1 });
   const images: { visible: boolean; x: number; y: number; texture: string }[] = [];

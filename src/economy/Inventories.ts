@@ -229,7 +229,7 @@ export class Inventories {
       const exports = direction === 'export';
       entry.goods[product] += exports ? -units : units;
       const balance = { before, after: entry.goods[product] };
-      this.history?.record({ resource: product, units, operation: purpose === 'mission' ? 'mission-delivery' : direction,
+      this.history?.record({ resource: product, units, operation: purpose === 'mission' ? (exports ? 'mission-delivery' : 'mission-reward') : direction,
         origin: exports ? entry.auditId : trader, destination: exports ? trader : entry.auditId,
         ...(exports ? { originBalance: balance } : { destinationBalance: balance }) });
     }

@@ -32,6 +32,13 @@ export class KingdomEventsPanel {
   open(mission: Readonly<KingdomMission>): void {
     const choices: NarrativeChoice[] = [];
     const pending = mission.status === 'available' || mission.status === 'active';
+    if (this.simulation.kingdomEvents.pendingRewards.some(reward => reward.id === mission.id)) {
+      choices.push({ label: 'Recibir suministros pendientes', disabled: this.simulation.crown.defeated, run: () => {
+        const received = this.simulation.kingdomEvents.claimRewards(mission.id);
+        this.changed();
+        return received;
+      } });
+    }
     const decide = (choice: 'accept' | 'fulfill' | 'reject' | 'defer') => {
       const applied = this.simulation.decideMission(mission.id, choice);
       this.changed();
@@ -79,7 +86,7 @@ export class KingdomEventsPanel {
         reward: 'Recompensa · ' + missionReward(mission), risk: missionRisk(mission) };
       for (const [key, value] of Object.entries(values)) setText(this.fields.get(key)!, value);
     }
-    const view = engine.history.length + ':' + engine.history.at(-1)?.id;
+    const view = engine.history.length + ':' + engine.history.at(-1)?.id + ':' + JSON.stringify(engine.pendingRewards);
     if (view === this.historyView) return;
     this.historyView = view;
     this.completed.replaceChildren(...engine.history.filter(mission => mission.status === 'completed').reverse().map(mission => {
@@ -87,6 +94,16 @@ export class KingdomEventsPanel {
       item.append(mission.title + ' · Completada · ' + missionResult(mission) + ' · ' + missionDate(mission.resolvedAt!), this.button(mission));
       return item;
     }));
+    // Outstanding grants survive the bounded mission history, and stay claimable here.
+    for (const reward of engine.pendingRewards) {
+      const item = document.createElement('li'), button = document.createElement('button');
+      item.textContent = reward.title + ' · Pendiente: ' + reward.remaining.food + ' comida · ' + reward.remaining.wood
+        + ' madera. Se necesita espacio en almacenes conectados, con personal y recepción autorizada. ';
+      button.textContent = 'Recibir suministros pendientes';
+      button.disabled = this.simulation.crown.defeated;
+      button.onclick = () => { engine.claimRewards(reward.id); this.changed(); };
+      item.append(button); this.completed.prepend(item);
+    }
     this.history.replaceChildren(...[...engine.history].reverse().map(mission => {
       const item = document.createElement('li');
       item.append(mission.title + ' · ' + missionStatusNames[mission.status] + ' · ' + missionDate(mission.resolvedAt!)

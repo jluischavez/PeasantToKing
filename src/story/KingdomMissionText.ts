@@ -10,9 +10,18 @@ export const missionDecisionNames = { accept: 'Aceptada', fulfill: 'Entrega o re
   defer: 'Respuesta pospuesta' } as const;
 export const missionDate = (timeMs: number) => formatGameTime(gameTimeAt(timeMs));
 export const missionReward = (mission: Readonly<KingdomMission>) =>
-  formatNumber(mission.reward.gold) + ' oro · hasta +' + mission.reward.favor + ' favor';
+  formatNumber(mission.reward.gold) + ' oro · hasta +' + mission.reward.favor + ' favor'
+    + (mission.reward.food ? ' · ' + mission.reward.food + ' comida' : '')
+    + (mission.reward.wood ? ' · ' + mission.reward.wood + ' madera' : '');
 export const missionResult = (mission: Readonly<KingdomMission>) => mission.result
-  ? 'Resultado · ' + formatNumber(mission.result.gold) + ' oro · ' + mission.result.favor + ' favor'
+  ? 'Resultado · ' + formatNumber(mission.result.gold) + ' oro neto · ' + mission.result.favor + ' favor'
+    + (mission.result.goldReceived !== undefined ? ' · Recompensa recibida: ' + mission.result.goldReceived + ' oro' : '')
+    + (mission.result.materials ? (['food', 'wood'] as const).map(product => {
+      const received = mission.result!.materials![product], pending = mission.status === 'completed'
+        ? Math.max(0, (mission.reward[product] ?? 0) - received) : 0;
+      return (received ? ' · Recibido: ' + formatNumber(received) + ' ' + productNames[product].toLowerCase() : '')
+        + (pending ? ' · Pendiente de almacenar: ' + formatNumber(pending) + ' ' + productNames[product].toLowerCase() : '');
+    }).join('') : '')
     + (mission.result.delivery ? ' · ' + mission.result.delivery.amount + ' de '
       + productNames[mission.result.delivery.product].toLowerCase() + ' entregados' : '') : '';
 export const missionRisk = (mission: Readonly<KingdomMission>) =>

@@ -98,7 +98,7 @@ export class SettlementSimulation {
     this.kingdomEvents = new KingdomEvents(seed, () => this.realmContext(), (id, effect) => {
       if (this.crown.defeated || !this.economy.settleMission('mission:' + id, effect.goldCost, effect.goldReward, effect.delivery)) return false;
       return this.crown.applyMissionFavor(effect.favor, this.simulatedTimeMs);
-    }, () => this.crown.defeated);
+    }, () => this.crown.defeated, (id, product, amount) => this.economy.receiveMissionReward(id, product, amount));
   }
 
   saveState() {

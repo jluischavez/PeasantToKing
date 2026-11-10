@@ -63,12 +63,12 @@ export class Logistics {
   }
   reconcile(includeMarkets = true): void {
     // Access and workforce must be rebuilt before validating restored or reconnected trips.
-    for (const op of this.operations) if ((op.state === 'Blocked' || op.revision !== this.connections!.topologyRevision)
-      && (includeMarkets || (op.kind !== 'warehouse-to-market' && op.kind !== 'household-purchase'))) this.validateRoute(op);
+    for (const op of this.operations) if (includeMarkets || (op.kind !== 'warehouse-to-market' && op.kind !== 'household-purchase')) this.validateRoute(op);
   }
   route(source: Cell, destination: Cell): Cell[] | null {
     return this.routes?.find(source, destination, this.connections!.topologyRevision) ?? null;
   }
+  workplaceAt(cell: Cell) { return this.map?.getConstruction(cell) ?? undefined; }
   queueArrival(home: Cell, residents: number): void {
     if (!this.map?.villageCenter || this.map.getConstruction(home) !== 'house'
       || [...this.journeys, ...this.journeyHistory].some(j => j.kind === 'immigration'
@@ -138,7 +138,12 @@ export class Logistics {
         const route = current ? this.routes!.find(current, j.destination, this.connections!.topologyRevision, true)
           : j.kind === 'immigration' ? this.routes!.find(j.source, j.destination, this.connections!.topologyRevision, true) : this.route(j.source, j.destination);
         if (!route) { j.state = 'Blocked'; continue; }
-        j.route = route; j.index = 0; j.phaseMs = 0; j.state = 'Carrying'; j.revision = this.connections!.topologyRevision;
+        const unloading = j.state === 'Unloading' && route.length === 1;
+        const moving = j.state === 'Carrying' && current && same(current, route[0])
+          && j.route[j.index + 1] && route[1] && same(j.route[j.index + 1], route[1]);
+        j.route = route; j.index = 0;
+        if (!unloading && !moving) j.phaseMs = 0;
+        j.state = unloading ? 'Unloading' : 'Carrying'; j.revision = this.connections!.topologyRevision;
       }
     }
   }
@@ -313,8 +318,19 @@ export class Logistics {
         : op.pickupMs === null ? this.route(op.source, op.destination)
         : this.routes!.find(op.route[op.index], op.destination, this.connections!.topologyRevision, true);
       if (!route) { op.state = 'Blocked'; return false; }
-      op.route = route; op.index = 0; op.phaseMs = 0; op.revision = this.connections!.topologyRevision;
-      op.state = walkingOut ? (route.length === 1 ? 'Loading' : 'WalkingToSource') : op.pickupMs === null ? 'Loading' : 'Carrying';
+      // Topology edits elsewhere must not restart timed work at a valid access.
+      // Loading buyers stand at the market, even though their destination is home.
+      const current = op.route[op.index];
+      const loading = op.state === 'Loading' && same(current, route[0]);
+      const unloading = op.state === 'Unloading' && route.length === 1 && same(current, route[0]);
+      const moving = (op.state === 'Carrying' || op.state === 'WalkingToSource')
+        && same(current, route[0]) && op.route[op.index + 1] && route[1]
+        && same(op.route[op.index + 1], route[1]);
+      op.route = route; op.index = 0;
+      if (!loading && !unloading && !moving) op.phaseMs = 0;
+      op.revision = this.connections!.topologyRevision;
+      op.state = unloading ? 'Unloading' : walkingOut ? (loading || route.length === 1 ? 'Loading' : 'WalkingToSource')
+        : op.pickupMs === null ? 'Loading' : 'Carrying';
     }
     return true;
   }

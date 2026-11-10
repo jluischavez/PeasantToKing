@@ -6,6 +6,7 @@ import { ConstructionMap } from '../src/map/ConstructionMap.ts';
 import { RoadConnections } from '../src/map/RoadConnections.ts';
 import { Session } from '../src/persistence/Session.ts';
 import { SaveSlots, saveKey } from '../src/persistence/SaveSlots.ts';
+import { TransportRenderer } from '../src/map/TransportRenderer.ts';
 const c = (column: number, row = 2) => ({ column, row });
 const home = c(9), market = c(6), warehouse = c(3), well = c(10);
 function buyer() {
@@ -84,6 +85,43 @@ test.each([1, 2, 3] as const)('buyers and journeys preserve exact simulated time
   const restored = Session.restore(json(game)).session;
   assert.deepEqual(json(restored), json(game));
   game.simulation.setPaused(true); const state = json(game); game.simulation.advance(90000); assert.deepEqual(json(game), state);
+});
+
+test.each([1, 2, 3] as const)('street visibility follows the same operation through loading, pause, walking and unloading at ×%s', speed => {
+  const game = village();
+  const logistics = game.economy.storage.logistics;
+  assert.ok(game.economy.storage.queueProduction(c(1), 'food', U, 0));
+  logistics.stopForDemolition(c(1));
+  const op = logistics.operations[0], phases = new Set<string>();
+  const images: any[] = [];
+  const scene = { textures: { exists: () => true },
+    cameras: { main: { worldView: { left: 0, right: 2400, top: 0, bottom: 2400 } } },
+    add: { image: () => {
+      const image = { name: '', visible: false, x: 0, y: 0,
+        setDepth() { return this; }, setTexture() { return this; }, setAlpha() { return this; },
+        setPosition(x: number, y: number) { this.x = x; this.y = y; return this; },
+        setVisible(value: boolean) { this.visible = value; return this; } };
+      images.push(image); return image;
+    } } };
+  const renderer = new TransportRenderer(scene as never, logistics);
+  const render = () => renderer.update(game.simulation.renderTimeMs, game.simulation.simulatedTimeMs);
+  game.simulation.setSpeed(speed); game.simulation.advance(400 / speed); render();
+  assert.equal(op.state, 'Loading'); assert.ok(!images.some(image => image.visible && image.name === op.npc));
+  game.simulation.setPaused(true);
+  const saved = json(game), visible = images.map(image => ({ ...image }));
+  for (let frame = 0; frame < 10; frame++) { game.simulation.advance(1000); render(); }
+  assert.deepEqual(json(game), saved); assert.deepEqual(images, visible);
+  game.simulation.setPaused(false);
+  for (let tick = 0; tick < 50; tick++) {
+    if (logistics.operations.includes(op)) phases.add(op.state);
+    game.simulation.advance(100 / speed); render();
+    const sprite = images.find(image => image.visible && image.name === op.npc);
+    if (op.state === 'Loading' || op.state === 'Unloading' || !logistics.operations.includes(op)) assert.equal(sprite, undefined);
+    if (sprite) assert.equal(op.state, 'Carrying');
+  }
+  assert.deepEqual(phases, new Set(['Loading', 'Carrying', 'Unloading']));
+  assert.ok(!logistics.operations.includes(op));
+  assert.ok(images.every(image => image.name !== op.npc));
 });
 test('legacy settlements schedule a real admitted family from a valid center road, without overbooking', () => {
   const game = village(0); game.simulation.advance(5000);
