@@ -11,6 +11,7 @@ import { housingArt } from './HousingArt';
 import { TerrainRenderer } from './TerrainRenderer';
 import type { TerrainRegion } from './TerrainRenderer';
 import type { TerrainMap } from './Terrain';
+import { requiresRoadConnection } from './BuildingAccess';
 
 const regionPadding = 6;
 
@@ -103,7 +104,7 @@ export class GridMap {
         }
         const span = type === 'bridge' ? map.bridgeAt(cell) : null;
         this.positionArt(image, cell, building, texture, Boolean(span && span.from.row !== span.to.row));
-        if (type !== 'road' && type !== 'bridge' && !connections.isConnected(cell)) {
+        if (type !== 'road' && type !== 'bridge' && requiresRoadConnection(type) && !connections.isConnected(cell)) {
           const markerX = x + 0.86 * cellSize;
           const markerY = y + 0.14 * cellSize;
           this.connectionIndicators.fillStyle(0x1c211d);

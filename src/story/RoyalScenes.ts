@@ -1,4 +1,16 @@
 import type { RoyalEvent } from '../simulation/Crown';
+import type { RoyalGrant } from '../simulation/RoyalPrivileges';
+import { formatNumber } from '../formatNumber';
+
+export function royalPrivilegeMessage(grant: RoyalGrant): string {
+  const response = grant.kind === 'intercession' ? 'El tesorero real ha aceptado reducir vuestra obligación.'
+    : grant.kind === 'gold' ? 'La Corona concede un subsidio extraordinario a vuestra administración.'
+    : 'Su Majestad ha autorizado el envío de provisiones.';
+  const benefit = grant.kind === 'intercession' ? `${formatNumber(grant.benefit)} oro menos de tributo`
+    : `${formatNumber(grant.benefit)} ${grant.kind === 'gold' ? 'oro' : grant.kind === 'food' ? 'comida' : 'madera'} recibidos`;
+  return `${response} ${benefit}. Favor gastado: ${grant.favorSpent}. Favor restante: ${grant.favorAfter}/100. `
+    + (grant.kind === 'intercession' ? 'Intercesión utilizada para esta obligación.' : 'Recuperación compartida: 72 h del juego.');
+}
 
 export const royalDecree = {
   title: 'El primer decreto real',

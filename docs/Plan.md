@@ -1,5 +1,86 @@
 # Peasant to King — Plan incremental para Codex
 
+## Hotfix posterior a 15C — Jardines sin dependencia vial (2026-11-10)
+
+Regla permanente: un jardín funciona sin caminos. Se distingue la conexión física (`RoadConnections`), el requisito del tipo (`BuildingAccess.requiresRoadConnection`) y el efecto activo (belleza con vivienda receptora conectada). No se concede conectividad ficticia ni paso vial a través del jardín.
+
+Inspector: «Conexión vial: No necesaria». Marcador amarillo y alerta colectiva excluyen jardines sin acceso. La cobertura conserva radio 3 y beneficios reales; al desconectar una vivienda, su detalle atribuye la falta de acceso a la vivienda. La incidencia pendiente era de presentación: construcción, belleza, misiones y recarga ya cumplían la regla. Se preserva íntegramente 15C y los demás cambios locales.
+
+## Etapa 15C — Visualización de alcance y cobertura (2026-11-10)
+
+Se parte del estado local de 15B y del hotfix de jardines, con 510 pruebas iniciales aprobadas en serie. Es una representación derivada y de solo lectura: no crea edificios provisionales, transfiere productos, asigna empleados o modifica servicios. La versión de guardado permanece en 11.
+
+| Emisor | Alcance visualizado | Beneficio vigente / previsión |
+| --- | --- | --- |
+| Jardín | 3 casillas desde su huella | Belleza real; no requiere camino; hogares receptores sí conectados |
+| Parque | 6 desde toda su huella | Belleza con conexión del parque y hogar |
+| Plaza con fuente | 5 desde toda su huella | Belleza; nunca servicio de agua |
+| Mercado | Hasta 6 tramos viales | Caminos y hogares alcanzables, existencias autorizadas y recepción observada del hogar |
+| Pozo | Hasta 6 tramos viales | Asignaciones reales por hogar, incluidos cupos parciales de los 30 habitantes |
+| Campamento maderero | 6 desde el borde completo | Casillas reales con árbol/bosque, diferenciadas del terreno sin madera |
+| Camino mejorado | 2 casillas | Bonificación existente de 5/10 puntos según nivel; sin cobertura ficticia para tierra o su vista previa |
+
+La métrica de proximidad sigue siendo Manhattan desde el rectángulo completo. `FootprintRange` concentra el cálculo antes repetido por belleza y bosque; `ResidentialBeauty` y `Woodland` lo consumen conservando orden y reglas. La fórmula de puntos y la excepción del jardín son compartidas con la clasificación visual. `MarketCoverage` expone su recorrido vial puro y los resultados vigentes de mercados; tanto simulación como previsualización usan el mismo BFS, accesos por perímetro, rango, conexiones y eje de puentes. `ConstructionMap.borderRoads` admite dimensiones opcionales para consultar una huella virtual, sin ocupar terreno. `WaterService` permanece intacto: el overlay consulta sus asignaciones y usa el recorrido vial compartido para la geometría.
+
+`BuildingCoverageModel` separa geometría y clasificación. La geometría se conserva mientras no cambien objetivo/huella, ocupación, topología, terreno o nivel de camino. El informe se reutiliza hasta cambiar revisión de contexto o segundo simulado. `MapScene` avisa al cambiar estado, selección, casilla o herramienta; mover la cámara con el mismo objetivo no vuelve a trazar la red. El alcance vial pinta únicamente los caminos alcanzados y hogares; viviendas cercanas sin ruta tienen contorno gris, sin dibujar un círculo económico. No se exploran las 10.000 casillas por frame.
+
+Antes de construir se presenta potencial en amarillo, la huella inválida en rojo y los candidatos con contorno. Para belleza se estima además la mejora neta respetando el mejor aporte de cada tipo y el máximo; no se considera que una nueva decoración idéntica sume de nuevo. Trabajadores, suministros y futuros repartos no se inventan. Al seleccionar, verde representa una observación vigente o arbolado y el relleno parcial representa cupo/productos parcialmente cubiertos. Las condiciones y los conteos están al principio del inspector, con explicación desplegable y tooltip por vivienda. No se modifican los controles ni campos previos.
+
+Mercados: la simulación conserva existencias domésticas y muestras de necesidad, pero no la procedencia completa de cada reserva. Por ello el informe identifica recepción del hogar en el último segundo **de cualquier origen**, restringida a productos que el mercado tenga autorizados y a mercados operativos; no afirma que el mercado seleccionado haya entregado esa comida/madera. Las existencias para comprar se muestran por separado, descontando reservas y exigiendo operación/permiso. No se usa `Distribution.supplyAt`, porque puede cerrar la reserva de arranque. Esta limitación de atribución es explícita y no se introduce un segundo libro económico. Una zona alcanzable no garantiza atención, cupo ni reparto futuro.
+
+`CoverageRenderer` emplea un solo Graphics de profundidad 0,32 en el mundo: queda sobre las ilustraciones y bajo selección/NPCs, con rellenos tenues y sin eventos de entrada. No hay un sprite por celda ni objetos por frame. El buffer se borra al cambiar de informe, y el objeto se destruye al cerrar la escena. El motor de cámara proporciona zoom, desplazamiento y recorte; no se reimplementa su transformación. La vista previa tiene prioridad sobre selección; herramientas sin alcance o demolición la ocultan. Cancelar construcción no vuelve a mostrar silenciosamente el alcance de la selección anterior: se puede seleccionar de nuevo. Apoyar el dedo refresca la previsualización; cancelar el gesto la retira y soltar conserva el flujo de construcción existente.
+
+Comprobación de Chrome real: ciudad con huellas 3×3/2×2, pozo con 30 habitantes asignados y parcial, mercado abastecido mediante compradores reales, jardín aislado y arbolado. A 1280×900 y 390×844 se verificaron selección, potencial, invalidez, cancelación, demolición, pausa, zoom mínimo/máximo, WASD, arrastre y selección/previsualización táctil. Ciento cincuenta movimientos de cursor mantuvieron un solo objeto de cobertura; `Session.saveState(null)` permaneció idéntico, con cero excepciones. Las capturas se inspeccionaron visualmente. El harness usó perfil temporal, se retiró del repositorio y sus evidencias quedaron en los artefactos del chat; no es un benchmark de FPS.
+
+Para comparar el estado durante ese recorrido, el harness detuvo el reloj con el mecanismo de suspensión narrativa existente. La capa de cobertura no pausa la partida ni modifica dicho mecanismo; la simulación normal continúa al seleccionar y construir.
+
+Archivos de 15C: nuevos `src/map/{FootprintRange,BuildingCoverage,CoverageRenderer}.ts`, `src/ui/CoveragePanel.ts` y `tests/buildingCoverage.test.ts`; integración en `src/map/{ConstructionMap,MarketCoverage,Woodland}.ts`, `src/population/ResidentialBeauty.ts`, `src/scenes/{MapScene,MapInput}.ts`, `index.html` y los tres documentos vigentes. Se preservan los cambios locales anteriores. Sin ramas, commits, push, dependencias nuevas ni publicación.
+
+Validación final: 537 pruebas en 44 archivos, 27 nuevas, con `npm test -- --maxWorkers=1` (72,58 s). Build y diff --check correctos; git status y diff revisados. Permanece el aviso conocido de tamaño de Phaser. No hay fallos funcionales conocidos pendientes; las limitaciones explícitas son atribución de producto doméstico a un mercado concreto y ausencia de un benchmark exhaustivo de FPS.
+
+## Hotfix — Jardines sin caminos y auditoría del oro (2026-11-10)
+
+**REGLA PERMANENTE: Los jardines no necesitan conexión vial para aportar belleza o contar como decoración válida.** Su colocación sigue validando terreno, ocupación, costo y bloqueo por rango existentes. La vivienda receptora conserva su requisito de conexión; parques y plazas siguen exigiendo su propio acceso. No se crean empleos, cobertura de agua ni servicios económicos/logísticos para un jardín.
+
+La regresión se debía a cuatro supuestos compartidos: `ResidentialBeauty` descartaba toda fuente desconectada; `realmContext` solo contaba edificios conectados; `KingdomEvents` exigía conexión para cualquier nueva decoración; y el espacio de obras se buscaba únicamente junto a caminos. Se exceptúa exclusivamente `garden`, sin modificar `RoadConnections` ni falsificar `sites.connected`. La línea base de las misiones incluye jardines aislados anteriores a la aceptación, de modo que solo cuentan los nuevos. Las misiones de caminos mantienen su filtro de conexión. El objetivo textual del jardín elimina la exigencia vial; el de parques/plazas no cambia.
+
+La búsqueda de espacio de jardín puede revisar cualquier casilla construible. Conserva un resultado derivado identificado por la colección de construcciones y la revisión del terreno: no repite el recorrido mientras ambos sigan iguales. `TerrainMap.revision` cambia únicamente al limpiar/plantar con éxito y permite invalidar también un resultado negativo cuando se libera terreno; no altera los códigos, la producción ni el formato de guardado. Colocar/demoler invalida mediante el mecanismo de colección de ocupación existente. Guardar/cargar reconstruye belleza y caché desde mapa/terreno, sin migraciones ni recursos extra.
+
+Revisión del oro: el flujo vigente `KingdomEvents.finish → Economy.settleMission → Treasury.settleMission` acredita y audita correctamente. Con premio positivo se registra `mission-reward`, con origen de misión, destino tesorería, importe y balances; con premio cero no existe ese ingreso. Una contribución se registra aparte como `mission-contribution`, y el resultado distingue saldo neto de oro recibido. Se verificaron recargas antes/después de resolver e intentos repetidos. No se modifican tesorería, auditoría, interfaz económica, catálogo, recompensas ni balance durante este hotfix.
+
+Comportamiento que puede explicar el reporte: `EconomicHistory` tiene capacidad por defecto de 200 movimientos de todos los recursos. Cada movimiento nuevo puede retirar el más antiguo; filtrar por oro no aumenta esa capacidad. La prueba completa una misión de jardín, observa sus 15 oro, realiza 200 cargos económicos reales y comprueba que el movimiento de recompensa sale del historial, pero el resultado de la misión y el saldo siguen correctos, incluso recargando. En Crónicas se conservan hasta sesenta misiones. Los filtros existentes también pueden ocultar movimientos que no correspondan al edificio seleccionado; no se agregan filtros ni se amplían límites.
+
+Archivos propios del hotfix: `src/population/ResidentialBeauty.ts`, `src/map/Terrain.ts`, `src/simulation/{SettlementSimulation,KingdomEvents}.ts`, `src/story/KingdomMissionText.ts`, `tests/{residentialBeauty,kingdomEvents,gardensAndMissionGold}.test.ts` y los tres documentos vigentes. Se preservan los cambios locales anteriores de 15B. Sin ramas, commits, push, dependencias nuevas ni publicación.
+
+Validación final: 510 pruebas en 43 archivos (12 nuevas) con `npm test -- --maxWorkers=1`, 72,75 s; build y diff --check correctos. Los 55 casos focalizados de belleza, misiones y auditoría también pasan. Permanece la advertencia conocida de tamaño de Phaser. No se realizó comprobación manual de navegador en este hotfix; se documenta la reproducción. No queda fallo funcional conocido pendiente.
+
+## Etapa 15B — Audiencias y privilegios reales (2026-11-10)
+
+Implementada sobre el estado local de 15A-4 y su hotfix, con 464 pruebas iniciales aprobadas en serie. El favor mantiene sus reglas existentes y ahora permite decisiones explícitas desde el panel La Corona; no hay beneficios pasivos ni nueva pantalla.
+
+| Solicitud | Favor requerido | Favor gastado | Concesión | Límite |
+| --- | ---: | ---: | --- | --- |
+| Ayuda alimentaria | 60 | 8 | 20 comida | Recuperación compartida de 72 h simuladas |
+| Suministro de madera | 60 | 8 | 15 madera | Misma recuperación que comida y subsidio |
+| Subsidio de la Corona | 80 | 15 | 20 oro | Misma recuperación que provisiones |
+| Intercesión real | 90 | 18 | 15 % menos del tributo, máximo 50 oro | Una vez por obligación vigente no pagada |
+
+`RoyalPrivileges` reúne catálogo, tipos, cálculo y validación de audiencias. `Crown` conserva secuencia, usos acumulados, última ayuda, próxima disponibilidad, última obligación intercedida y sesenta concesiones recientes. Cada confirmación incluye secuencia siguiente, favor esperado y vencimiento esperado; antes de entregar se revalidan umbral, derrota, recuperación, obligación y viabilidad. La transacción es síncrona: el ingreso central debe aprobarse íntegro antes de descontar favor y registrar la concesión. Repetir la confirmación anterior no vuelve a entregar, incluso tras recargar o concluir la recuperación. Si cambia la capacidad tras preparar, no se cobra ni se inicia recuperación.
+
+Economía comparte el plan de recepción central con las recompensas existentes, conservando su entrega parcial y sus premios pendientes. Las provisiones reales exigen que quepa todo el lote: respetan recepción, conexión, personal, vaciado, demolición, capacidad compartida y reservas de entrada. Se pueden repartir entre varios almacenes, sin reservas iniciales ni inventarios ficticios. `Inventories.exchange` registra las importaciones reales como `royal-aid`, no como producción, comercio o misión. El subsidio usa tesorería con `royal-subsidy`, sumando veinte al saldo firmado y amortizando deuda cuando exista.
+
+La intercesión modifica la obligación misma y añade `discount: { originalGold, reduction, requestSequence }`. La reducción se calcula en céntimos; 50/150/350 quedan en 42,5/127,5/300. No ingresa oro, no cambia fechas, rachas ni advertencias y no afecta una obligación pagada. El pago y el eventual impago utilizan el nuevo importe. Se amplía mínimamente la validación de importes, acumulados y eventos de pago/impago para admitir fracciones monetarias; el resto de reglas permanece igual. `royal-relief` audita la reducción de la obligación en céntimos y no una transferencia a tesorería.
+
+El panel reutiliza tarjetas, botones, confirmación y scroll existentes. Cada solicitud muestra relato breve, requisito, costo, beneficio, estado y bloqueo. El contador común muestra horas/minutos del juego; confirmar informa beneficio recibido, favor gastado, favor restante y recuperación. El tributo muestra original/reducción/importe actual, y el historial de la Corona combina las audiencias con los eventos anteriores. No hay nuevas voces ni escenas principales.
+
+Guardado 11: persiste las audiencias y el descuento; versiones 1–10 se restauran sin concesiones retroactivas y con recuperación vacía. Los términos y pendientes de misiones no se recalculan. Se validan secuencias continuas, recuentos acumulados, beneficios/costos, fechas, recuperación, ausencia de obligaciones repetidas y correspondencia entre descuento y audiencia. El límite del historial no elimina contadores, última ayuda ni protección del tributo. Pausa y velocidades reutilizan exclusivamente `simulatedTimeMs`; no se usa hora real.
+
+Balance: se mantienen las cantidades solicitadas. La mejor ofrenda ofrece 25 favor por 200 oro (8 oro por punto): recuperar 15 puntos cuesta al menos 120 y el subsidio paga 20; recuperar 18 cuesta 144 y la intercesión ahorra como máximo 50. La comida y madera recibidas podrían exportarse por 6,4/7,2 oro, frente a al menos 64 para recuperar los ocho puntos mediante ofrendas. El periodo común limita además la frecuencia. No cambian precios, salarios, consumo, producción, requisitos de ascenso ni beneficios de las misiones.
+
+Archivos de 15B: `src/simulation/{RoyalPrivileges,Crown,SettlementSimulation}.ts`, `src/economy/{Economy,Treasury,Inventories,EconomicHistory}.ts`, `src/ui/{CrownPanel,SimulationPanel}.ts`, `src/story/RoyalScenes.ts`, `src/persistence/SaveSlots.ts`, `index.html`, `tests/royalPrivileges.test.ts`, actualización de versión esperada en `tests/footprints.test.ts` y los tres documentos vigentes. No se modifican el renderizado ni las operaciones de NPCs. Sin ramas, commits, push, nuevas dependencias ni publicación.
+
+Validación: 498 pruebas en 42 archivos, con 34 casos nuevos, aprobadas en serie (74,24 s) y en una comprobación paralela adicional (30,29 s); no se reprodujeron los timeouts anteriores ni hubo fallos funcionales. Build y diff --check correctos. Chrome real comprobó cancelación/confirmación, doble clic, descuento 50→42,5, subsidio de 20, falta de capacidad sin cobro, madera real y recarga, en escritorio/móvil con cero excepciones. Se conserva la advertencia conocida de tamaño de Phaser. Las reglas de recepción completa de ayudas y límite por obligación son deliberadas; no hay asuntos funcionales conocidos pendientes de esta etapa ni transportistas exteriores físicos.
+
 ## Etapa 15A-4 — NPCs, profesiones y recompensas (2026-11-10)
 
 Se partió del estado local limpio y de 437 pruebas aprobadas. Se conserva la arquitectura de 15A-1/2/3.

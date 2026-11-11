@@ -188,8 +188,34 @@ export class Economy {
   }
 
   receiveMissionReward(id: string, product: ProductId, amount: number): number {
+    const plan = this.incomingSupplyPlan(product, amount);
+    return plan && this.storage.inventories.exchange(plan.network, id, plan.lines, () => true, 'mission')
+      ? plan.received : 0;
+  }
+
+  canReceiveRoyalAid(product: ProductId, amount: number): boolean {
+    return this.incomingSupplyPlan(product, amount)?.received === amount;
+  }
+
+  receiveRoyalAid(id: string, product: ProductId, amount: number): boolean {
+    const plan = this.incomingSupplyPlan(product, amount);
+    return !!plan && plan.received === amount
+      && this.storage.inventories.exchange(plan.network, id, plan.lines, () => true, 'royal-aid');
+  }
+
+  receiveRoyalSubsidy(id: string, gold: number): boolean { return this.treasury.creditRoyalSubsidy(id, gold); }
+
+  recordRoyalRelief(id: string, dueAt: number, original: number, reduction: number): boolean {
+    if (!whole(dueAt) || !whole(original * centsPerGold, 1) || !whole(reduction * centsPerGold, 1, original * centsPerGold)) return false;
+    this.history.record({ resource: 'gold', units: reduction * centsPerGold, unitScale: centsPerGold, operation: 'royal-relief',
+      origin: id, destination: 'tribute:' + dueAt,
+      originBalance: { before: original * centsPerGold, after: original * centsPerGold - reduction * centsPerGold } });
+    return true;
+  }
+
+  private incomingSupplyPlan(product: ProductId, amount: number): { network: string; lines: TradeLine[]; received: number } | null {
     let remaining = Math.round(amount * unitsPerResource);
-    if (!whole(remaining, 0) || remaining / unitsPerResource !== amount) return 0;
+    if (!whole(remaining, 1) || remaining / unitsPerResource !== amount) return null;
     const requested = remaining;
     const lines: TradeLine[] = [];
     let network: string | null = null;
@@ -204,8 +230,7 @@ export class Economy {
       remaining -= units;
       if (remaining === 0) break;
     }
-    return network && lines.length && this.storage.inventories.exchange(network, id, lines, () => true, 'mission')
-      ? (requested - remaining) / unitsPerResource : 0;
+    return network && lines.length ? { network, lines, received: (requested - remaining) / unitsPerResource } : null;
   }
 
   get currentTaxPolicy(): TaxPolicy { return this.taxPolicy; }

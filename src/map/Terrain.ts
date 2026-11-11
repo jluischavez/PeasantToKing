@@ -26,6 +26,7 @@ export function isProtectedGround(ground: Ground): boolean {
 }
 
 export class TerrainMap {
+  revision = 0;
   constructor(readonly columns: number, readonly rows: number, private readonly codes = new Uint8Array(columns * rows)) {}
 
   private index(cell: Cell): number {
@@ -47,12 +48,14 @@ export class TerrainMap {
     const tile = this.at(cell);
     if (!tile || tile.obstacle !== expected || isProtectedGround(tile.ground)) return false;
     this.codes[this.index(cell)] = terrainCode(tile.ground);
+    this.revision++;
     return true;
   }
 
   plantTree(cell: Cell): boolean {
     if (!this.canBuild(cell)) return false;
     this.codes[this.index(cell)] = terrainCode(this.at(cell)!.ground, 'tree');
+    this.revision++;
     return true;
   }
 

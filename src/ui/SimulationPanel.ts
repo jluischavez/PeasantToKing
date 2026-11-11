@@ -11,6 +11,7 @@ import { formatGameTime, gameTimeAt } from '../simulation/GameTime';
 import { rankRules, settlementRanks } from '../simulation/SettlementProgress';
 
 const operationNames = {
+  'royal-aid': 'Provisiones reales', 'royal-subsidy': 'Subsidio real', 'royal-relief': 'Reducción del tributo',
   'mission-contribution': 'Contribución de misión', 'mission-reward': 'Recompensa de misión', 'mission-delivery': 'Entrega de misión',
   production: 'Producción', transfer: 'Transferencia', consumption: 'Consumo', sale: 'Venta',
   construction: 'Costo de construcción', 'construction-material': 'Material de construcción',
@@ -29,6 +30,8 @@ const endpointNames: Readonly<Record<string, string>> = {
 
 function endpointName(id: string): string {
   const [type, coordinates] = id.split(':');
+  if (type === 'royal-audience') return 'Audiencia real ' + coordinates;
+  if (type === 'tribute' && Number.isFinite(Number(coordinates))) return 'Obligación real · ' + formatGameTime(gameTimeAt(Number(coordinates)));
   if (type === 'cargo') return 'Cargamento ' + coordinates;
   if (type === 'mission') return 'Misión del reino ' + id.slice(8);
   if (type === 'terrain' && coordinates) return 'Terreno (' + coordinates + ')';

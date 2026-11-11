@@ -6,7 +6,7 @@ import type { CameraView } from '../map/MapCamera';
 export const saveSlots = [1, 2, 3] as const;
 export type SaveSlot = typeof saveSlots[number];
 export const autosaveMs = 60_000;
-const version = 10;
+const version = 11;
 const maxSaveLength = 2_000_000;
 const tabKey = 'peasant-to-king:tab-session';
 export const saveKey = (slot: SaveSlot) => 'peasant-to-king:save:' + slot;
@@ -19,7 +19,7 @@ function parse(raw: string): Envelope {
   check(raw.length <= maxSaveLength);
   const save = JSON.parse(raw) as Envelope;
   if (save?.version !== 1 && save?.version !== 2 && save?.version !== 3 && save?.version !== 4
-    && save?.version !== 5 && save?.version !== 6 && save?.version !== 7 && save?.version !== 8 && save?.version !== 9 && save?.version !== version) {
+    && save?.version !== 5 && save?.version !== 6 && save?.version !== 7 && save?.version !== 8 && save?.version !== 9 && save?.version !== 10 && save?.version !== version) {
     throw new Error('La versión del guardado no es compatible.');
   }
   check(whole(save.savedAt, 1, 8.64e15) && save.state && typeof save.state === 'object');
@@ -30,6 +30,7 @@ function parse(raw: string): Envelope {
   check(save.version < 7 || (save.state.simulation?.kingdomEvents !== undefined
     && save.state.simulation.trade?.exported !== undefined));
   check(save.version < 8 || save.state.economy?.logistics !== undefined);
+  check(save.version < 11 || save.state.crown?.audiences !== undefined);
   return save;
 }
 

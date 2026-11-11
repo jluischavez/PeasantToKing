@@ -204,11 +204,12 @@ export class Inventories {
   }
 
   // Validate the full manifest against shadow balances before settling gold or touching stock.
-  exchange(network: string, trader: string, lines: readonly TradeLine[], settlePayment: () => boolean, purpose: 'trade' | 'mission' = 'trade'): boolean {
+  exchange(network: string, trader: string, lines: readonly TradeLine[], settlePayment: () => boolean, purpose: 'trade' | 'mission' | 'royal-aid' = 'trade'): boolean {
     const balances = new Map<Inventory, Goods>();
     if (lines.length === 0) return false;
     for (const { warehouse, product, units, direction } of lines) {
       const entry = this.entries.get(warehouse);
+      if (purpose === 'royal-aid' && direction !== 'import') return false;
       if (!entry || entry.kind !== 'warehouse' || !entry.operational || entry.network !== network
         || !isProductId(product) || !whole(units, 1)) return false;
       const goods = balances.get(entry) ?? { ...entry.goods };
@@ -229,7 +230,8 @@ export class Inventories {
       const exports = direction === 'export';
       entry.goods[product] += exports ? -units : units;
       const balance = { before, after: entry.goods[product] };
-      this.history?.record({ resource: product, units, operation: purpose === 'mission' ? (exports ? 'mission-delivery' : 'mission-reward') : direction,
+      this.history?.record({ resource: product, units, operation: purpose === 'royal-aid' ? 'royal-aid'
+        : purpose === 'mission' ? (exports ? 'mission-delivery' : 'mission-reward') : direction,
         origin: exports ? entry.auditId : trader, destination: exports ? trader : entry.auditId,
         ...(exports ? { originBalance: balance } : { destinationBalance: balance }) });
     }

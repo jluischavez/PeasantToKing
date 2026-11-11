@@ -36,7 +36,8 @@ export function missionObjective(objective: Objective): string {
       + objective.happiness + ', belleza ≥' + objective.beauty + ', comida ≥' + objective.food + ' % y agua ≥' + objective.water + ' %.';
     case 'roads': return 'Mejorar ' + objective.target + ' nuevos tramos propios a '
       + (objective.level === 3 ? 'piedra' : 'grava') + ', conectados al Centro.';
-    case 'building': return 'Añadir ' + objective.target + ' ' + constructionNames[objective.building].toLowerCase() + ' conectado al Centro.';
+    case 'building': return 'Añadir ' + objective.target + ' ' + constructionNames[objective.building].toLowerCase()
+      + (objective.building === 'garden' ? ' (no necesita caminos).' : ' conectado al Centro.');
     case 'growth': return 'Ganar ' + objective.target + ' habitantes desde la aceptación y sostenerlos durante '
       + formatNumber(objective.holdMs / hour) + ' h con felicidad ≥' + objective.happiness + ' y comida y agua ≥90 %.';
     case 'trade': return 'Exportar ' + objective.target + ' de ' + productNames[objective.product].toLowerCase()

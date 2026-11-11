@@ -1,6 +1,7 @@
 import type { Cell } from './CellSelection';
 import type { ConstructionMap, Dimensions } from './ConstructionMap';
 import type { TerrainMap } from './Terrain';
+import { footprintRange } from './FootprintRange';
 
 export const woodlandRules = { harvestRange: 6 } as const;
 export const missingWoodlandReason = 'Sin árboles ni bosque a ' + woodlandRules.harvestRange + ' casillas del borde del campamento.';
@@ -10,16 +11,8 @@ export function isWoodland(terrain: TerrainMap, cell: Cell): boolean {
   return obstacle === 'tree' || obstacle === 'forest';
 }
 
-function* harvestArea(terrain: TerrainMap, cell: Cell, { width, height }: Dimensions): Iterable<Cell> {
-  const { harvestRange: range } = woodlandRules;
-  const right = cell.column + width - 1;
-  const bottom = cell.row + height - 1;
-  for (let row = Math.max(0, cell.row - range); row <= Math.min(terrain.rows - 1, bottom + range); row++) {
-    for (let column = Math.max(0, cell.column - range); column <= Math.min(terrain.columns - 1, right + range); column++) {
-      const distance = Math.max(cell.column - column, column - right, 0) + Math.max(cell.row - row, row - bottom, 0);
-      if (distance <= range) yield { column, row };
-    }
-  }
+export function harvestArea(terrain: TerrainMap, cell: Cell, dimensions: Dimensions): Iterable<Cell> {
+  return footprintRange(terrain, cell, dimensions, woodlandRules.harvestRange);
 }
 
 export function hasHarvestableWoodland(terrain: TerrainMap, cell: Cell, dimensions: Dimensions): boolean {

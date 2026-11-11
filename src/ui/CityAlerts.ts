@@ -4,6 +4,7 @@ import type { RoadConnections } from '../map/RoadConnections';
 import type { HouseholdNeeds } from '../population/HouseholdNeeds';
 import { setText } from './domText';
 import { signedRate } from './FinanceSummary';
+import { requiresRoadConnection } from '../map/BuildingAccess';
 
 export class CityAlerts {
   private readonly count = document.getElementById('alert-count')!;
@@ -19,7 +20,7 @@ export class CityAlerts {
       this.revision = roads.revision;
       this.disconnected = 0;
       for (const { cell, type } of map.occupiedCells()) {
-        if (type !== 'road' && type !== 'bridge' && !roads.isConnected(cell)) this.disconnected++;
+        if (type !== 'road' && type !== 'bridge' && requiresRoadConnection(type) && !roads.isConnected(cell)) this.disconnected++;
       }
     }
     const alerts = [];

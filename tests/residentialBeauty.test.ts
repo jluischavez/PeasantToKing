@@ -20,19 +20,19 @@ function neighborhood() {
   return game;
 }
 
-test('the best decoration per type counts from its nearest tile, with road access and a score cap', () => {
+test('the best decoration counts from its nearest tile, gardens need no road, and the score is capped', () => {
   const { map, simulation } = neighborhood();
   assert.ok(map.place(c(7, 10), 'park', constructionDimensions.park));
   assert.ok(map.place(c(11, 10), 'plaza', constructionDimensions.plaza));
   assert.ok(map.place(c(10, 8), 'garden'));
   assert.ok(map.place(c(11, 8), 'garden'));
-  assert.ok(map.place(c(10, 11), 'garden')); // Closer, but disconnected.
+  assert.ok(map.place(c(10, 11), 'garden')); // Closer and valid despite being disconnected.
   simulation.recalculate();
-  assert.deepEqual(simulation.beauty.at(home), { score: 100, sources: { garden: 17, park: 35, plaza: 40 } });
+  assert.deepEqual(simulation.beauty.at(home), { score: 100, sources: { garden: 25, park: 35, plaza: 40 } });
   assert.equal(simulation.beauty.at(c(20, 10)).score, 15);
   assert.ok(map.remove(c(9, 12)));
   simulation.recalculate();
-  assert.equal(simulation.beauty.at(home).score, 72);
+  assert.equal(simulation.beauty.at(home).score, 80);
 });
 
 test('decoration charges maintenance once, employs nobody and a fountain supplies no water after loading', () => {

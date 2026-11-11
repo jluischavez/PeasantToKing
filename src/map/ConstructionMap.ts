@@ -109,9 +109,9 @@ export class ConstructionMap {
     return this.contains(cell) ? this.cells[this.index(cell)]! : null;
   }
 
-  *borderRoads(cell: Cell): Iterable<Cell> {
-    const size = this.constructionAt(cell) ?? singleTile;
-    const { column, row } = this.constructionAt(cell)?.cell ?? cell;
+  *borderRoads(cell: Cell, previewSize?: Dimensions): Iterable<Cell> {
+    const size = previewSize ?? this.constructionAt(cell) ?? singleTile;
+    const { column, row } = previewSize ? cell : this.constructionAt(cell)?.cell ?? cell;
     const right = column + size.width - 1, bottom = row + size.height - 1;
     for (let x = column; x <= right; x++) {
       const north = { column: x, row: row - 1 }, south = { column: x, row: bottom + 1 };

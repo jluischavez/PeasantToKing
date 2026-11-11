@@ -4,7 +4,7 @@ import type { ProductId } from './Products';
 export type AuditResource = ProductId | 'gold';
 export type SiteCharge = 'construction' | 'demolition' | 'clearing' | 'recognition' | 'tribute' | 'offering';
 export type AuditOperation = SiteCharge | 'production' | 'transfer' | 'consumption' | 'sale' | 'construction-material' | 'wages' | 'maintenance' | 'tax' | 'export' | 'import'
-  | 'mission-contribution' | 'mission-reward' | 'mission-delivery';
+  | 'mission-contribution' | 'mission-reward' | 'mission-delivery' | 'royal-aid' | 'royal-subsidy' | 'royal-relief';
 type Balance = Readonly<{ before: number; after: number }>;
 type Movement = Readonly<{
   resource: AuditResource;
@@ -54,7 +54,7 @@ export class EconomicHistory {
         && ['completed', 'unpaid'].includes(event.result) && balance(event.originBalance) && balance(event.destinationBalance)
         && ['production', 'transfer', 'consumption', 'sale', 'construction', 'construction-material',
           'demolition', 'clearing', 'recognition', 'tribute', 'offering', 'wages', 'maintenance', 'tax', 'export', 'import',
-          'mission-contribution', 'mission-reward', 'mission-delivery'].includes(event.operation));
+          'mission-contribution', 'mission-reward', 'mission-delivery', 'royal-aid', 'royal-subsidy', 'royal-relief'].includes(event.operation));
       previousTime = event.timeMs;
     }
     this.sequence = sequence;

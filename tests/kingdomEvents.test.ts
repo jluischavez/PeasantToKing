@@ -25,6 +25,22 @@ function rewardScenario() {
   return { game, engine: game.simulation.kingdomEvents, mission: game.simulation.kingdomEvents.current! };
 }
 
+test('gold contributions and rewards retain separate exact ledger balances and the mission reports their net', () => {
+  const { game, engine, mission } = rewardScenario(), before = game.economy.credit.balance;
+  assert.equal(mission.objective.kind, 'gold'); assert.ok(mission.reward.gold > 0);
+  assert.ok(game.simulation.decideMission(mission.id, 'fulfill'));
+  const contribution = game.economy.history.read('gold').find(event => event.operation === 'mission-contribution')!;
+  const reward = game.economy.history.read('gold').find(event => event.operation === 'mission-reward')!;
+  const cost = mission.objective.target, credit = mission.reward.gold;
+  const costScale = contribution.unitScale ?? U, rewardScale = reward.unitScale ?? U;
+  assert.equal(contribution.units / costScale, cost); assert.equal(reward.units / rewardScale, credit);
+  assert.deepEqual(contribution.originBalance, { before: before * costScale, after: (before - cost) * costScale });
+  assert.deepEqual(reward.destinationBalance, { before: (before - cost) * rewardScale, after: (before - cost + credit) * rewardScale });
+  assert.equal(game.economy.credit.balance, before - cost + credit);
+  assert.equal(engine.history.at(-1)!.result!.gold, credit - cost);
+  assert.equal(engine.history.at(-1)!.result!.goldReceived, credit);
+});
+
 test('combined gold, food, wood and favor settle exactly once through real inventories and audit', () => {
   const { game, engine, mission } = rewardScenario();
   const before = game.economy.resources, favor = game.simulation.crown.favor;

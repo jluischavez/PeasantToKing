@@ -1,6 +1,8 @@
 import { gameTimeRules, simulatedMsPerGameHour } from './GameTime.ts';
 import type { SettlementRank } from './SettlementProgress';
 import { check, list, whole } from '../persistence/validation.ts';
+import { emptyRoyalAudiences, royalAidCooldownMs, royalPrivileges, tributeReduction, validateRoyalAudiences, isRoyalPrivilege } from './RoyalPrivileges';
+import type { RoyalAudiences, RoyalPrivilege, RoyalRequest } from './RoyalPrivileges';
 
 export const crownRules = {
   creditLimit: 200, initialFavor: 50, periodMs: 3 * gameTimeRules.hoursPerDay * simulatedMsPerGameHour,
@@ -16,13 +18,15 @@ export const defeatReasons = {
   confidence: 'Destitución por pérdida de confianza real',
   tributes: 'Destitución por tres tributos consecutivos sin pagar',
 } as const;
-type Tribute = Readonly<{ gold: number; dueAt: number; paid: boolean }>;
+type Tribute = Readonly<{ gold: number; dueAt: number; paid: boolean;
+  discount?: { originalGold: number; reduction: number; requestSequence: number } }>;
 type Decree = 'waiting' | 'ready' | 'presented' | 'seen' | 'skipped';
 type CrownState = {
   favor: number; nextAt: number; obligation: Tribute | null; streak: number; decree: Decree;
   events: RoyalEvent[]; tributeTotal: number; offeringTotal: number;
   confidence: { startedAt: number; dueAt: number; decree: Decree } | null;
   defeat: { reason: keyof typeof defeatReasons; timeMs: number } | null;
+  audiences?: RoyalAudiences;
 };
 type SavedCrown = Omit<CrownState, 'confidence' | 'defeat'> & Partial<Pick<CrownState, 'confidence' | 'defeat'>>;
 
@@ -43,6 +47,46 @@ export class Crown {
   get history(): readonly RoyalEvent[] { return this.state.events; }
   get tributeTotal(): number { return this.state.tributeTotal; }
   get offeringTotal(): number { return this.state.offeringTotal; }
+  get audiences(): Readonly<RoyalAudiences> { return this.state.audiences ?? emptyRoyalAudiences(); }
+
+  privilegeIssue(kind: RoyalPrivilege, timeMs: number): string | null {
+    if (!isRoyalPrivilege(kind)) return 'Solicitud desconocida.';
+    if (this.defeated) return 'La partida ha terminado.';
+    const rule = royalPrivileges[kind];
+    if (this.favor < rule.required) return `Requiere ${rule.required} de favor; tienes ${this.favor}.`;
+    if (kind !== 'intercession') return timeMs < this.audiences.nextAidAt ? 'Las ayudas reales están en recuperación.' : null;
+    if (!this.obligation || this.obligation.paid || timeMs >= this.obligation.dueAt) return 'Requiere un tributo vigente y pendiente de pago.';
+    return this.obligation.discount || this.audiences.lastIntercessionDueAt === this.obligation.dueAt
+      ? 'Esta obligación ya recibió una intercesión.' : null;
+  }
+
+  preparePrivilege(kind: RoyalPrivilege): RoyalRequest {
+    return { kind, sequence: this.audiences.sequence + 1, favor: this.favor,
+      tributeDueAt: kind === 'intercession' ? this.obligation?.dueAt ?? null : null };
+  }
+
+  requestPrivilege(request: RoyalRequest, timeMs: number, grant: (id: string, benefit: number) => boolean): boolean {
+    this.expireConfidence(timeMs);
+    if (!request || !whole(timeMs) || timeMs % 1000 !== 0 || this.privilegeIssue(request.kind, timeMs)
+      || timeMs < Math.max(this.audiences.history.at(-1)?.timeMs ?? 0, this.history.at(-1)?.timeMs ?? 0)
+      || request.sequence !== this.audiences.sequence + 1 || request.favor !== this.favor
+      || request.tributeDueAt !== (request.kind === 'intercession' ? this.obligation?.dueAt ?? null : null)) return false;
+    const rule = royalPrivileges[request.kind], tribute = this.obligation;
+    const benefit = request.kind === 'intercession' ? tributeReduction(tribute!.gold) : rule.amount;
+    if (!grant('royal-audience:' + request.sequence, benefit)) return false;
+    // The callback is synchronous and validates its whole economic transaction first.
+    if (request.kind === 'intercession') this.state.obligation = { ...tribute!, gold: tribute!.gold - benefit,
+      discount: { originalGold: tribute!.gold, reduction: benefit, requestSequence: request.sequence } };
+    this.changeFavor(-rule.cost, timeMs);
+    const audiences = this.state.audiences ??= emptyRoyalAudiences();
+    const event = { sequence: ++audiences.sequence, kind: request.kind, timeMs,
+      favorSpent: rule.cost, favorAfter: this.favor, benefit, tributeDueAt: request.tributeDueAt };
+    audiences.used[request.kind]++;
+    if (request.kind === 'intercession') audiences.lastIntercessionDueAt = request.tributeDueAt;
+    audiences.history.push(event); if (audiences.history.length > 60) audiences.history.shift();
+    if (request.kind !== 'intercession') { audiences.lastAid = event; audiences.nextAidAt = timeMs + royalAidCooldownMs; }
+    return true;
+  }
 
   advance(timeMs: number, rank: SettlementRank): void {
     this.expireConfidence(timeMs);
@@ -114,6 +158,8 @@ export class Crown {
 
   saveState(): CrownState {
     return { ...this.state, events: [...this.history],
+      obligation: this.obligation ? structuredClone(this.obligation) : null,
+      audiences: structuredClone(this.audiences),
       confidence: this.confidence ? { ...this.confidence } : null, defeat: this.state.defeat ? { ...this.state.defeat } : null };
   }
 
@@ -128,17 +174,33 @@ export class Crown {
       && (streak === crownRules.defeatAfter ? nextAt === timeMs
         : nextAt > timeMs || state.defeat?.reason === 'confidence')
       && ['waiting', 'ready', 'presented', 'seen', 'skipped'].includes(decree)
-      && whole(tributeTotal) && whole(offeringTotal));
+      && Number.isSafeInteger(tributeTotal * 100) && tributeTotal >= 0 && whole(offeringTotal));
     check(obligation === null ? decree === 'waiting' && streak === 0 && tributeTotal === 0
-      : decree !== 'waiting' && whole(obligation.gold, 1)
+      : decree !== 'waiting' && (obligation.discount ? Number.isSafeInteger(obligation.gold * 100) && obligation.gold >= 0 : whole(obligation.gold, 1))
         && obligation.dueAt === nextAt && typeof obligation.paid === 'boolean' && (!obligation.paid || streak === 0));
+    if (state.audiences !== undefined) validateRoyalAudiences(state.audiences, timeMs);
+    if (state.audiences?.lastIntercessionDueAt !== null && state.audiences?.lastIntercessionDueAt !== undefined) {
+      check(obligation && state.audiences.lastIntercessionDueAt <= obligation.dueAt);
+      if (state.audiences.lastIntercessionDueAt === obligation.dueAt) check(obligation.discount !== undefined);
+    }
+    if (obligation?.discount) {
+      const discount = obligation.discount;
+      check(whole(discount.originalGold, 1) && discount.reduction === tributeReduction(discount.originalGold)
+        && obligation.gold === discount.originalGold - discount.reduction
+        && state.audiences?.lastIntercessionDueAt === obligation.dueAt
+        && whole(discount.requestSequence, 1, state.audiences?.sequence ?? 0));
+      const event = state.audiences!.history.find(grant => grant.sequence === discount.requestSequence);
+      check(discount.requestSequence <= state.audiences!.sequence - state.audiences!.history.length
+        || (event?.kind === 'intercession' && event.tributeDueAt === obligation.dueAt && event.benefit === discount.reduction));
+    }
     list(events, crownRules.historyLimit);
     let previous = 0;
     let previousStreak: number | undefined;
     for (const event of events) {
       const confidenceEvent = event.kind === 'confidence-lost' || event.kind === 'confidence-restored' || event.kind === 'mission';
       check(['paid', 'missed', 'offering', 'confidence-lost', 'confidence-restored', 'mission'].includes(event.kind)
-        && (confidenceEvent ? event.gold === 0 : whole(event.gold, 1))
+        && (confidenceEvent ? event.gold === 0 : event.kind === 'paid' || event.kind === 'missed'
+          ? Number.isSafeInteger(event.gold * 100) && event.gold >= 0 : whole(event.gold, 1))
         && whole(event.streak, 0, crownRules.defeatAfter) && whole(event.timeMs, previous, timeMs));
       if (event.kind === 'paid') check(event.streak === 0);
       if (event.kind === 'missed') check(event.streak > 0 && (previousStreak === undefined || event.streak === previousStreak + 1));
@@ -165,7 +227,7 @@ export class Crown {
         && ['ready', 'presented', 'seen', 'skipped'].includes(confidence.decree)
         && (defeat?.reason === 'confidence' ? confidence.dueAt === timeMs : confidence.dueAt > timeMs));
     check(defeat?.reason !== 'confidence' || confidence !== null);
-    this.state = { ...state, events: [...events], confidence: confidence ? { ...confidence } : null,
+    this.state = { ...structuredClone(state), events: [...events], confidence: confidence ? { ...confidence } : null,
       defeat: defeat ? { ...defeat } : null };
   }
 

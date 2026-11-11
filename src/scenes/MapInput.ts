@@ -29,6 +29,7 @@ export function bindMapInput(canvas: HTMLCanvasElement, camera: MapCamera,
     event.preventDefault();
     canvas.focus({ preventScroll: true });
     canvas.setPointerCapture(event.pointerId);
+    refreshHover();
   }, options);
   canvas.addEventListener('pointermove', event => {
     if (!event.isPrimary) return;

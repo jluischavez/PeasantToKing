@@ -38,6 +38,12 @@
             <button id="cancel-selection" type="button" disabled>Limpiar</button>
           </header>
           <div id="selection-content" tabindex="0" role="region" aria-label="Información y configuración de la casilla">
+            <section id="coverage-info" aria-label="Alcance y cobertura" hidden>
+              <h3>Alcance y cobertura</h3>
+              <p id="coverage-summary" class="panel-note"></p>
+              <p id="coverage-legend" class="panel-note"></p>
+              <details><summary>Condiciones del alcance</summary><p id="coverage-restriction" class="panel-note"></p></details>
+            </section>
             <dl id="cell-details" class="data-rows">
               <dt>Coordenadas</dt><dd id="cell-coordinates">—</dd>
               <dt>Terreno</dt><dd id="cell-terrain">—</dd>
@@ -230,6 +236,16 @@
                 <button id="crown-cancel" type="button">Cancelar</button>
               </div>
               <p id="crown-feedback" class="panel-note" role="status"></p>
+              <h3>Privilegios reales</h3>
+              <p class="panel-note">Conserva influencia para solicitar concesiones mayores o gástala para resolver necesidades inmediatas.</p>
+              <p id="crown-aid-cooldown" class="panel-note"></p>
+              <div id="crown-privileges"></div>
+              <div id="crown-privilege-confirmation" hidden>
+                <p id="crown-privilege-quote" class="panel-note"></p>
+                <button id="crown-privilege-confirm" type="button">Confirmar audiencia</button>
+                <button id="crown-privilege-cancel" type="button">Cancelar</button>
+              </div>
+              <p id="crown-privilege-feedback" class="panel-note" role="status"></p>
               <h3>Historial de la Corona</h3>
               <ol id="crown-history"></ol>
             </details>

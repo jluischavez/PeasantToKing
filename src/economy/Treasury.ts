@@ -113,6 +113,16 @@ export class Treasury {
     });
   }
 
+  creditRoyalSubsidy(id: string, gold: number): boolean {
+    const units = gold * unitsPerGold;
+    if (!whole(units, 1) || !whole(this.units + units, this.floor)) return false;
+    const before = this.units;
+    this.units += units;
+    this.record({ operation: 'royal-subsidy', units, origin: id, destination: 'treasury',
+      destinationBalance: { before, after: this.units } });
+    return true;
+  }
+
   accrueSecond(costs: OperatingCosts, taxHundredthsOfCentPerHour: number): void {
     this.accruedTaxes += taxHundredthsOfCentPerHour * (unitsPerCentSecond / centsPerGold);
     this.accruedWages += costs.wages * unitsPerCentSecond;

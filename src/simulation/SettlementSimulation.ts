@@ -30,6 +30,8 @@ import { Crown } from './Crown.ts';
 import type { Offering } from './Crown';
 import type { SettlementRank, SettlementStats } from './SettlementProgress';
 import { KingdomEvents } from './KingdomEvents.ts';
+import { royalPrivileges } from './RoyalPrivileges';
+import type { RoyalPrivilege, RoyalRequest } from './RoyalPrivileges';
 import type { MissionChoice, RealmContext } from './KingdomEvents';
 
 export type SimulationSpeed = 1 | 2 | 3;
@@ -72,6 +74,7 @@ export class SettlementSimulation {
   private readonly arrivals: OccasionalArrival[] = [];
   private demolition: DemolitionTarget | null = null;
   private pendingBridge: BridgeSpan | null = null;
+  private gardenSpaceCache?: { occupied: ReturnType<ConstructionMap['occupiedCells']>; terrainRevision: number; available: boolean };
   private readonly economy: Economy;
   private readonly population: Population;
   private readonly immigrationIntervalSeconds: number;
@@ -159,8 +162,8 @@ export class SettlementSimulation {
       if (['road', 'garden', 'park', 'plaza'].includes(type)) {
         sites[cell.column + ',' + cell.row] = { type, connected, level: this.map.roadLevelAt(cell) ?? 0 };
       }
+      if (connected || type === 'garden') buildings[type] = (buildings[type] ?? 0) + 1;
       if (!connected) continue;
-      buildings[type] = (buildings[type] ?? 0) + 1;
       if (type === 'road') {
         connectedRoads.push(cell);
         const level = this.map.roadLevelAt(cell);
@@ -173,6 +176,7 @@ export class SettlementSimulation {
     const decorationSpace = { garden: false, park: false, plaza: false };
     for (const type of ['garden', 'park', 'plaza'] as const) {
       if (this.progress.buildingLock(type)) continue;
+      if (type === 'garden') { decorationSpace.garden = this.hasGardenSpace(); continue; }
       const size = constructionDimensions[type];
       decorationSpace[type] = connectedRoads.some(road => [
         { column: road.column + 1, row: road.row }, { column: road.column - size.width, row: road.row },
@@ -197,6 +201,19 @@ export class SettlementSimulation {
     return this.kingdomEvents.decide(id, choice, this.simulatedTimeMs);
   }
 
+  private hasGardenSpace(): boolean {
+    const occupied = this.map.occupiedCells(), terrainRevision = this.map.terrain.revision;
+    if (this.gardenSpaceCache?.occupied === occupied && this.gardenSpaceCache.terrainRevision === terrainRevision)
+      return this.gardenSpaceCache.available;
+    // Search once per construction/terrain edit, not once per mission update.
+    let available = false;
+    outer: for (let row = 0; row < this.map.rows; row++) for (let column = 0; column < this.map.columns; column++) {
+      if (this.map.canPlace({ column, row }, 'garden', constructionDimensions.garden)) { available = true; break outer; }
+    }
+    this.gardenSpaceCache = { occupied, terrainRevision, available };
+    return available;
+  }
+
   recognize(rank: SettlementRank): boolean {
     if (this.crown.defeated) return false;
     return this.progress.recognize(rank, this.settlementStats(), this.simulatedTimeMs,
@@ -209,6 +226,23 @@ export class SettlementSimulation {
 
   makeOffering(gold: Offering, expectedFavor: number): boolean {
     return this.crown.offer(gold, expectedFavor, this.simulatedTimeMs, amount => this.economy.payRoyalCost(amount, 'offering'));
+  }
+
+  royalPrivilegeIssue(kind: RoyalPrivilege): string | null {
+    const issue = this.crown.privilegeIssue(kind, this.simulatedTimeMs);
+    if (issue) return issue;
+    if ((kind === 'food' || kind === 'wood') && !this.economy.canReceiveRoyalAid(kind, royalPrivileges[kind].amount))
+      return 'Necesitas almacenes conectados y operativos, con recepción autorizada y espacio libre para todo el suministro, descontando las reservas.';
+    return null;
+  }
+
+  requestRoyalPrivilege(request: RoyalRequest): boolean {
+    if (!request || this.royalPrivilegeIssue(request.kind)) return false;
+    return this.crown.requestPrivilege(request, this.simulatedTimeMs, (id, benefit) => {
+      if (request.kind === 'food' || request.kind === 'wood') return this.economy.receiveRoyalAid(id, request.kind, benefit);
+      if (request.kind === 'gold') return this.economy.receiveRoyalSubsidy(id, benefit);
+      return this.economy.recordRoyalRelief(id, this.crown.obligation!.dueAt, this.crown.obligation!.gold, benefit);
+    });
   }
 
   roadUpgradeAt(cell: Cell) {

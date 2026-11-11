@@ -22,6 +22,7 @@ import { clearingCosts } from '../map/ConstructionCosts';
 import { groundNames, isProtectedGround, obstacleNames } from '../map/Terrain';
 import type { TerrainTile } from '../map/Terrain';
 import { roadMaterials } from '../map/RoadMaterials';
+import { requiresRoadConnection } from '../map/BuildingAccess';
 import type { RoadLevel } from '../map/RoadMaterials';
 
 export class SelectionPanel {
@@ -109,7 +110,8 @@ export class SelectionPanel {
       ? (residents > 0 || housing.level > 1 ? homeLevel.name : 'Solar vacío')
       : construction ? 'Ocupada' : cell ? 'Casilla disponible' : 'Sin selección';
     add('status', 'Estado', status);
-    if (construction) add('connection', 'Conexión', connected ? 'Conectado' : 'Sin conexión');
+    if (construction) add('connection', 'Conexión vial', requiresRoadConnection(construction)
+      ? connected ? 'Conectado' : 'Sin conexión' : 'No necesaria');
     if (employment) {
       add('workers', 'Empleados', fraction(employment.workers, employment.capacity));
       add('operation', 'Operación', employment.issue ? 'Inactivo' : 'Operativo');

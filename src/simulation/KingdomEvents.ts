@@ -168,7 +168,7 @@ export class KingdomEvents {
           && context.foodCoverage >= 90 && context.waterCoverage >= 90 ? Math.min(objective.holdMs, mission.sustainedMs + delta) : 0;
         break;
       case 'building':
-        mission.progress = Math.min(objective.target, Object.entries(context.sites).filter(([id, site]) => site.connected
+        mission.progress = Math.min(objective.target, Object.entries(context.sites).filter(([id, site]) => (site.connected || site.type === 'garden')
           && site.type === objective.building && !Object.hasOwn(mission.baselineSites, id)).length);
         break;
       case 'roads':
